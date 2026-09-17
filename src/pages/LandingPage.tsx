@@ -2,12 +2,12 @@ import { Link } from 'react-router-dom'
 import './LandingPage.css'
 
 const navLinks = [
-  { label: 'Features', href: '#features' },
-  { label: 'How It Works', href: '#how-it-works' },
-  { label: 'Explore', href: '#explore' },
-  { label: 'Pricing', href: '#pricing' },
-  { label: 'About US', href: '#about' },
-  { label: 'Blog', href: '#blog' },
+  { label: 'Features', href: '/features', external: true },
+  { label: 'How It Works', href: '#how-it-works', external: false },
+  { label: 'Explore', href: '#explore', external: false },
+  { label: 'Pricing', href: '#pricing', external: false },
+  { label: 'About US', href: '#about', external: false },
+  { label: 'Blog', href: '#blog', external: false },
 ]
 
 const heroHighlights = [
@@ -223,11 +223,17 @@ export default function LandingPage() {
       <header className="header animate-rise">
         <Logo />
         <nav className="nav" aria-label="Primary">
-          {navLinks.map((link) => (
-            <a key={link.href} href={link.href}>
-              {link.label}
-            </a>
-          ))}
+          {navLinks.map((link) =>
+            link.external ? (
+              <Link key={link.href} to={link.href}>
+                {link.label}
+              </Link>
+            ) : (
+              <a key={link.href} href={link.href}>
+                {link.label}
+              </a>
+            ),
+          )}
         </nav>
         <div className="header-actions">
           <Link className="btn-outline" to="/login">

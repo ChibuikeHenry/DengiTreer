@@ -1,21 +1,26 @@
 import { useCallback, useState } from 'react'
 import { Outlet, useOutletContext } from 'react-router-dom'
+import AddChildModal from '../components/AddChildModal'
 import AddParentModal from '../components/AddParentModal'
+import AddSiblingModal from '../components/AddSiblingModal'
+import AddSpouseModal from '../components/AddSpouseModal'
 import DashboardLayout, { DashIcons } from '../components/DashboardLayout'
 import { useAuth } from '../context/AuthContext'
 import '../dashboard.css'
 
-type HomeContext = {
-  openAddParent: () => void
+export type MemberModalKind = 'parent' | 'spouse' | 'sibling' | 'child'
+
+export type DashboardContext = {
+  openModal: (kind: MemberModalKind) => void
 }
 
 export function HomeDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [activeModal, setActiveModal] = useState<MemberModalKind | null>(null)
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
-  const closeModal = useCallback(() => setModalOpen(false), [])
-  const openAddParent = useCallback(() => setModalOpen(true), [])
+  const closeModal = useCallback(() => setActiveModal(null), [])
+  const openModal = useCallback((kind: MemberModalKind) => setActiveModal(kind), [])
 
   return (
     <DashboardLayout
@@ -23,14 +28,17 @@ export function HomeDashboard() {
       onToggleSidebar={() => setSidebarOpen((v) => !v)}
       onCloseSidebar={closeSidebar}
     >
-      <Outlet context={{ openAddParent } satisfies HomeContext} />
-      <AddParentModal open={modalOpen} onClose={closeModal} />
+      <Outlet context={{ openModal } satisfies DashboardContext} />
+      <AddParentModal open={activeModal === 'parent'} onClose={closeModal} />
+      <AddSpouseModal open={activeModal === 'spouse'} onClose={closeModal} />
+      <AddSiblingModal open={activeModal === 'sibling'} onClose={closeModal} />
+      <AddChildModal open={activeModal === 'child'} onClose={closeModal} />
     </DashboardLayout>
   )
 }
 
 export default function HomePage() {
-  const { openAddParent } = useOutletContext<HomeContext>()
+  const { openModal } = useOutletContext<DashboardContext>()
   const { user } = useAuth()
   const firstName =
     user?.displayName?.trim().split(/\s+/)[0] ||
@@ -61,17 +69,21 @@ export default function HomePage() {
         </div>
 
         <div className="tree-diagram" aria-label="Family tree starter">
-          <button type="button" className="node node-parent" onClick={openAddParent}>
+          <button type="button" className="node node-parent" onClick={() => openModal('parent')}>
             + Add Parent
           </button>
-          <button type="button" className="node node-sibling">
+          <button
+            type="button"
+            className="node node-sibling"
+            onClick={() => openModal('sibling')}
+          >
             + Add Siblings
           </button>
           <div className="node node-you">YOU</div>
-          <button type="button" className="node node-spouse">
+          <button type="button" className="node node-spouse" onClick={() => openModal('spouse')}>
             + Add Spouse
           </button>
-          <button type="button" className="node node-child">
+          <button type="button" className="node node-child" onClick={() => openModal('child')}>
             + Add Child
           </button>
           <span className="tree-line tree-line-v-top" aria-hidden="true" />
