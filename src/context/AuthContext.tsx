@@ -19,7 +19,7 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import type { User } from 'firebase/auth'
-import { auth, googleProvider } from '../lib/firebase'
+import { auth, facebookProvider, googleProvider } from '../lib/firebase'
 
 type AuthContextValue = {
   user: User | null
@@ -32,6 +32,7 @@ type AuthContextValue = {
     password: string,
   ) => Promise<void>
   loginWithGoogle: () => Promise<void>
+  loginWithFacebook: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -55,7 +56,9 @@ function getErrorMessage(error: unknown) {
       case 'auth/too-many-requests':
         return 'Too many attempts. Try again later.'
       case 'auth/popup-closed-by-user':
-        return 'Google sign-in was cancelled.'
+        return 'Sign-in was cancelled.'
+      case 'auth/account-exists-with-different-credential':
+        return 'An account already exists with the same email using a different sign-in method.'
       case 'auth/popup-blocked':
         return 'Pop-up was blocked. Allow pop-ups and try again.'
       case 'auth/operation-not-allowed':
@@ -123,6 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await setPersistence(auth, browserLocalPersistence)
         googleProvider.setCustomParameters({ prompt: 'select_account' })
         const credential = await signInWithPopup(auth, googleProvider)
+        setUser(credential.user)
+        setLoading(false)
+      },
+      async loginWithFacebook() {
+        await setPersistence(auth, browserLocalPersistence)
+        const credential = await signInWithPopup(auth, facebookProvider)
         setUser(credential.user)
         setLoading(false)
       },

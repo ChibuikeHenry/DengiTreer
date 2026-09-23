@@ -9,6 +9,8 @@ type ModalFrameProps = {
   description: string
   submitLabel: string
   onSubmit: (event: FormEvent) => void
+  formError?: string
+  submitting?: boolean
   children: ReactNode
 }
 
@@ -19,6 +21,8 @@ export default function ModalFrame({
   description,
   submitLabel,
   onSubmit,
+  formError,
+  submitting = false,
   children,
 }: ModalFrameProps) {
   const titleId = useId()
@@ -71,12 +75,17 @@ export default function ModalFrame({
 
         <form className="modal-form" onSubmit={onSubmit}>
           {children}
+          {formError ? (
+            <p className="modal-form-error" role="alert">
+              {formError}
+            </p>
+          ) : null}
           <footer className="modal-actions">
             <button type="button" className="btn-modal-outline" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn-modal-primary">
-              {submitLabel}
+            <button type="submit" className="btn-modal-primary" disabled={submitting}>
+              {submitting ? 'Sending invite…' : submitLabel}
             </button>
           </footer>
         </form>

@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import type { FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
 import {
+  ContactFields,
   OccupationEducationFields,
   ParentSelectFields,
   PersonalInfoFields,
   PhotoUploadField,
 } from './familyFormFields'
+import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 
 type Props = { open: boolean; onClose: () => void }
 
@@ -17,20 +18,27 @@ export default function AddChildModal({ open, onClose }: Props) {
   const [dob, setDob] = useState('')
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    onClose()
-  }
+  const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('child', onClose)
 
   return (
     <ModalFrame
       open={open}
       onClose={onClose}
       title="Add a Child"
-      description="Add your child to your family tree. You can always edit details later."
+      description="Add your child to your family tree. Living children can be invited by email to join."
       submitLabel="Add Child"
-      onSubmit={handleSubmit}
+      onSubmit={onSubmit({
+        firstName,
+        middleName,
+        lastName,
+        inviteeEmail: email,
+        memberStatus: status,
+      })}
+      formError={error}
+      submitting={submitting}
     >
       <section className="modal-section">
         <h3>1. Select Parent(s)</h3>
@@ -76,7 +84,18 @@ export default function AddChildModal({ open, onClose }: Props) {
       </section>
 
       <section className="modal-section">
-        <h3>4. Additional Information (Optional)</h3>
+        <h3>4. Contact Information {status === 'living' ? '' : '(Optional)'}</h3>
+        <ContactFields
+          phone={phone}
+          email={email}
+          onPhone={setPhone}
+          onEmail={setEmail}
+          emailRequired={status === 'living'}
+        />
+      </section>
+
+      <section className="modal-section">
+        <h3>5. Additional Information (Optional)</h3>
         <OccupationEducationFields />
       </section>
     </ModalFrame>

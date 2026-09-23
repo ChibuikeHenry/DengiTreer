@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { DashIcons } from './DashboardLayout'
 
 const parentTypes = [
@@ -53,6 +54,7 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
   const [privacy, setPrivacy] = useState<(typeof privacyOptions)[number]>(
     'Family members only',
   )
+  const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose)
 
   useEffect(() => {
     if (!open) return
@@ -79,9 +81,15 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
     onClose()
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    handleClose()
+    await submit({
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email,
+      memberStatus: status,
+    })
   }
 
   return (
@@ -285,13 +293,19 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
                   />
                 </label>
                 <label className="field">
-                  <span>Email Address</span>
+                  <span>Email Address{status === 'living' ? ' *' : ''}</span>
                   <input
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Email Address"
+                    required={status === 'living'}
                   />
+                  {status === 'living' ? (
+                    <span className="field-hint">
+                      We&apos;ll email them a link to join as a parent on your tree.
+                    </span>
+                  ) : null}
                 </label>
               </div>
               <div className="photo-upload">
@@ -327,12 +341,18 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
             <p className="privacy-note">You can change this later in privacy settings.</p>
           </section>
 
+          {error ? (
+            <p className="modal-form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+
           <footer className="modal-actions">
             <button type="button" className="btn-modal-outline" onClick={handleClose}>
               Cancel
             </button>
-            <button type="submit" className="btn-modal-primary">
-              Add Family Member
+            <button type="submit" className="btn-modal-primary" disabled={submitting}>
+              {submitting ? 'Sending invite…' : 'Add Family Member'}
             </button>
           </footer>
         </form>

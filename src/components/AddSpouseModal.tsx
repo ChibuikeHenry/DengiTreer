@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import type { FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
 import {
   ContactFields,
   OccupationEducationFields,
   PersonalInfoFields,
 } from './familyFormFields'
+import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 
 type Props = { open: boolean; onClose: () => void }
 
@@ -16,20 +16,27 @@ export default function AddSpouseModal({ open, onClose }: Props) {
   const [dob, setDob] = useState('')
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    onClose()
-  }
+  const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('spouse', onClose)
 
   return (
     <ModalFrame
       open={open}
       onClose={onClose}
       title="Add a Spouse"
-      description="Add a new relative to your family tree. You can always edit details later."
+      description="Add a new relative to your family tree. Living spouses receive an email invite to join with their role."
       submitLabel="Add Spouse"
-      onSubmit={handleSubmit}
+      onSubmit={onSubmit({
+        firstName,
+        middleName,
+        lastName,
+        inviteeEmail: email,
+        memberStatus: status,
+      })}
+      formError={error}
+      submitting={submitting}
     >
       <section className="modal-section">
         <h3>1. Personal Information</h3>
@@ -71,8 +78,14 @@ export default function AddSpouseModal({ open, onClose }: Props) {
       </section>
 
       <section className="modal-section">
-        <h3>3. Contact Information (Optional)</h3>
-        <ContactFields />
+        <h3>3. Contact Information {status === 'living' ? '' : '(Optional)'}</h3>
+        <ContactFields
+          phone={phone}
+          email={email}
+          onPhone={setPhone}
+          onEmail={setEmail}
+          emailRequired={status === 'living'}
+        />
       </section>
 
       <section className="modal-section">

@@ -1,5 +1,7 @@
 import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { FacebookAuthProvider, getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
+import { getFunctions } from 'firebase/functions'
 
 const firebaseConfig = {
   apiKey: 'AIzaSyAxDe2Gm_SfRKrju5les_mYNkwgRrL3ihs',
@@ -13,4 +15,9 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
+export const db = getFirestore(app)
+export const functions = getFunctions(app, 'us-central1')
 export const googleProvider = new GoogleAuthProvider()
+export const facebookProvider = new FacebookAuthProvider()
+// Firebase requests public_profile + email by default; email must be enabled
+// in Meta → Use cases → Facebook Login → Permissions.

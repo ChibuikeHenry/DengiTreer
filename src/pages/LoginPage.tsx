@@ -1,13 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { AuthLayout, GoogleIcon } from '../components/AuthShell'
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router-dom'
+import { AuthLayout, FacebookIcon, GoogleIcon } from '../components/AuthShell'
 import { getErrorMessage, useAuth } from '../context/AuthContext'
+import {
+  acceptPersistedInvitationIfAny,
+  persistInviteToken,
+} from '../lib/invitations'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, loginWithGoogle, resetPassword, user, loading } = useAuth()
+  const [searchParams] = useSearchParams()
+  const { login, loginWithGoogle, loginWithFacebook, resetPassword, user, loading } =
+    useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -17,6 +29,11 @@ export default function LoginPage() {
 
   const from = (location.state as { from?: string } | null)?.from
   const redirectTo = from && from !== '/login' ? from : '/home'
+
+  useEffect(() => {
+    const token = searchParams.get('invite')
+    if (token) persistInviteToken(token)
+  }, [searchParams])
 
   if (loading) {
     return (
@@ -37,6 +54,7 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await login(email, password, remember)
+      await acceptPersistedInvitationIfAny()
       navigate(redirectTo, { replace: true })
     } catch (err) {
       setError(getErrorMessage(err))
@@ -51,6 +69,22 @@ export default function LoginPage() {
     setSubmitting(true)
     try {
       await loginWithGoogle()
+      await acceptPersistedInvitationIfAny()
+      navigate(redirectTo, { replace: true })
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleFacebook() {
+    setError('')
+    setInfo('')
+    setSubmitting(true)
+    try {
+      await loginWithFacebook()
+      await acceptPersistedInvitationIfAny()
       navigate(redirectTo, { replace: true })
     } catch (err) {
       setError(getErrorMessage(err))
@@ -81,15 +115,26 @@ export default function LoginPage() {
         <p>Log in to continue building your family network.</p>
       </header>
 
-      <button
-        type="button"
-        className="btn-google"
-        onClick={handleGoogle}
-        disabled={submitting}
-      >
-        <GoogleIcon />
-        Continue with Google
-      </button>
+      <div className="auth-social-stack">
+        <button
+          type="button"
+          className="btn-google"
+          onClick={handleGoogle}
+          disabled={submitting}
+        >
+          <GoogleIcon />
+          Continue with Google
+        </button>
+        <button
+          type="button"
+          className="btn-facebook"
+          onClick={handleFacebook}
+          disabled={submitting}
+        >
+          <FacebookIcon />
+          Continue with Facebook
+        </button>
+      </div>
 
       <div className="auth-divider" role="separator">
         <span>OR</span>

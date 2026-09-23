@@ -164,17 +164,49 @@ export function OccupationEducationFields() {
   )
 }
 
-export function ContactFields() {
+type ContactFieldsProps = {
+  phone?: string
+  email?: string
+  onPhone?: (value: string) => void
+  onEmail?: (value: string) => void
+  emailRequired?: boolean
+}
+
+export function ContactFields({
+  phone = '',
+  email = '',
+  onPhone,
+  onEmail,
+  emailRequired = false,
+}: ContactFieldsProps) {
   return (
     <div className="form-row form-row-photo">
       <div className="form-stack">
         <label className="field">
           <span>Phone Number</span>
-          <input type="tel" placeholder="Phone Number" />
+          <input
+            type="tel"
+            placeholder="Phone Number"
+            value={phone}
+            onChange={(e) => onPhone?.(e.target.value)}
+          />
         </label>
         <label className="field">
-          <span>Email Address</span>
-          <input type="email" placeholder="Email Address" />
+          <span>
+            Email Address{emailRequired ? ' *' : ''}
+          </span>
+          <input
+            type="email"
+            placeholder="Email Address"
+            value={email}
+            onChange={(e) => onEmail?.(e.target.value)}
+            required={emailRequired}
+          />
+          {emailRequired ? (
+            <span className="field-hint">
+              We&apos;ll email them a link to join as this role on your tree.
+            </span>
+          ) : null}
         </label>
       </div>
       <PhotoUploadField />

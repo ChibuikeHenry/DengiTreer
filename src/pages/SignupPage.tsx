@@ -1,12 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { AuthLayout, GoogleIcon } from '../components/AuthShell'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { AuthLayout, FacebookIcon, GoogleIcon } from '../components/AuthShell'
 import { getErrorMessage, useAuth } from '../context/AuthContext'
+import {
+  acceptPersistedInvitationIfAny,
+  persistInviteToken,
+} from '../lib/invitations'
 
 export default function SignupPage() {
   const navigate = useNavigate()
-  const { signup, loginWithGoogle, user, loading } = useAuth()
+  const [searchParams] = useSearchParams()
+  const { signup, loginWithGoogle, loginWithFacebook, user, loading } = useAuth()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -15,6 +20,13 @@ export default function SignupPage() {
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    const token = searchParams.get('invite')
+    if (token) persistInviteToken(token)
+    const prefillEmail = searchParams.get('email')
+    if (prefillEmail) setEmail(prefillEmail)
+  }, [searchParams])
 
   if (loading) {
     return (
@@ -45,6 +57,7 @@ export default function SignupPage() {
     setSubmitting(true)
     try {
       await signup(firstName, lastName, email, password)
+      await acceptPersistedInvitationIfAny()
       navigate('/home', { replace: true })
     } catch (err) {
       setError(getErrorMessage(err))
@@ -58,6 +71,21 @@ export default function SignupPage() {
     setSubmitting(true)
     try {
       await loginWithGoogle()
+      await acceptPersistedInvitationIfAny()
+      navigate('/home', { replace: true })
+    } catch (err) {
+      setError(getErrorMessage(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleFacebook() {
+    setError('')
+    setSubmitting(true)
+    try {
+      await loginWithFacebook()
+      await acceptPersistedInvitationIfAny()
       navigate('/home', { replace: true })
     } catch (err) {
       setError(getErrorMessage(err))
@@ -73,15 +101,26 @@ export default function SignupPage() {
         <p>Start building your family legacy today.</p>
       </header>
 
-      <button
-        type="button"
-        className="btn-google"
-        onClick={handleGoogle}
-        disabled={submitting}
-      >
-        <GoogleIcon />
-        Sign up with Google
-      </button>
+      <div className="auth-social-stack">
+        <button
+          type="button"
+          className="btn-google"
+          onClick={handleGoogle}
+          disabled={submitting}
+        >
+          <GoogleIcon />
+          Sign up with Google
+        </button>
+        <button
+          type="button"
+          className="btn-facebook"
+          onClick={handleFacebook}
+          disabled={submitting}
+        >
+          <FacebookIcon />
+          Sign up with Facebook
+        </button>
+      </div>
 
       <div className="auth-divider" role="separator">
         <span>OR</span>

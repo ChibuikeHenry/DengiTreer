@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import './LandingPage.css'
 
 const navLinks = [
-  { label: 'Features', href: '/features', external: true },
+  { label: 'Features', href: '#features', external: false },
   { label: 'How It Works', href: '#how-it-works', external: false },
   { label: 'Explore', href: '#explore', external: false },
   { label: 'Pricing', href: '#pricing', external: false },
