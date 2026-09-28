@@ -1,36 +1,64 @@
 import { useCallback, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
 import {
   getCallableErrorMessage,
   sendFamilyMemberInvite,
   type FamilyMemberInviteInput,
   type InviteRole,
 } from '../lib/invitations'
+import { uploadFamilyMemberPhoto } from '../lib/profilePhoto'
 
-type Fields = Omit<FamilyMemberInviteInput, 'role'>
+export type FamilyMemberSubmitFields = Omit<FamilyMemberInviteInput, 'role'> & {
+  photoFile?: File | null
+}
 
 export function useFamilyMemberInviteSubmit(role: InviteRole, onClose: () => void) {
+  const { user } = useAuth()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   const submit = useCallback(
-    async (fields: Fields) => {
+    async (fields: FamilyMemberSubmitFields) => {
+      if (!user) {
+        setError('Sign in to add family members.')
+        return
+      }
+
       setError('')
       setSubmitting(true)
       try {
-        await sendFamilyMemberInvite({ role, ...fields })
+        const { photoFile, ...inviteFields } = fields
+        let photoURL: string | undefined
+
+        if (photoFile) {
+          photoURL = await uploadFamilyMemberPhoto(user.uid, role, photoFile)
+        }
+
+        const inviteeEmail = inviteFields.inviteeEmail?.trim()
+        await sendFamilyMemberInvite({
+          role,
+          ...inviteFields,
+          inviteeEmail: inviteeEmail || undefined,
+          photoURL,
+        })
         onClose()
       } catch (err) {
-        setError(getCallableErrorMessage(err))
+        const message = getCallableErrorMessage(err)
+        if (message.includes('storage/unauthorized') || message.includes('403')) {
+          setError('Could not upload photo. Check Storage rules or try again without a photo.')
+        } else {
+          setError(message)
+        }
       } finally {
         setSubmitting(false)
       }
     },
-    [onClose, role],
+    [onClose, role, user],
   )
 
   const onSubmit = useCallback(
-    (fields: Fields) => (event: FormEvent) => {
+    (fields: FamilyMemberSubmitFields) => (event: FormEvent) => {
       event.preventDefault()
       void submit(fields)
     },

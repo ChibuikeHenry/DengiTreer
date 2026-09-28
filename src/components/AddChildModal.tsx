@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ModalFrame from './ModalFrame'
 import {
   ContactFields,
   OccupationEducationFields,
   ParentSelectFields,
   PersonalInfoFields,
-  PhotoUploadField,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
 type Props = { open: boolean; onClose: () => void }
 
@@ -20,8 +20,18 @@ export default function AddChildModal({ open, onClose }: Props) {
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [fatherId, setFatherId] = useState('')
+  const [motherId, setMotherId] = useState('')
+  const photo = usePhotoPicker()
 
   const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('child', onClose)
+
+  useEffect(() => {
+    if (open) return
+    photo.reset()
+    setFatherId('')
+    setMotherId('')
+  }, [open, photo.reset])
 
   return (
     <ModalFrame
@@ -36,6 +46,7 @@ export default function AddChildModal({ open, onClose }: Props) {
         lastName,
         inviteeEmail: email,
         memberStatus: status,
+        photoFile: photo.file,
       })}
       formError={error}
       submitting={submitting}
@@ -45,7 +56,13 @@ export default function AddChildModal({ open, onClose }: Props) {
         <p className="field-hint">
           Choose the parent(s) for this child from your family tree.
         </p>
-        <ParentSelectFields />
+        <ParentSelectFields
+          active={open}
+          fatherId={fatherId}
+          motherId={motherId}
+          onFatherId={setFatherId}
+          onMotherId={setMotherId}
+        />
       </section>
 
       <section className="modal-section">
@@ -69,18 +86,15 @@ export default function AddChildModal({ open, onClose }: Props) {
 
       <section className="modal-section">
         <h3>3. Relationship details</h3>
-        <div className="form-row form-row-sibling-details">
-          <label className="field">
-            <span>Order in Birth</span>
-            <select defaultValue="">
-              <option value="">Select birth order</option>
-              <option value="1">First born</option>
-              <option value="2">Second born</option>
-            </select>
-            <span className="field-hint">e.g First born, Second born, etc.</span>
-          </label>
-          <PhotoUploadField compact />
-        </div>
+        <label className="field">
+          <span>Order in Birth</span>
+          <select defaultValue="">
+            <option value="">Select birth order</option>
+            <option value="1">First born</option>
+            <option value="2">Second born</option>
+          </select>
+          <span className="field-hint">e.g First born, Second born, etc.</span>
+        </label>
       </section>
 
       <section className="modal-section">
@@ -90,7 +104,10 @@ export default function AddChildModal({ open, onClose }: Props) {
           email={email}
           onPhone={setPhone}
           onEmail={setEmail}
-          emailRequired={status === 'living'}
+          emailOptionalHint={status === 'living'}
+          photoPreviewUrl={photo.previewUrl}
+          onPhotoSelect={photo.selectFile}
+          photoError={photo.error}
         />
       </section>
 

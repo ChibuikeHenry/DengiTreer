@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ModalFrame from './ModalFrame'
 import {
   ContactFields,
   OccupationEducationFields,
   ParentSelectFields,
   PersonalInfoFields,
-  PhotoUploadField,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
 type Props = { open: boolean; onClose: () => void }
 
@@ -20,8 +20,14 @@ export default function AddSiblingModal({ open, onClose }: Props) {
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const photo = usePhotoPicker()
 
   const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('sibling', onClose)
+
+  useEffect(() => {
+    if (open) return
+    photo.reset()
+  }, [open, photo.reset])
 
   return (
     <ModalFrame
@@ -36,6 +42,7 @@ export default function AddSiblingModal({ open, onClose }: Props) {
         lastName,
         inviteeEmail: email,
         memberStatus: status,
+        photoFile: photo.file,
       })}
       formError={error}
       submitting={submitting}
@@ -72,7 +79,6 @@ export default function AddSiblingModal({ open, onClose }: Props) {
               <span className="field-hint">e.g First born, Second born, etc</span>
             </label>
           </div>
-          <PhotoUploadField compact />
         </div>
       </section>
 
@@ -102,7 +108,10 @@ export default function AddSiblingModal({ open, onClose }: Props) {
           email={email}
           onPhone={setPhone}
           onEmail={setEmail}
-          emailRequired={status === 'living'}
+          emailOptionalHint={status === 'living'}
+          photoPreviewUrl={photo.previewUrl}
+          onPhotoSelect={photo.selectFile}
+          photoError={photo.error}
         />
       </section>
 

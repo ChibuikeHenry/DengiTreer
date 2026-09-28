@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { ContactFields } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { DashIcons } from './DashboardLayout'
 
 const parentTypes = [
@@ -21,7 +23,8 @@ const parentTypes = [
   },
 ] as const
 
-const relationships = ['Mother', 'Father'] as const
+const relationships = ['Mother', 'Father', 'Unknown / Not Known'] as const
+const UNKNOWN_RELATIONSHIP = 'Unknown / Not Known'
 const privacyOptions = [
   'Family members only',
   'Immediate family only',
@@ -54,7 +57,13 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
   const [privacy, setPrivacy] = useState<(typeof privacyOptions)[number]>(
     'Family members only',
   )
+  const photo = usePhotoPicker()
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose)
+
+  useEffect(() => {
+    if (open) return
+    photo.reset()
+  }, [open, photo.reset])
 
   useEffect(() => {
     if (!open) return
@@ -81,14 +90,23 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
     onClose()
   }
 
+  const isUnknownParent = relationship === UNKNOWN_RELATIONSHIP
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (!relationship) return
+
+    const resolvedFirst = firstName.trim() || (isUnknownParent ? 'Unknown' : '')
+    const resolvedLast = lastName.trim() || (isUnknownParent ? 'Parent' : '')
+    if (!resolvedFirst || !resolvedLast) return
+
     await submit({
-      firstName,
-      middleName,
-      lastName,
-      inviteeEmail: email,
+      firstName: resolvedFirst,
+      middleName: middleName.trim(),
+      lastName: resolvedLast,
+      inviteeEmail: email.trim() || undefined,
       memberStatus: status,
+      photoFile: photo.file,
     })
   }
 
@@ -106,7 +124,10 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
         <header className="modal-head">
           <div>
             <h2 id={titleId}>Add a PARENT</h2>
-            <p>Add a new relative to your family tree. You can always edit details later.</p>
+            <p>
+              Add a new relative to your family tree. You can edit their details until they
+              accept your invite and claim their profile.
+            </p>
           </div>
           <button
             type="button"
@@ -168,7 +189,7 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                   placeholder="First Name"
-                  required
+                  required={!isUnknownParent}
                 />
               </label>
               <label className="field">
@@ -185,7 +206,7 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                   placeholder="Last Name"
-                  required
+                  required={!isUnknownParent}
                 />
               </label>
             </div>
@@ -193,21 +214,18 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
             <div className="form-row form-row-status">
               <label className="field">
                 <span>Date of Birth</span>
-                <span className="field-with-icon">
-                  <input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                  />
-                  {DashIcons.calendar()}
-                </span>
+                <input
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                />
               </label>
               <label className="field">
                 <span>Gender</span>
                 <select
                   value={gender}
                   onChange={(e) => setGender(e.target.value)}
-                  required
+                  required={!isUnknownParent}
                 >
                   <option value="">Select</option>
                   <option value="female">Female</option>
@@ -266,6 +284,10 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
                         onClick={() => {
                           setRelationship(option)
                           setRelationshipOpen(false)
+                          if (option === UNKNOWN_RELATIONSHIP) {
+                            if (!firstName.trim()) setFirstName('Unknown')
+                            if (!lastName.trim()) setLastName('Parent')
+                          }
                         }}
                       >
                         <span>
@@ -281,43 +303,22 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
 
           <section className="modal-section">
             <h3>4. Additional Information (Optional)</h3>
-            <div className="form-row form-row-photo">
-              <div className="form-stack">
-                <label className="field">
-                  <span>Phone Number</span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="Phone Number"
-                  />
-                </label>
-                <label className="field">
-                  <span>Email Address{status === 'living' ? ' *' : ''}</span>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Email Address"
-                    required={status === 'living'}
-                  />
-                  {status === 'living' ? (
-                    <span className="field-hint">
-                      We&apos;ll email them a link to join as a parent on your tree.
-                    </span>
-                  ) : null}
-                </label>
-              </div>
-              <div className="photo-upload">
-                <span className="photo-label">Add a Photo</span>
-                <label className="photo-box">
-                  <input type="file" accept="image/png,image/jpeg" />
-                  {DashIcons.upload()}
-                  <strong>Upload Photo</strong>
-                  <small>JPG, PNG up to 5MB</small>
-                </label>
-              </div>
-            </div>
+            <ContactFields
+              phone={phone}
+              email={email}
+              onPhone={setPhone}
+              onEmail={setEmail}
+              emailOptionalHint={status === 'living'}
+              photoPreviewUrl={photo.previewUrl}
+              onPhotoSelect={photo.selectFile}
+              photoError={photo.error}
+            />
+            {isUnknownParent ? (
+              <p className="field-hint">
+                You can add a parent placeholder when details aren&apos;t known yet. Update
+                their information later when you learn more.
+              </p>
+            ) : null}
           </section>
 
           <section className="modal-section">

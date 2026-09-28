@@ -1,6 +1,8 @@
-import type { ReactNode, SVGProps } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState, type ReactNode, type SVGProps } from 'react'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
+import ProfileAvatar from './ProfileAvatar'
 
 type IconProps = SVGProps<SVGSVGElement>
 
@@ -173,9 +175,28 @@ export default function DashboardLayout({
 }: DashboardLayoutProps) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
-  const displayName = user?.displayName?.trim() || 'Member'
+  const [displayName, setDisplayName] = useState('Member')
+  const [headerPhotoURL, setHeaderPhotoURL] = useState<string | null>(null)
   const firstName = displayName.split(' ')[0] || 'Member'
-  const initial = (displayName[0] || 'D').toUpperCase()
+
+  useEffect(() => {
+    if (!user) {
+      setDisplayName('Member')
+      setHeaderPhotoURL(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const profile = await resolveUserProfileForForm(user)
+      if (cancelled) return
+      const name = profileFullName(profile) || user.displayName?.trim() || 'Member'
+      setDisplayName(name)
+      setHeaderPhotoURL(user.photoURL ?? profile.photoURL ?? null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
 
   async function handleLogout() {
     await logout()
@@ -253,16 +274,36 @@ export default function DashboardLayout({
               {DashIcons.help()}
             </button>
             <div className="dash-user-menu">
-              <button type="button" className="dash-user">
-                <span className="dash-avatar">{initial}</span>
+              <Link
+                to="/home/profile"
+                className="dash-user-link"
+                title="View profile"
+                aria-label={`View profile for ${displayName}`}
+              >
+                <ProfileAvatar
+                  photoURL={headerPhotoURL}
+                  name={displayName}
+                  size="md"
+                  className="dash-avatar"
+                />
                 <span className="dash-user-meta">
                   <strong>{displayName}</strong>
                   <span>New Member</span>
                 </span>
+              </Link>
+              <button
+                type="button"
+                className="dash-user-menu-toggle"
+                aria-label="Account menu"
+                aria-haspopup="true"
+              >
                 {DashIcons.chevron()}
               </button>
               <div className="dash-user-dropdown">
                 <p className="dash-user-greeting">Hi, {firstName}</p>
+                <button type="button" onClick={() => navigate('/home/profile')}>
+                  Edit profile
+                </button>
                 <button type="button" onClick={handleLogout}>
                   Log out
                 </button>

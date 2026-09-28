@@ -65,8 +65,7 @@
   gap: 0.65rem;
 }
 
-.btn-google,
-.btn-facebook {
+.btn-google {
   width: 100%;
   display: inline-flex;
   align-items: center;
@@ -85,14 +84,12 @@
     border-color 0.2s ease;
 }
 
-.btn-google:hover,
-.btn-facebook:hover {
+.btn-google:hover {
   background: #f7f8f4;
   border-color: #b8c0b0;
 }
 
-.btn-google:disabled,
-.btn-facebook:disabled {
+.btn-google:disabled {
   opacity: 0.65;
   cursor: not-allowed;
 }
@@ -152,6 +149,28 @@
   outline: 2px solid #34611d;
   outline-offset: 1px;
   border-color: #34611d;
+}
+
+.auth-field input.auth-input-readonly,
+.auth-field input.auth-input-readonly:disabled {
+  background: #eef1ea;
+  color: #5c6456;
+  border-color: #d4d9cf;
+  cursor: not-allowed;
+}
+
+.auth-field input.auth-input-readonly:focus {
+  outline: none;
+  border-color: #d4d9cf;
+}
+
+.auth-field-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #6b7364;
+  line-height: 1.4;
 }
 
 .auth-meta {

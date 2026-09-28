@@ -19,7 +19,8 @@ import {
   updateProfile,
 } from 'firebase/auth'
 import type { User } from 'firebase/auth'
-import { auth, facebookProvider, googleProvider } from '../lib/firebase'
+import { auth, googleProvider } from '../lib/firebase'
+import { profileFromAuthUser, saveUserProfile } from '../lib/userProfile'
 
 type AuthContextValue = {
   user: User | null
@@ -32,7 +33,6 @@ type AuthContextValue = {
     password: string,
   ) => Promise<void>
   loginWithGoogle: () => Promise<void>
-  loginWithFacebook: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   logout: () => Promise<void>
 }
@@ -119,6 +119,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (displayName) {
           await updateProfile(credential.user, { displayName })
         }
+        await saveUserProfile(credential.user.uid, {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          middleName: '',
+          email: email.trim(),
+        })
         setUser(auth.currentUser ?? credential.user)
         setLoading(false)
       },
@@ -126,12 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await setPersistence(auth, browserLocalPersistence)
         googleProvider.setCustomParameters({ prompt: 'select_account' })
         const credential = await signInWithPopup(auth, googleProvider)
-        setUser(credential.user)
-        setLoading(false)
-      },
-      async loginWithFacebook() {
-        await setPersistence(auth, browserLocalPersistence)
-        const credential = await signInWithPopup(auth, facebookProvider)
+        const profile = profileFromAuthUser(credential.user)
+        await saveUserProfile(credential.user.uid, profile)
         setUser(credential.user)
         setLoading(false)
       },

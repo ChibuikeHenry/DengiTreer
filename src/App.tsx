@@ -1,14 +1,20 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
+import AboutUsPage from './pages/AboutUsPage'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import DiscoveriesPage from './pages/DiscoveriesPage'
 import JoinInvitePage from './pages/JoinInvitePage'
 import FamilyTreePage from './pages/FamilyTreePage'
-import HomePage, { HomeDashboard, PlaceholderPage } from './pages/HomePage'
+import HomePage, { HomeDashboard } from './pages/HomePage'
 import InvitationsPage from './pages/InvitationsPage'
+import ManageTreesPage from './pages/ManageTreesPage'
+import PeoplePage from './pages/PeoplePage'
+import PhotosPage from './pages/PhotosPage'
+import ProfilePage from './pages/ProfilePage'
+import SettingsPage from './pages/SettingsPage'
 import './auth.css'
 
 export default function App() {
@@ -17,6 +23,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/about" element={<AboutUsPage />} />
           <Route path="/features" element={<Navigate to="/#features" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -31,19 +38,13 @@ export default function App() {
           >
             <Route index element={<HomePage />} />
             <Route path="tree" element={<FamilyTreePage />} />
-            <Route path="people" element={<PlaceholderPage title="People" />} />
+            <Route path="people" element={<PeoplePage />} />
             <Route path="invitations" element={<InvitationsPage />} />
             <Route path="discoveries" element={<DiscoveriesPage />} />
-            <Route
-              path="manage"
-              element={<PlaceholderPage title="Manage Trees" />}
-            />
-            <Route path="photos" element={<PlaceholderPage title="Photos" />} />
-            <Route path="profile" element={<PlaceholderPage title="Profile" />} />
-            <Route
-              path="settings"
-              element={<PlaceholderPage title="Settings" />}
-            />
+            <Route path="manage" element={<ManageTreesPage />} />
+            <Route path="photos" element={<PhotosPage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,3 +1,5 @@
+import type { ChangeEvent } from 'react'
+import { useTreeParentPickOptions, type ParentPickOption } from '../hooks/useTreeParentPickOptions'
 import { DashIcons } from './DashboardLayout'
 
 type PersonalInfoProps = {
@@ -64,10 +66,7 @@ export function PersonalInfoFields({
       <div className="form-row form-row-status">
         <label className="field">
           <span>Date of Birth</span>
-          <span className="field-with-icon">
-            <input type="date" value={dob} onChange={(e) => onDob(e.target.value)} />
-            {DashIcons.calendar()}
-          </span>
+          <input type="date" value={dob} onChange={(e) => onDob(e.target.value)} />
         </label>
         <label className="field">
           <span>Gender</span>
@@ -104,37 +103,116 @@ export function PersonalInfoFields({
   )
 }
 
-export function ParentSelectFields() {
+type ParentSelectFieldsProps = {
+  active?: boolean
+  fatherId?: string
+  motherId?: string
+  onFatherId?: (id: string) => void
+  onMotherId?: (id: string) => void
+}
+
+function parentOptionLabel(option: ParentPickOption) {
+  if (option.id === 'self') return `${option.displayName} (You)`
+  return option.displayName
+}
+
+export function ParentSelectFields({
+  active = true,
+  fatherId = '',
+  motherId = '',
+  onFatherId,
+  onMotherId,
+}: ParentSelectFieldsProps) {
+  const { fathers, mothers } = useTreeParentPickOptions(active)
+
   return (
     <div className="form-row form-row-2">
       <label className="field">
         <span>Father</span>
-        <select defaultValue="">
+        <select
+          value={fatherId}
+          onChange={(e) => onFatherId?.(e.target.value)}
+          required={fathers.length > 0}
+        >
           <option value="">Select father</option>
-          <option value="uche">Uche Achoromadu</option>
+          {fathers.map((option) => (
+            <option key={option.id} value={option.id}>
+              {parentOptionLabel(option)}
+            </option>
+          ))}
         </select>
+        {fathers.length === 0 ? (
+          <span className="field-hint">
+            Add yourself and invite your spouse (or co-parent) to see choices here.
+          </span>
+        ) : null}
       </label>
       <label className="field">
         <span>Mother</span>
-        <select defaultValue="">
+        <select
+          value={motherId}
+          onChange={(e) => onMotherId?.(e.target.value)}
+          required={mothers.length > 0}
+        >
           <option value="">Select mother</option>
-          <option value="grace">Grace Achoromadu</option>
+          {mothers.map((option) => (
+            <option key={option.id} value={option.id}>
+              {parentOptionLabel(option)}
+            </option>
+          ))}
         </select>
+        {mothers.length === 0 ? (
+          <span className="field-hint">
+            Only people on your tree that you added or invited appear in this list.
+          </span>
+        ) : null}
       </label>
     </div>
   )
 }
 
-export function PhotoUploadField({ compact }: { compact?: boolean }) {
+type PhotoUploadFieldProps = {
+  compact?: boolean
+  previewUrl?: string | null
+  onFileSelect?: (file: File | null) => void
+  error?: string
+}
+
+export function PhotoUploadField({
+  compact,
+  previewUrl,
+  onFileSelect,
+  error,
+}: PhotoUploadFieldProps) {
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null
+    onFileSelect?.(file)
+    event.target.value = ''
+  }
+
   return (
     <div className={compact ? 'photo-upload photo-upload-compact' : 'photo-upload'}>
-      <span className="photo-label">Add a Photo</span>
-      <label className="photo-box">
-        <input type="file" accept="image/png,image/jpeg" />
-        {DashIcons.upload()}
-        <strong>Upload Photo</strong>
-        <small>JPG, PNG up to 5MB</small>
+      <span className="photo-label">Profile picture</span>
+      <label className={`photo-box${previewUrl ? ' photo-box-has-preview' : ''}`}>
+        <input
+          type="file"
+          accept="image/png,image/jpeg,.jpg,.jpeg"
+          onChange={handleChange}
+        />
+        {previewUrl ? (
+          <>
+            <img src={previewUrl} alt="" className="photo-preview" />
+            <strong>Change photo</strong>
+          </>
+        ) : (
+          <>
+            {DashIcons.upload()}
+            <strong>Upload Photo</strong>
+            <small>Profile picture · JPG, PNG up to 5MB</small>
+          </>
+        )}
       </label>
+      {error ? <span className="field-hint photo-upload-error">{error}</span> : null}
     </div>
   )
 }
@@ -170,6 +248,11 @@ type ContactFieldsProps = {
   onPhone?: (value: string) => void
   onEmail?: (value: string) => void
   emailRequired?: boolean
+  emailOptionalHint?: boolean
+  emailReadOnly?: boolean
+  photoPreviewUrl?: string | null
+  onPhotoSelect?: (file: File | null) => void
+  photoError?: string
 }
 
 export function ContactFields({
@@ -178,6 +261,11 @@ export function ContactFields({
   onPhone,
   onEmail,
   emailRequired = false,
+  emailOptionalHint = false,
+  emailReadOnly = false,
+  photoPreviewUrl,
+  onPhotoSelect,
+  photoError,
 }: ContactFieldsProps) {
   return (
     <div className="form-row form-row-photo">
@@ -201,15 +289,28 @@ export function ContactFields({
             value={email}
             onChange={(e) => onEmail?.(e.target.value)}
             required={emailRequired}
+            readOnly={emailReadOnly}
+            disabled={emailReadOnly}
+            className={emailReadOnly ? 'field-readonly' : undefined}
+            aria-readonly={emailReadOnly}
           />
           {emailRequired ? (
             <span className="field-hint">
               We&apos;ll email them a link to join as this role on your tree.
             </span>
+          ) : emailOptionalHint ? (
+            <span className="field-hint">
+              Optional. Add an email if you want to invite them to claim their profile on
+              DengiTree.
+            </span>
           ) : null}
         </label>
       </div>
-      <PhotoUploadField />
+      <PhotoUploadField
+        previewUrl={photoPreviewUrl}
+        onFileSelect={onPhotoSelect}
+        error={photoError}
+      />
     </div>
   )
 }

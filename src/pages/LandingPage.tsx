@@ -6,7 +6,7 @@ const navLinks = [
   { label: 'How It Works', href: '#how-it-works', external: false },
   { label: 'Explore', href: '#explore', external: false },
   { label: 'Pricing', href: '#pricing', external: false },
-  { label: 'About US', href: '#about', external: false },
+  { label: 'About US', href: '/about', external: true },
   { label: 'Blog', href: '#blog', external: false },
 ]
 
@@ -408,7 +408,7 @@ export default function LandingPage() {
             <h3>Company</h3>
             <ul>
               <li>
-                <a href="#about">About Us</a>
+                <Link to="/about">About Us</Link>
               </li>
               <li>
                 <a href="#careers">Careers</a>

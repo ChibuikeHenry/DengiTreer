@@ -101,7 +101,7 @@ export default function HomePage() {
         openModal('parent')
         break
       case 'profile':
-        navigate('/home/tree', { state: { openSelf: true } })
+        navigate('/home/profile')
         break
       case 'invitations':
         navigate('/home/invitations')
@@ -143,10 +143,10 @@ export default function HomePage() {
           </div>
           <div className="tree-card-photo">
             <img
-              src="/images/cta-banner.png"
-              alt=""
-              width={320}
-              height={240}
+              src="/images/hero-family.png"
+              alt="Family members connected across generations"
+              width={693}
+              height={426}
             />
           </div>
         </section>

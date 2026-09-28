@@ -10,6 +10,7 @@ import {
   subscribeSentInvitations,
   type InvitationRecord,
 } from '../lib/invitations'
+import { canInviterEditInvitation, isProfileClaimed } from '../lib/profileClaim'
 
 type Tab = 'sent' | 'received'
 
@@ -243,13 +244,30 @@ export default function InvitationsPage() {
                   </span>
                 </div>
                 <span
-                  className={`inv-badge inv-badge-${item.status === 'joined' ? 'joined' : 'pending'}`}
+                  className={`inv-badge inv-badge-${
+                    isProfileClaimed(item)
+                      ? 'claimed'
+                      : item.status === 'joined'
+                        ? 'joined'
+                        : 'pending'
+                  }`}
+                  title={
+                    tab === 'sent' && isProfileClaimed(item)
+                      ? 'They claimed their profile. You can view them on your tree but cannot edit their details.'
+                      : undefined
+                  }
                 >
-                  {item.status === 'joined' ? 'Joined' : 'Pending'}
+                  {tab === 'sent' && isProfileClaimed(item)
+                    ? 'Profile claimed'
+                    : item.status === 'joined'
+                      ? 'Joined'
+                      : 'Pending'}
                 </span>
-                <button type="button" className="inv-menu" aria-label="More options">
-                  ⋮
-                </button>
+                {tab === 'sent' && canInviterEditInvitation(item) ? (
+                  <button type="button" className="inv-menu" aria-label="More options">
+                    ⋮
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>

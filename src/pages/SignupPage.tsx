@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { AuthLayout, FacebookIcon, GoogleIcon } from '../components/AuthShell'
+import { AuthLayout, GoogleIcon } from '../components/AuthShell'
 import { getErrorMessage, useAuth } from '../context/AuthContext'
 import {
   acceptPersistedInvitationIfAny,
+  fetchInvitationPreview,
   persistInviteToken,
+  readPersistedInviteToken,
 } from '../lib/invitations'
 
 export default function SignupPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { signup, loginWithGoogle, loginWithFacebook, user, loading } = useAuth()
+  const { signup, loginWithGoogle, user, loading } = useAuth()
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
@@ -20,13 +22,53 @@ export default function SignupPage() {
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [inviteEmailLocked, setInviteEmailLocked] = useState(false)
+  const [invitePrefillLoading, setInvitePrefillLoading] = useState(false)
 
   useEffect(() => {
-    const token = searchParams.get('invite')
-    if (token) persistInviteToken(token)
-    const prefillEmail = searchParams.get('email')
-    if (prefillEmail) setEmail(prefillEmail)
+    const tokenFromQuery = searchParams.get('invite')?.trim()
+    if (tokenFromQuery) persistInviteToken(tokenFromQuery)
+
+    const prefillEmail = searchParams.get('email')?.trim().toLowerCase()
+    if (prefillEmail) {
+      setEmail(prefillEmail)
+      setInviteEmailLocked(true)
+      return
+    }
+
+    const token = tokenFromQuery || readPersistedInviteToken()
+    if (!token) return
+
+    let cancelled = false
+    setInvitePrefillLoading(true)
+    ;(async () => {
+      try {
+        const preview = await fetchInvitationPreview(token)
+        if (cancelled) return
+        const inviteeEmail = preview.inviteeEmail?.trim().toLowerCase()
+        if (inviteeEmail) {
+          setEmail(inviteeEmail)
+          setInviteEmailLocked(true)
+        }
+      } catch {
+        /* invite preview optional; user can still sign up */
+      } finally {
+        if (!cancelled) setInvitePrefillLoading(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [searchParams])
+
+  const inviteToken =
+    searchParams.get('invite')?.trim() || readPersistedInviteToken() || ''
+  const loginHref = inviteToken
+    ? `/login?invite=${encodeURIComponent(inviteToken)}${
+        email ? `&email=${encodeURIComponent(email)}` : ''
+      }`
+    : '/login'
 
   if (loading) {
     return (
@@ -80,20 +122,6 @@ export default function SignupPage() {
     }
   }
 
-  async function handleFacebook() {
-    setError('')
-    setSubmitting(true)
-    try {
-      await loginWithFacebook()
-      await acceptPersistedInvitationIfAny()
-      navigate('/home', { replace: true })
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   return (
     <AuthLayout>
       <header className="auth-card-head">
@@ -110,15 +138,6 @@ export default function SignupPage() {
         >
           <GoogleIcon />
           Sign up with Google
-        </button>
-        <button
-          type="button"
-          className="btn-facebook"
-          onClick={handleFacebook}
-          disabled={submitting}
-        >
-          <FacebookIcon />
-          Sign up with Facebook
         </button>
       </div>
 
@@ -159,11 +178,25 @@ export default function SignupPage() {
             type="email"
             name="email"
             autoComplete="email"
-            placeholder="Enter email address"
+            placeholder={
+              invitePrefillLoading ? 'Loading invitation email…' : 'Enter email address'
+            }
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              if (!inviteEmailLocked) setEmail(e.target.value)
+            }}
             required
+            readOnly={inviteEmailLocked}
+            disabled={invitePrefillLoading}
+            className={inviteEmailLocked ? 'auth-input-readonly' : undefined}
+            aria-readonly={inviteEmailLocked}
           />
+          {inviteEmailLocked ? (
+            <span className="auth-field-hint">
+              This invitation was sent to this address. Sign up with this email to join
+              the family tree.
+            </span>
+          ) : null}
         </label>
 
         <label className="auth-field">
@@ -216,7 +249,7 @@ export default function SignupPage() {
       </form>
 
       <p className="auth-switch">
-        Already have an account? <Link to="/login">Log in</Link>
+        Already have an account? <Link to={loginHref}>Log in</Link>
       </p>
     </AuthLayout>
   )

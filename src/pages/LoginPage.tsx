@@ -7,7 +7,7 @@ import {
   useNavigate,
   useSearchParams,
 } from 'react-router-dom'
-import { AuthLayout, FacebookIcon, GoogleIcon } from '../components/AuthShell'
+import { AuthLayout, GoogleIcon } from '../components/AuthShell'
 import { getErrorMessage, useAuth } from '../context/AuthContext'
 import {
   acceptPersistedInvitationIfAny,
@@ -18,8 +18,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { login, loginWithGoogle, loginWithFacebook, resetPassword, user, loading } =
-    useAuth()
+  const { login, loginWithGoogle, resetPassword, user, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -78,21 +77,6 @@ export default function LoginPage() {
     }
   }
 
-  async function handleFacebook() {
-    setError('')
-    setInfo('')
-    setSubmitting(true)
-    try {
-      await loginWithFacebook()
-      await acceptPersistedInvitationIfAny()
-      navigate(redirectTo, { replace: true })
-    } catch (err) {
-      setError(getErrorMessage(err))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   async function handleForgotPassword() {
     setError('')
     setInfo('')
@@ -124,15 +108,6 @@ export default function LoginPage() {
         >
           <GoogleIcon />
           Continue with Google
-        </button>
-        <button
-          type="button"
-          className="btn-facebook"
-          onClick={handleFacebook}
-          disabled={submitting}
-        >
-          <FacebookIcon />
-          Continue with Facebook
         </button>
       </div>
 

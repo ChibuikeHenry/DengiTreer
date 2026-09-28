@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ModalFrame from './ModalFrame'
 import {
   ContactFields,
@@ -6,6 +6,7 @@ import {
   PersonalInfoFields,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
 type Props = { open: boolean; onClose: () => void }
 
@@ -18,8 +19,14 @@ export default function AddSpouseModal({ open, onClose }: Props) {
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const photo = usePhotoPicker()
 
   const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('spouse', onClose)
+
+  useEffect(() => {
+    if (open) return
+    photo.reset()
+  }, [open, photo.reset])
 
   return (
     <ModalFrame
@@ -34,6 +41,7 @@ export default function AddSpouseModal({ open, onClose }: Props) {
         lastName,
         inviteeEmail: email,
         memberStatus: status,
+        photoFile: photo.file,
       })}
       formError={error}
       submitting={submitting}
@@ -70,9 +78,7 @@ export default function AddSpouseModal({ open, onClose }: Props) {
           </label>
           <label className="field">
             <span>Wedding Anniversary Date (Optional)</span>
-            <span className="field-with-icon">
-              <input type="date" />
-            </span>
+            <input type="date" />
           </label>
         </div>
       </section>
@@ -84,7 +90,10 @@ export default function AddSpouseModal({ open, onClose }: Props) {
           email={email}
           onPhone={setPhone}
           onEmail={setEmail}
-          emailRequired={status === 'living'}
+          emailOptionalHint={status === 'living'}
+          photoPreviewUrl={photo.previewUrl}
+          onPhotoSelect={photo.selectFile}
+          photoError={photo.error}
         />
       </section>
 

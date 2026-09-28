@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.acceptInvitation = exports.getInvitationByToken = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -66,15 +66,12 @@ async function createInvitationRecord(uid, authToken, data) {
     const inviteeEmail = String(data.inviteeEmail ?? '')
         .trim()
         .toLowerCase();
-    if (memberStatus === 'living' && role !== 'member' && !inviteeEmail) {
-        throw new https_1.HttpsError('invalid-argument', 'Email is required to invite a living relative.');
-    }
     const inviterName = (typeof authToken.name === 'string' && authToken.name) ||
         (typeof authToken.email === 'string' && authToken.email) ||
         'A family member';
     const token = newToken();
     const joinUrl = `${APP_ORIGIN}/join/${token}`;
-    await db.collection('invitations').doc(token).set({
+    const invitationPayload = {
         token,
         inviterUid: uid,
         inviterName,
@@ -82,15 +79,39 @@ async function createInvitationRecord(uid, authToken, data) {
         inviteeEmail: inviteeEmail || null,
         inviteeName: inviteeName || null,
         inviteeFirstName: firstName || null,
+        inviteeMiddleName: middleName || null,
         inviteeLastName: lastName || null,
         role,
         status: 'pending',
         memberStatus,
         personalMessage: data.personalMessage?.trim() || null,
+        photoURL: data.photoURL?.trim() || null,
         createdAt: firestore_1.FieldValue.serverTimestamp(),
         joinedAt: null,
         joinedUid: null,
-    });
+    };
+    await db.collection('invitations').doc(token).set(invitationPayload);
+    if (role !== 'member') {
+        await db
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .doc(token)
+            .set({
+            inviteToken: token,
+            firstName: firstName || null,
+            middleName: middleName || null,
+            lastName: lastName || null,
+            displayName: inviteeName || null,
+            role,
+            memberStatus,
+            photoURL: data.photoURL?.trim() || null,
+            inviteeEmail: inviteeEmail || null,
+            claimedByUid: null,
+            claimedAt: null,
+            createdAt: firestore_1.FieldValue.serverTimestamp(),
+        });
+    }
     if (memberStatus === 'living' && inviteeEmail) {
         await queueInviteEmail({
             to: inviteeEmail,
@@ -157,6 +178,7 @@ exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
         ? request.auth.token.email.toLowerCase()
         : null;
     let role = 'member';
+    const joinedUid = request.auth.uid;
     await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists) {
@@ -171,18 +193,117 @@ exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
             throw new https_1.HttpsError('permission-denied', 'Sign in with the email address this invitation was sent to.');
         }
         role = doc.role;
+        const inviterUid = String(doc.inviterUid ?? '');
+        const invitePhoto = doc.photoURL;
+        const firstName = String(doc.inviteeFirstName ?? '').trim();
+        const middleName = String(doc.inviteeMiddleName ?? '').trim();
+        const lastName = String(doc.inviteeLastName ?? '').trim();
+        const displayName = String(doc.inviteeName ?? '').trim() ||
+            [firstName, middleName, lastName].filter(Boolean).join(' ');
         tx.update(ref, {
             status: 'joined',
             joinedAt: firestore_1.FieldValue.serverTimestamp(),
-            joinedUid: request.auth.uid,
+            joinedUid,
+            profileClaimed: true,
         });
-        tx.set(db.collection('users').doc(request.auth.uid), {
+        tx.set(db.collection('users').doc(joinedUid), {
             familyRole: role,
-            invitedByUid: doc.inviterUid,
+            invitedByUid: inviterUid || null,
             inviteToken: token,
+            profileClaimed: true,
+            claimedInviteToken: token,
+            firstName: firstName || null,
+            middleName: middleName || null,
+            lastName: lastName || null,
+            photoURL: invitePhoto?.trim() || null,
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         }, { merge: true });
+        if (inviterUid && role !== 'member') {
+            const familyMemberRef = db
+                .collection('users')
+                .doc(inviterUid)
+                .collection('familyMembers')
+                .doc(token);
+            const familySnap = await tx.get(familyMemberRef);
+            if (familySnap.exists) {
+                tx.update(familyMemberRef, {
+                    claimedByUid: joinedUid,
+                    claimedAt: firestore_1.FieldValue.serverTimestamp(),
+                    displayName: displayName || familySnap.data()?.displayName || null,
+                });
+            }
+        }
     });
-    return { ok: true, role, roleLabel: roleLabel(role) };
+    return {
+        ok: true,
+        role,
+        roleLabel: roleLabel(role),
+        profileClaimed: true,
+    };
+});
+exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to update this family member.');
+    }
+    const data = (request.data ?? {});
+    const token = String(data.token ?? '').trim();
+    if (!token) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
+    }
+    const firstName = String(data.firstName ?? '').trim();
+    const lastName = String(data.lastName ?? '').trim();
+    const middleName = String(data.middleName ?? '').trim();
+    if (!firstName || !lastName) {
+        throw new https_1.HttpsError('invalid-argument', 'First and last name are required.');
+    }
+    const inviteeName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+    const photoURL = data.photoURL === null || data.photoURL === undefined
+        ? undefined
+        : String(data.photoURL).trim() || null;
+    const ref = db.collection('invitations').doc(token);
+    const uid = request.auth.uid;
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) {
+            throw new https_1.HttpsError('not-found', 'Invitation not found.');
+        }
+        const doc = snap.data();
+        if (doc.inviterUid !== uid) {
+            throw new https_1.HttpsError('permission-denied', 'You can only edit people you invited.');
+        }
+        if (doc.status !== 'pending' || doc.profileClaimed === true) {
+            throw new https_1.HttpsError('failed-precondition', 'This person has claimed their profile. You can no longer edit their details.');
+        }
+        const invitationUpdate = {
+            inviteeFirstName: firstName,
+            inviteeMiddleName: middleName || null,
+            inviteeLastName: lastName,
+            inviteeName: inviteeName,
+            updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        };
+        if (photoURL !== undefined) {
+            invitationUpdate.photoURL = photoURL;
+        }
+        tx.update(ref, invitationUpdate);
+        const familyMemberRef = db
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .doc(token);
+        const familySnap = await tx.get(familyMemberRef);
+        if (familySnap.exists) {
+            const familyUpdate = {
+                firstName,
+                middleName: middleName || null,
+                lastName,
+                displayName: inviteeName,
+            };
+            if (photoURL !== undefined) {
+                familyUpdate.photoURL = photoURL;
+            }
+            tx.update(familyMemberRef, familyUpdate);
+        }
+    });
+    return { ok: true };
 });
 //# sourceMappingURL=index.js.map

@@ -4,7 +4,7 @@ const navItems = [
   { label: 'Features', to: '/#features' },
   { label: 'How It Works', to: '/#how-it-works' },
   { label: 'Pricing', to: '/#pricing' },
-  { label: 'About US', to: '/#about' },
+  { label: 'About US', to: '/about' },
   { label: 'Blog', to: '/#blog' },
 ] as const
 

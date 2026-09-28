@@ -1,55 +1,153 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useOutletContext } from 'react-router-dom'
+import ProfileAvatar from '../components/ProfileAvatar'
+import { useAuth } from '../context/AuthContext'
+import {
+  computeTreeStats,
+  membersByRole,
+  roleLabel,
+  subscribeTreeMembers,
+  type TreeMember,
+} from '../lib/familyTreeMembers'
+import {
+  hasSavedProfileName,
+  profileFirstName,
+  profileFullName,
+  resolveUserProfileForForm,
+} from '../lib/userProfile'
 import { hasSelfOnTree } from '../lib/treeStorage'
+import type { InviteRole } from '../lib/invitations'
 import type { DashboardContext } from './HomePage'
 
-function StarterDiagram({ openModal }: { openModal: DashboardContext['openModal'] }) {
+function TreePerson({
+  member,
+  slotClass,
+}: {
+  member: TreeMember
+  slotClass: string
+}) {
+  return (
+    <div className={`tree-person ${slotClass}`}>
+      <ProfileAvatar
+        photoURL={member.photoURL}
+        name={member.displayName}
+        size="tree"
+        className="tree-person-avatar"
+      />
+      <span className="tree-person-name">
+        {profileFirstName(member.displayName, roleLabel(member.role))}
+      </span>
+      {!member.profileClaimed ? (
+        <span className="tree-person-role">{roleLabel(member.role)}</span>
+      ) : null}
+    </div>
+  )
+}
+
+function TreeSlot({
+  slotRole,
+  member,
+  openModal,
+}: {
+  slotRole: InviteRole
+  member?: TreeMember
+  openModal: DashboardContext['openModal']
+}) {
+  const modalRole = slotRole as 'parent' | 'child' | 'sibling' | 'spouse'
+  const slotClass = `tree-person-${slotRole}`
+
+  if (member) {
+    return <TreePerson member={member} slotClass={slotClass} />
+  }
+
+  return (
+    <button type="button" className={`node node-${slotRole} ${slotClass}`} onClick={() => openModal(modalRole)}>
+      + Add {roleLabel(slotRole)}
+    </button>
+  )
+}
+
+function StarterDiagram({
+  openModal,
+  members,
+  selfPhotoURL,
+  selfName,
+  selfHasProfileName,
+}: {
+  openModal: DashboardContext['openModal']
+  members: TreeMember[]
+  selfPhotoURL: string | null
+  selfName: string
+  selfHasProfileName: boolean
+}) {
+  const selfLabel = selfHasProfileName ? profileFirstName(selfName, 'You') : 'You'
+  const byRole = membersByRole(members)
+
   return (
     <div className="ft-canvas ft-canvas-starter">
       <div className="tree-diagram tree-diagram-lg">
         <span className="tree-line tree-line-v-top" aria-hidden="true" />
         <span className="tree-line tree-line-v-bottom" aria-hidden="true" />
         <span className="tree-line tree-line-h" aria-hidden="true" />
-        <div className="node node-you">You</div>
-        <button
-          type="button"
-          className="node node-parent"
-          onClick={() => openModal('parent')}
-        >
-          + Add Parent
-        </button>
-        <button
-          type="button"
-          className="node node-child"
-          onClick={() => openModal('child')}
-        >
-          + Add Child
-        </button>
-        <button
-          type="button"
-          className="node node-sibling"
-          onClick={() => openModal('sibling')}
-        >
-          + Add Sibling
-        </button>
-        <button
-          type="button"
-          className="node node-spouse"
-          onClick={() => openModal('spouse')}
-        >
-          + Add Spouse
-        </button>
+        <Link to="/home/profile" className="tree-person tree-person-you tree-person-link">
+          <ProfileAvatar
+            photoURL={selfPhotoURL}
+            name={selfName}
+            size="tree"
+            className="tree-person-avatar tree-person-avatar-you"
+          />
+          <span className="tree-person-name">{selfLabel}</span>
+        </Link>
+        <TreeSlot slotRole="parent" member={byRole.parent} openModal={openModal} />
+        <TreeSlot slotRole="child" member={byRole.child} openModal={openModal} />
+        <TreeSlot slotRole="sibling" member={byRole.sibling} openModal={openModal} />
+        <TreeSlot slotRole="spouse" member={byRole.spouse} openModal={openModal} />
       </div>
     </div>
   )
 }
 
 export default function FamilyTreePage() {
+  const { user } = useAuth()
   const { openModal, treeVersion } = useOutletContext<DashboardContext>()
   const location = useLocation()
   const [view, setView] = useState<'tree' | 'list'>('tree')
+  const [members, setMembers] = useState<TreeMember[]>([])
+  const [selfPhotoURL, setSelfPhotoURL] = useState<string | null>(null)
+  const [selfName, setSelfName] = useState('')
+  const [selfHasProfileName, setSelfHasProfileName] = useState(false)
 
   const selfAdded = useMemo(() => hasSelfOnTree(), [treeVersion])
+  const selfListLabel = selfHasProfileName ? selfName : 'You'
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setMembers([])
+      return
+    }
+    return subscribeTreeMembers(user.uid, setMembers)
+  }, [user?.uid, treeVersion])
+
+  useEffect(() => {
+    if (!user) {
+      setSelfPhotoURL(null)
+      setSelfName('')
+      setSelfHasProfileName(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      const profile = await resolveUserProfileForForm(user)
+      if (cancelled) return
+      const name = profileFullName(profile) || user.displayName?.trim() || ''
+      setSelfName(name)
+      setSelfHasProfileName(hasSavedProfileName(profile))
+      setSelfPhotoURL(user.photoURL ?? profile.photoURL ?? null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user, treeVersion])
 
   useEffect(() => {
     const state = location.state as { openSelf?: boolean } | null
@@ -59,9 +157,7 @@ export default function FamilyTreePage() {
     }
   }, [location.state, openModal])
 
-  const memberCount = selfAdded ? 1 : 0
-  const generations = selfAdded ? 1 : 0
-  const branches = 0
+  const stats = computeTreeStats(selfAdded, members)
 
   const quickActions = [
     {
@@ -121,15 +217,45 @@ export default function FamilyTreePage() {
               </button>
             </div>
           ) : (
-            <StarterDiagram openModal={openModal} />
+            <StarterDiagram
+              openModal={openModal}
+              members={members}
+              selfPhotoURL={selfPhotoURL}
+              selfName={selfName}
+              selfHasProfileName={selfHasProfileName}
+            />
           )
         ) : (
           <ul className="ft-list">
             {selfAdded ? (
-              <li>
-                <strong>You</strong>
-                <span>Profile · Living</span>
-              </li>
+              <>
+                <li className="ft-list-person">
+                  <Link to="/home/profile" className="ft-list-person-link">
+                    <ProfileAvatar photoURL={selfPhotoURL} name={selfName || 'You'} size="sm" />
+                    <span>
+                      <strong>{selfListLabel}</strong>
+                      <span>Profile · Living</span>
+                    </span>
+                  </Link>
+                </li>
+                {members.map((member) => (
+                  <li key={member.id} className="ft-list-person">
+                    <ProfileAvatar
+                      photoURL={member.photoURL}
+                      name={member.displayName}
+                      size="sm"
+                    />
+                    <span>
+                      <strong>{member.displayName}</strong>
+                      <span>
+                        {roleLabel(member.role)} ·{' '}
+                        {member.memberStatus === 'living' ? 'Living' : 'Deceased'}
+                        {member.inviteStatus === 'pending' ? ' · Invite pending' : ''}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </>
             ) : (
               <li className="ft-list-empty">No family members yet. Add yourself to begin.</li>
             )}
@@ -144,21 +270,21 @@ export default function FamilyTreePage() {
             <li>
               <span className="ft-stat-icon" />
               <span>
-                <strong>{memberCount}</strong>
+                <strong>{stats.total}</strong>
                 <small>Total Family Member</small>
               </span>
             </li>
             <li>
               <span className="ft-stat-icon" />
               <span>
-                <strong>{generations}</strong>
+                <strong>{stats.generations}</strong>
                 <small>Generation</small>
               </span>
             </li>
             <li>
               <span className="ft-stat-icon" />
               <span>
-                <strong>{branches}</strong>
+                <strong>{stats.branches}</strong>
                 <small>Branches</small>
               </span>
             </li>

@@ -75,6 +75,7 @@ type CreateInviteInput = {
   inviteeEmail?: string
   memberStatus?: 'living' | 'deceased'
   personalMessage?: string
+  photoURL?: string
 }
 
 async function createInvitationRecord(
@@ -96,13 +97,6 @@ async function createInvitationRecord(
     .trim()
     .toLowerCase()
 
-  if (memberStatus === 'living' && role !== 'member' && !inviteeEmail) {
-    throw new HttpsError(
-      'invalid-argument',
-      'Email is required to invite a living relative.',
-    )
-  }
-
   const inviterName =
     (typeof authToken.name === 'string' && authToken.name) ||
     (typeof authToken.email === 'string' && authToken.email) ||
@@ -111,7 +105,7 @@ async function createInvitationRecord(
   const token = newToken()
   const joinUrl = `${APP_ORIGIN}/join/${token}`
 
-  await db.collection('invitations').doc(token).set({
+  const invitationPayload = {
     token,
     inviterUid: uid,
     inviterName,
@@ -120,15 +114,41 @@ async function createInvitationRecord(
     inviteeEmail: inviteeEmail || null,
     inviteeName: inviteeName || null,
     inviteeFirstName: firstName || null,
+    inviteeMiddleName: middleName || null,
     inviteeLastName: lastName || null,
     role,
     status: 'pending',
     memberStatus,
     personalMessage: data.personalMessage?.trim() || null,
+    photoURL: data.photoURL?.trim() || null,
     createdAt: FieldValue.serverTimestamp(),
     joinedAt: null,
     joinedUid: null,
-  })
+  }
+
+  await db.collection('invitations').doc(token).set(invitationPayload)
+
+  if (role !== 'member') {
+    await db
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .doc(token)
+      .set({
+        inviteToken: token,
+        firstName: firstName || null,
+        middleName: middleName || null,
+        lastName: lastName || null,
+        displayName: inviteeName || null,
+        role,
+        memberStatus,
+        photoURL: data.photoURL?.trim() || null,
+        inviteeEmail: inviteeEmail || null,
+        claimedByUid: null,
+        claimedAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      })
+  }
 
   if (memberStatus === 'living' && inviteeEmail) {
     await queueInviteEmail({
@@ -217,6 +237,7 @@ export const acceptInvitation = onCall(async (request) => {
       : null
 
   let role: InviteRole = 'member'
+  const joinedUid = request.auth.uid
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
@@ -238,24 +259,149 @@ export const acceptInvitation = onCall(async (request) => {
     }
 
     role = doc.role as InviteRole
+    const inviterUid = String(doc.inviterUid ?? '')
+    const invitePhoto = doc.photoURL as string | null | undefined
+    const firstName = String(doc.inviteeFirstName ?? '').trim()
+    const middleName = String(doc.inviteeMiddleName ?? '').trim()
+    const lastName = String(doc.inviteeLastName ?? '').trim()
+    const displayName =
+      String(doc.inviteeName ?? '').trim() ||
+      [firstName, middleName, lastName].filter(Boolean).join(' ')
 
     tx.update(ref, {
       status: 'joined',
       joinedAt: FieldValue.serverTimestamp(),
-      joinedUid: request.auth!.uid,
+      joinedUid,
+      profileClaimed: true,
     })
 
     tx.set(
-      db.collection('users').doc(request.auth!.uid),
+      db.collection('users').doc(joinedUid),
       {
         familyRole: role,
-        invitedByUid: doc.inviterUid,
+        invitedByUid: inviterUid || null,
         inviteToken: token,
+        profileClaimed: true,
+        claimedInviteToken: token,
+        firstName: firstName || null,
+        middleName: middleName || null,
+        lastName: lastName || null,
+        photoURL: invitePhoto?.trim() || null,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     )
+
+    if (inviterUid && role !== 'member') {
+      const familyMemberRef = db
+        .collection('users')
+        .doc(inviterUid)
+        .collection('familyMembers')
+        .doc(token)
+      const familySnap = await tx.get(familyMemberRef)
+      if (familySnap.exists) {
+        tx.update(familyMemberRef, {
+          claimedByUid: joinedUid,
+          claimedAt: FieldValue.serverTimestamp(),
+          displayName: displayName || familySnap.data()?.displayName || null,
+        })
+      }
+    }
   })
 
-  return { ok: true, role, roleLabel: roleLabel(role) }
+  return {
+    ok: true,
+    role,
+    roleLabel: roleLabel(role),
+    profileClaimed: true,
+  }
+})
+
+type UpdatePendingMemberInput = {
+  token?: string
+  firstName?: string
+  middleName?: string
+  lastName?: string
+  photoURL?: string | null
+}
+
+export const updatePendingFamilyMemberProfile = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to update this family member.')
+  }
+
+  const data = (request.data ?? {}) as UpdatePendingMemberInput
+  const token = String(data.token ?? '').trim()
+  if (!token) {
+    throw new HttpsError('invalid-argument', 'Missing invitation token.')
+  }
+
+  const firstName = String(data.firstName ?? '').trim()
+  const lastName = String(data.lastName ?? '').trim()
+  const middleName = String(data.middleName ?? '').trim()
+  if (!firstName || !lastName) {
+    throw new HttpsError('invalid-argument', 'First and last name are required.')
+  }
+
+  const inviteeName = [firstName, middleName, lastName].filter(Boolean).join(' ')
+  const photoURL =
+    data.photoURL === null || data.photoURL === undefined
+      ? undefined
+      : String(data.photoURL).trim() || null
+
+  const ref = db.collection('invitations').doc(token)
+  const uid = request.auth.uid
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'Invitation not found.')
+    }
+
+    const doc = snap.data()!
+    if (doc.inviterUid !== uid) {
+      throw new HttpsError('permission-denied', 'You can only edit people you invited.')
+    }
+
+    if (doc.status !== 'pending' || doc.profileClaimed === true) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This person has claimed their profile. You can no longer edit their details.',
+      )
+    }
+
+    const invitationUpdate: Record<string, unknown> = {
+      inviteeFirstName: firstName,
+      inviteeMiddleName: middleName || null,
+      inviteeLastName: lastName,
+      inviteeName: inviteeName,
+      updatedAt: FieldValue.serverTimestamp(),
+    }
+    if (photoURL !== undefined) {
+      invitationUpdate.photoURL = photoURL
+    }
+
+    tx.update(ref, invitationUpdate)
+
+    const familyMemberRef = db
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .doc(token)
+    const familySnap = await tx.get(familyMemberRef)
+    if (familySnap.exists) {
+      const familyUpdate: Record<string, unknown> = {
+        firstName,
+        middleName: middleName || null,
+        lastName,
+        displayName: inviteeName,
+      }
+      if (photoURL !== undefined) {
+        familyUpdate.photoURL = photoURL
+      }
+      tx.update(familyMemberRef, familyUpdate)
+    }
+  })
+
+  return { ok: true }
 })
