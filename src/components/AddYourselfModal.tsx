@@ -8,9 +8,12 @@ import { resolveUserProfileForForm, saveUserProfile } from '../lib/userProfile'
 import ModalFrame from './ModalFrame'
 import {
   ContactFields,
+  MemberBioField,
   OccupationEducationFields,
   PersonalInfoFields,
 } from './familyFormFields'
+import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
+import MemberPrivacyFields from './MemberPrivacyFields'
 
 type Props = {
   open: boolean
@@ -28,6 +31,8 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  const [bio, setBio] = useState('')
+  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
   const photo = usePhotoPicker()
   const [prefillLoading, setPrefillLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -49,6 +54,7 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
       setLastName(profile.lastName)
       setEmail(profile.email || user.email?.trim() || '')
       setPhone(profile.phone ?? '')
+      setBio(profile.bio ?? '')
       setPrefillLoading(false)
     })()
 
@@ -78,6 +84,8 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
         email: email.trim(),
         phone: phone.trim(),
         photoURL,
+        bio: bio.trim(),
+        profilePrivacy: privacy,
       })
 
       onSuccess()
@@ -158,7 +166,18 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
       </section>
 
       <section className="modal-section">
-        <h3>4. Additional Information (Optional)</h3>
+        <h3>4. About you (Optional)</h3>
+        <MemberBioField bio={bio} onBioChange={setBio} idPrefix="yourself" />
+      </section>
+
+      <MemberPrivacyFields
+        privacy={privacy}
+        onPrivacyChange={setPrivacy}
+        sectionNumber={5}
+      />
+
+      <section className="modal-section">
+        <h3>6. Additional Information (Optional)</h3>
         <OccupationEducationFields />
       </section>
     </ModalFrame>

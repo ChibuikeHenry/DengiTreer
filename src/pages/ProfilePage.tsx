@@ -6,9 +6,15 @@ import LoadingSpinner from '../components/LoadingSpinner'
 import ProfileAvatar from '../components/ProfileAvatar'
 import {
   ContactFields,
+  MemberBioField,
   OccupationEducationFields,
   PersonalInfoFields,
 } from '../components/familyFormFields'
+import {
+  MEMBER_PRIVACY_OPTIONS,
+  parseMemberPrivacy,
+  type MemberPrivacy,
+} from '../lib/memberPrivacy'
 import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { uploadProfilePhoto } from '../lib/profilePhoto'
@@ -31,6 +37,8 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [photoURL, setPhotoURL] = useState<string | null>(null)
+  const [bio, setBio] = useState('')
+  const [profilePrivacy, setProfilePrivacy] = useState<MemberPrivacy>('family_members')
 
   useEffect(() => {
     if (!user) return
@@ -51,6 +59,10 @@ export default function ProfilePage() {
       setGender(profile.gender ?? '')
       setDob(profile.dateOfBirth ?? '')
       setPhotoURL(user.photoURL ?? profile.photoURL ?? null)
+      setBio(profile.bio ?? '')
+      setProfilePrivacy(
+        parseMemberPrivacy(profile.profilePrivacy ?? profile.defaultMemberPrivacy),
+      )
       setLoading(false)
     })()
 
@@ -97,6 +109,8 @@ export default function ProfilePage() {
         photoURL: nextPhotoURL,
         gender: gender.trim(),
         dateOfBirth: dob.trim(),
+        bio: bio.trim(),
+        profilePrivacy,
       })
 
       if (nextPhotoURL) setPhotoURL(nextPhotoURL)
@@ -191,6 +205,26 @@ export default function ProfilePage() {
               <p className="field-hint">
                 Email comes from your sign-in account and can&apos;t be changed here.
               </p>
+            </section>
+
+            <section className="profile-section">
+              <h2>Bio &amp; tree visibility</h2>
+              <MemberBioField bio={bio} onBioChange={setBio} idPrefix="profile" />
+              <label className="field">
+                <span>Who can view your information on the family tree?</span>
+                <select
+                  value={profilePrivacy}
+                  onChange={(e) =>
+                    setProfilePrivacy(e.target.value as MemberPrivacy)
+                  }
+                >
+                  {MEMBER_PRIVACY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </section>
 
             <section className="profile-section">

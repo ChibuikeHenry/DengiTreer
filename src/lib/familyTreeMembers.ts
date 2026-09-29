@@ -1,4 +1,11 @@
 import type { InviteRole } from './invitations'
+import { parseMemberPrivacy, type MemberPrivacy } from './memberPrivacy'
+import {
+  siblingRelationshipLabel,
+  type ParentKind,
+  type ParentSlot,
+  type SiblingRelationship,
+} from './siblingRelationship'
 import { subscribeSentInvitations, type InvitationRecord } from './invitations'
 import { isProfileClaimed } from './profileClaim'
 import { fetchUserProfile } from './userProfile'
@@ -15,9 +22,24 @@ export type TreeMember = {
   joinedUid: string | null
   profileClaimed: boolean
   inviterCanEdit: boolean
+  privacy: MemberPrivacy
+  bio: string
+  parentSlot: ParentSlot | null
+  parentKind: ParentKind | null
+  sharedFatherMemberId: string | null
+  sharedMotherMemberId: string | null
+  siblingRelationship: SiblingRelationship | null
+  dateOfBirth: string | null
+  dateOfDeath: string | null
 }
 
-const treeRoles = new Set<InviteRole>(['spouse', 'parent', 'child', 'sibling'])
+const treeRoles = new Set<InviteRole>([
+  'spouse',
+  'parent',
+  'grandparent',
+  'child',
+  'sibling',
+])
 
 export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember | null {
   if (!treeRoles.has(record.role)) return null
@@ -49,6 +71,15 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     joinedUid: record.joinedUid,
     profileClaimed: claimed,
     inviterCanEdit: record.memberStatus === 'deceased' || !claimed,
+    privacy: record.privacy,
+    bio: record.bio,
+    parentSlot: record.parentSlot,
+    parentKind: record.parentKind,
+    sharedFatherMemberId: record.sharedFatherMemberId,
+    sharedMotherMemberId: record.sharedMotherMemberId,
+    siblingRelationship: record.siblingRelationship,
+    dateOfBirth: record.dateOfBirth,
+    dateOfDeath: record.dateOfDeath,
   }
 }
 
@@ -71,6 +102,11 @@ async function enrichClaimedMember(member: TreeMember): Promise<TreeMember> {
       lastName: profile.lastName || member.lastName,
       displayName,
       photoURL: profile.photoURL ?? member.photoURL,
+      bio: profile.bio?.trim() || member.bio,
+      privacy: profile.profilePrivacy
+        ? parseMemberPrivacy(profile.profilePrivacy)
+        : member.privacy,
+      dateOfBirth: profile.dateOfBirth?.trim() || member.dateOfBirth,
     }
   } catch {
     return member
@@ -98,21 +134,44 @@ export function subscribeTreeMembers(
   )
 }
 
-export function membersByRole(members: TreeMember[]) {
-  const map: Partial<Record<InviteRole, TreeMember>> = {}
+const groupedTreeRoles = ['parent', 'child', 'sibling', 'spouse'] as const
+export type GroupedTreeRole = (typeof groupedTreeRoles)[number]
+
+export function membersGroupedByRole(members: TreeMember[]) {
+  const groups: Record<GroupedTreeRole, TreeMember[]> = {
+    parent: [],
+    child: [],
+    sibling: [],
+    spouse: [],
+  }
+
   for (const member of members) {
-    if (!map[member.role]) {
-      map[member.role] = member
+    if (groupedTreeRoles.includes(member.role as GroupedTreeRole)) {
+      groups[member.role as GroupedTreeRole].push(member)
     }
   }
-  return map
+
+  return groups
+}
+
+/** @deprecated Prefer membersGroupedByRole when multiple members per role are supported */
+export function membersByRole(members: TreeMember[]) {
+  const groups = membersGroupedByRole(members)
+  return {
+    parent: groups.parent[0],
+    child: groups.child[0],
+    sibling: groups.sibling[0],
+    spouse: groups.spouse[0],
+  }
 }
 
 export function computeTreeStats(selfOnTree: boolean, members: TreeMember[]) {
   const total = (selfOnTree ? 1 : 0) + members.length
+  const hasGrandparent = members.some((m) => m.role === 'grandparent')
   const hasParent = members.some((m) => m.role === 'parent')
   const hasChild = members.some((m) => m.role === 'child')
   let generations = selfOnTree ? 1 : 0
+  if (hasGrandparent) generations += 1
   if (hasParent) generations += 1
   if (hasChild) generations += 1
 
@@ -125,12 +184,44 @@ export function computeTreeStats(selfOnTree: boolean, members: TreeMember[]) {
   }
 }
 
+export function parentSlotLabel(member: TreeMember): string {
+  if (member.role !== 'parent') return roleLabel(member.role)
+  if (member.parentSlot === 'father') return 'Father'
+  if (member.parentSlot === 'mother') return 'Mother'
+  return 'Parent'
+}
+
+export function grandparentSlotLabel(member: TreeMember): string {
+  if (member.role !== 'grandparent') return roleLabel(member.role)
+  if (member.parentSlot === 'father') return 'Grandfather'
+  if (member.parentSlot === 'mother') return 'Grandmother'
+  return 'Grandparent'
+}
+
+export function treeMemberRoleLabel(member: TreeMember): string {
+  if (member.role === 'sibling') {
+    return memberRelationshipLabel(member) ?? roleLabel(member.role)
+  }
+  if (member.role === 'parent') return parentSlotLabel(member)
+  if (member.role === 'grandparent') return grandparentSlotLabel(member)
+  return roleLabel(member.role)
+}
+
+export function memberRelationshipLabel(member: TreeMember): string | null {
+  if (member.role === 'sibling' && member.siblingRelationship) {
+    return siblingRelationshipLabel(member.siblingRelationship)
+  }
+  return null
+}
+
 export function roleLabel(role: InviteRole): string {
   switch (role) {
     case 'spouse':
       return 'Spouse'
     case 'parent':
       return 'Parent'
+    case 'grandparent':
+      return 'Grandparent'
     case 'child':
       return 'Child'
     case 'sibling':

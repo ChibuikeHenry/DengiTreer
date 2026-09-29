@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.updateFamilyMemberPrivacy = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -10,10 +10,33 @@ const v2_1 = require("firebase-functions/v2");
 (0, v2_1.setGlobalOptions)({ region: 'us-central1' });
 const db = (0, firestore_1.getFirestore)();
 const APP_ORIGIN = process.env.APP_ORIGIN ?? 'https://dengitree.web.app';
+function parseParentKind(value) {
+    const v = String(value ?? '').trim();
+    if (v === 'step' || v === 'adoptive' || v === 'biological')
+        return v;
+    return 'biological';
+}
+function parseParentSlot(value) {
+    const v = String(value ?? '').trim();
+    if (v === 'father' || v === 'mother' || v === 'unknown')
+        return v;
+    return null;
+}
+const MEMBER_PRIVACY_VALUES = new Set([
+    'family_members',
+    'immediate_family',
+    'only_me',
+    'network',
+]);
+function parseMemberPrivacy(value) {
+    const normalized = String(value ?? '').trim();
+    return MEMBER_PRIVACY_VALUES.has(normalized) ? normalized : 'family_members';
+}
 function roleLabel(role) {
     const map = {
         spouse: 'Spouse',
         parent: 'Parent',
+        grandparent: 'Grandparent',
         child: 'Child',
         sibling: 'Sibling',
         member: 'Family Member',
@@ -55,7 +78,8 @@ async function queueInviteEmail(options) {
 }
 async function createInvitationRecord(uid, authToken, data) {
     const role = data.role;
-    if (!role || !['spouse', 'parent', 'child', 'sibling', 'member'].includes(role)) {
+    if (!role ||
+        !['spouse', 'parent', 'grandparent', 'child', 'sibling', 'member'].includes(role)) {
         throw new https_1.HttpsError('invalid-argument', 'Invalid invitation role.');
     }
     const firstName = String(data.firstName ?? '').trim();
@@ -66,6 +90,17 @@ async function createInvitationRecord(uid, authToken, data) {
     const inviteeEmail = String(data.inviteeEmail ?? '')
         .trim()
         .toLowerCase();
+    const privacy = parseMemberPrivacy(data.privacy);
+    const bio = String(data.bio ?? '').trim();
+    const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null;
+    const dateOfDeath = String(data.dateOfDeath ?? '').trim() || null;
+    const parentSlot = role === 'parent' || role === 'grandparent' ? parseParentSlot(data.parentSlot) : null;
+    const parentKind = role === 'parent' ? parseParentKind(data.parentKind) : null;
+    const sharedFatherMemberId = role === 'sibling' ? String(data.sharedFatherMemberId ?? '').trim() || null : null;
+    const sharedMotherMemberId = role === 'sibling' ? String(data.sharedMotherMemberId ?? '').trim() || null : null;
+    const siblingRelationship = role === 'sibling' && data.siblingRelationship
+        ? String(data.siblingRelationship).trim()
+        : null;
     const inviterName = (typeof authToken.name === 'string' && authToken.name) ||
         (typeof authToken.email === 'string' && authToken.email) ||
         'A family member';
@@ -86,6 +121,15 @@ async function createInvitationRecord(uid, authToken, data) {
         memberStatus,
         personalMessage: data.personalMessage?.trim() || null,
         photoURL: data.photoURL?.trim() || null,
+        privacy,
+        bio: bio || null,
+        parentSlot,
+        parentKind,
+        sharedFatherMemberId,
+        sharedMotherMemberId,
+        siblingRelationship,
+        dateOfBirth,
+        dateOfDeath,
         createdAt: firestore_1.FieldValue.serverTimestamp(),
         joinedAt: null,
         joinedUid: null,
@@ -107,10 +151,27 @@ async function createInvitationRecord(uid, authToken, data) {
             memberStatus,
             photoURL: data.photoURL?.trim() || null,
             inviteeEmail: inviteeEmail || null,
+            privacy,
+            bio: bio || null,
+            parentSlot,
+            parentKind,
+            sharedFatherMemberId,
+            sharedMotherMemberId,
+            siblingRelationship,
+            dateOfBirth,
+            dateOfDeath,
             claimedByUid: null,
             claimedAt: null,
             createdAt: firestore_1.FieldValue.serverTimestamp(),
         });
+    }
+    if (role === 'parent' && parentSlot && parentSlot !== 'unknown') {
+        const userParentPatch = {};
+        if (parentSlot === 'father')
+            userParentPatch.treeFatherMemberId = token;
+        if (parentSlot === 'mother')
+            userParentPatch.treeMotherMemberId = token;
+        await db.collection('users').doc(uid).set(userParentPatch, { merge: true });
     }
     if (memberStatus === 'living' && inviteeEmail) {
         await queueInviteEmail({
@@ -195,6 +256,7 @@ exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
         role = doc.role;
         const inviterUid = String(doc.inviterUid ?? '');
         const invitePhoto = doc.photoURL;
+        const inviteBio = String(doc.bio ?? '').trim();
         const firstName = String(doc.inviteeFirstName ?? '').trim();
         const middleName = String(doc.inviteeMiddleName ?? '').trim();
         const lastName = String(doc.inviteeLastName ?? '').trim();
@@ -216,6 +278,8 @@ exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
             middleName: middleName || null,
             lastName: lastName || null,
             photoURL: invitePhoto?.trim() || null,
+            bio: inviteBio || null,
+            profilePrivacy: parseMemberPrivacy(doc.privacy),
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         }, { merge: true });
         if (inviterUid && role !== 'member') {
@@ -260,6 +324,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
     const photoURL = data.photoURL === null || data.photoURL === undefined
         ? undefined
         : String(data.photoURL).trim() || null;
+    const bio = data.bio === undefined ? undefined : String(data.bio ?? '').trim() || null;
     const ref = db.collection('invitations').doc(token);
     const uid = request.auth.uid;
     await db.runTransaction(async (tx) => {
@@ -284,6 +349,9 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
         if (photoURL !== undefined) {
             invitationUpdate.photoURL = photoURL;
         }
+        if (bio !== undefined) {
+            invitationUpdate.bio = bio;
+        }
         tx.update(ref, invitationUpdate);
         const familyMemberRef = db
             .collection('users')
@@ -301,7 +369,47 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             if (photoURL !== undefined) {
                 familyUpdate.photoURL = photoURL;
             }
+            if (bio !== undefined) {
+                familyUpdate.bio = bio;
+            }
             tx.update(familyMemberRef, familyUpdate);
+        }
+    });
+    return { ok: true };
+});
+exports.updateFamilyMemberPrivacy = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to update privacy settings.');
+    }
+    const data = (request.data ?? {});
+    const token = String(data.token ?? '').trim();
+    if (!token) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
+    }
+    const privacy = parseMemberPrivacy(data.privacy);
+    const uid = request.auth.uid;
+    const ref = db.collection('invitations').doc(token);
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) {
+            throw new https_1.HttpsError('not-found', 'Invitation not found.');
+        }
+        const doc = snap.data();
+        if (doc.inviterUid !== uid) {
+            throw new https_1.HttpsError('permission-denied', 'You can only update people you added.');
+        }
+        tx.update(ref, {
+            privacy,
+            updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        });
+        const familyMemberRef = db
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .doc(token);
+        const familySnap = await tx.get(familyMemberRef);
+        if (familySnap.exists) {
+            tx.update(familyMemberRef, { privacy });
         }
     });
     return { ok: true };

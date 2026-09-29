@@ -10,12 +10,54 @@ setGlobalOptions({ region: 'us-central1' })
 const db = getFirestore()
 const APP_ORIGIN = process.env.APP_ORIGIN ?? 'https://dengitree.web.app'
 
-type InviteRole = 'spouse' | 'parent' | 'child' | 'sibling' | 'member'
+type InviteRole = 'spouse' | 'parent' | 'grandparent' | 'child' | 'sibling' | 'member'
+
+type MemberPrivacy =
+  | 'family_members'
+  | 'immediate_family'
+  | 'only_me'
+  | 'network'
+
+type ParentKind = 'biological' | 'step' | 'adoptive'
+type ParentSlot = 'father' | 'mother' | 'unknown'
+type SiblingRelationship =
+  | 'brother'
+  | 'sister'
+  | 'half-brother'
+  | 'half-sister'
+  | 'step-brother'
+  | 'step-sister'
+  | 'sibling'
+
+function parseParentKind(value: unknown): ParentKind {
+  const v = String(value ?? '').trim()
+  if (v === 'step' || v === 'adoptive' || v === 'biological') return v
+  return 'biological'
+}
+
+function parseParentSlot(value: unknown): ParentSlot | null {
+  const v = String(value ?? '').trim()
+  if (v === 'father' || v === 'mother' || v === 'unknown') return v
+  return null
+}
+
+const MEMBER_PRIVACY_VALUES = new Set<MemberPrivacy>([
+  'family_members',
+  'immediate_family',
+  'only_me',
+  'network',
+])
+
+function parseMemberPrivacy(value: unknown): MemberPrivacy {
+  const normalized = String(value ?? '').trim() as MemberPrivacy
+  return MEMBER_PRIVACY_VALUES.has(normalized) ? normalized : 'family_members'
+}
 
 function roleLabel(role: InviteRole): string {
   const map: Record<InviteRole, string> = {
     spouse: 'Spouse',
     parent: 'Parent',
+    grandparent: 'Grandparent',
     child: 'Child',
     sibling: 'Sibling',
     member: 'Family Member',
@@ -76,6 +118,15 @@ type CreateInviteInput = {
   memberStatus?: 'living' | 'deceased'
   personalMessage?: string
   photoURL?: string
+  privacy?: MemberPrivacy
+  bio?: string
+  parentSlot?: ParentSlot
+  parentKind?: ParentKind
+  sharedFatherMemberId?: string
+  sharedMotherMemberId?: string
+  siblingRelationship?: SiblingRelationship
+  dateOfBirth?: string
+  dateOfDeath?: string
 }
 
 async function createInvitationRecord(
@@ -84,7 +135,10 @@ async function createInvitationRecord(
   data: CreateInviteInput,
 ) {
   const role = data.role
-  if (!role || !['spouse', 'parent', 'child', 'sibling', 'member'].includes(role)) {
+  if (
+    !role ||
+    !['spouse', 'parent', 'grandparent', 'child', 'sibling', 'member'].includes(role)
+  ) {
     throw new HttpsError('invalid-argument', 'Invalid invitation role.')
   }
 
@@ -96,6 +150,21 @@ async function createInvitationRecord(
   const inviteeEmail = String(data.inviteeEmail ?? '')
     .trim()
     .toLowerCase()
+  const privacy = parseMemberPrivacy(data.privacy)
+  const bio = String(data.bio ?? '').trim()
+  const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null
+  const dateOfDeath = String(data.dateOfDeath ?? '').trim() || null
+  const parentSlot =
+    role === 'parent' || role === 'grandparent' ? parseParentSlot(data.parentSlot) : null
+  const parentKind = role === 'parent' ? parseParentKind(data.parentKind) : null
+  const sharedFatherMemberId =
+    role === 'sibling' ? String(data.sharedFatherMemberId ?? '').trim() || null : null
+  const sharedMotherMemberId =
+    role === 'sibling' ? String(data.sharedMotherMemberId ?? '').trim() || null : null
+  const siblingRelationship =
+    role === 'sibling' && data.siblingRelationship
+      ? (String(data.siblingRelationship).trim() as SiblingRelationship)
+      : null
 
   const inviterName =
     (typeof authToken.name === 'string' && authToken.name) ||
@@ -121,6 +190,15 @@ async function createInvitationRecord(
     memberStatus,
     personalMessage: data.personalMessage?.trim() || null,
     photoURL: data.photoURL?.trim() || null,
+    privacy,
+    bio: bio || null,
+    parentSlot,
+    parentKind,
+    sharedFatherMemberId,
+    sharedMotherMemberId,
+    siblingRelationship,
+    dateOfBirth,
+    dateOfDeath,
     createdAt: FieldValue.serverTimestamp(),
     joinedAt: null,
     joinedUid: null,
@@ -144,10 +222,26 @@ async function createInvitationRecord(
         memberStatus,
         photoURL: data.photoURL?.trim() || null,
         inviteeEmail: inviteeEmail || null,
+        privacy,
+        bio: bio || null,
+        parentSlot,
+        parentKind,
+        sharedFatherMemberId,
+        sharedMotherMemberId,
+        siblingRelationship,
+        dateOfBirth,
+        dateOfDeath,
         claimedByUid: null,
         claimedAt: null,
         createdAt: FieldValue.serverTimestamp(),
       })
+  }
+
+  if (role === 'parent' && parentSlot && parentSlot !== 'unknown') {
+    const userParentPatch: Record<string, string> = {}
+    if (parentSlot === 'father') userParentPatch.treeFatherMemberId = token
+    if (parentSlot === 'mother') userParentPatch.treeMotherMemberId = token
+    await db.collection('users').doc(uid).set(userParentPatch, { merge: true })
   }
 
   if (memberStatus === 'living' && inviteeEmail) {
@@ -261,6 +355,7 @@ export const acceptInvitation = onCall(async (request) => {
     role = doc.role as InviteRole
     const inviterUid = String(doc.inviterUid ?? '')
     const invitePhoto = doc.photoURL as string | null | undefined
+    const inviteBio = String(doc.bio ?? '').trim()
     const firstName = String(doc.inviteeFirstName ?? '').trim()
     const middleName = String(doc.inviteeMiddleName ?? '').trim()
     const lastName = String(doc.inviteeLastName ?? '').trim()
@@ -287,6 +382,8 @@ export const acceptInvitation = onCall(async (request) => {
         middleName: middleName || null,
         lastName: lastName || null,
         photoURL: invitePhoto?.trim() || null,
+        bio: inviteBio || null,
+        profilePrivacy: parseMemberPrivacy(doc.privacy),
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -323,6 +420,7 @@ type UpdatePendingMemberInput = {
   middleName?: string
   lastName?: string
   photoURL?: string | null
+  bio?: string
 }
 
 export const updatePendingFamilyMemberProfile = onCall(async (request) => {
@@ -348,6 +446,8 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
     data.photoURL === null || data.photoURL === undefined
       ? undefined
       : String(data.photoURL).trim() || null
+  const bio =
+    data.bio === undefined ? undefined : String(data.bio ?? '').trim() || null
 
   const ref = db.collection('invitations').doc(token)
   const uid = request.auth.uid
@@ -380,6 +480,9 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
     if (photoURL !== undefined) {
       invitationUpdate.photoURL = photoURL
     }
+    if (bio !== undefined) {
+      invitationUpdate.bio = bio
+    }
 
     tx.update(ref, invitationUpdate)
 
@@ -399,7 +502,55 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       if (photoURL !== undefined) {
         familyUpdate.photoURL = photoURL
       }
+      if (bio !== undefined) {
+        familyUpdate.bio = bio
+      }
       tx.update(familyMemberRef, familyUpdate)
+    }
+  })
+
+  return { ok: true }
+})
+
+export const updateFamilyMemberPrivacy = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to update privacy settings.')
+  }
+
+  const data = (request.data ?? {}) as { token?: string; privacy?: MemberPrivacy }
+  const token = String(data.token ?? '').trim()
+  if (!token) {
+    throw new HttpsError('invalid-argument', 'Missing invitation token.')
+  }
+
+  const privacy = parseMemberPrivacy(data.privacy)
+  const uid = request.auth.uid
+  const ref = db.collection('invitations').doc(token)
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) {
+      throw new HttpsError('not-found', 'Invitation not found.')
+    }
+
+    const doc = snap.data()!
+    if (doc.inviterUid !== uid) {
+      throw new HttpsError('permission-denied', 'You can only update people you added.')
+    }
+
+    tx.update(ref, {
+      privacy,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    const familyMemberRef = db
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .doc(token)
+    const familySnap = await tx.get(familyMemberRef)
+    if (familySnap.exists) {
+      tx.update(familyMemberRef, { privacy })
     }
   })
 

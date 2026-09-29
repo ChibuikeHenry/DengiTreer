@@ -1,9 +1,45 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import UpcomingBadge from '../components/UpcomingBadge'
 import { useAuth } from '../context/AuthContext'
+import {
+  DEFAULT_MEMBER_PRIVACY,
+  MEMBER_PRIVACY_OPTIONS,
+  type MemberPrivacy,
+  parseMemberPrivacy,
+} from '../lib/memberPrivacy'
+import { resolveUserProfileForForm, saveUserProfile } from '../lib/userProfile'
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const [defaultPrivacy, setDefaultPrivacy] =
+    useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
+  const [privacyStatus, setPrivacyStatus] = useState('')
+
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    ;(async () => {
+      const profile = await resolveUserProfileForForm(user)
+      if (cancelled) return
+      setDefaultPrivacy(parseMemberPrivacy(profile.defaultMemberPrivacy))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  async function handleDefaultPrivacyChange(value: MemberPrivacy) {
+    if (!user) return
+    setDefaultPrivacy(value)
+    setPrivacyStatus('Saving…')
+    try {
+      await saveUserProfile(user.uid, { defaultMemberPrivacy: value })
+      setPrivacyStatus('Saved')
+    } catch {
+      setPrivacyStatus('Could not save. Try again.')
+    }
+  }
 
   return (
     <div className="home upcoming-page settings-page">
@@ -65,12 +101,37 @@ export default function SettingsPage() {
       <section className="home-card upcoming-panel settings-group">
         <h2>Privacy</h2>
         <ul className="settings-list">
-          <li className="settings-row settings-row-disabled">
+          <li className="settings-row settings-row-privacy">
             <div>
-              <strong>Who can see your tree</strong>
-              <span>Family members only</span>
+              <strong>Default for new family members</strong>
+              <span>Used when you add parents, spouses, children, or siblings</span>
+              {privacyStatus ? (
+                <span className="settings-inline-status">{privacyStatus}</span>
+              ) : null}
             </div>
-            <UpcomingBadge />
+            <select
+              className="settings-select"
+              value={defaultPrivacy}
+              onChange={(e) =>
+                void handleDefaultPrivacyChange(e.target.value as MemberPrivacy)
+              }
+              aria-label="Default privacy for new family members"
+            >
+              {MEMBER_PRIVACY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </li>
+          <li className="settings-row">
+            <div>
+              <strong>Per-person privacy</strong>
+              <span>Update visibility for someone you already added</span>
+            </div>
+            <Link to="/home/invitations" className="settings-link">
+              Invitations
+            </Link>
           </li>
           <li className="settings-row settings-row-disabled">
             <div>

@@ -4,7 +4,14 @@ import ProfileAvatar from '../components/ProfileAvatar'
 import UpcomingBadge from '../components/UpcomingBadge'
 import { DashIcons } from '../components/DashboardLayout'
 import { useAuth } from '../context/AuthContext'
-import { roleLabel, subscribeTreeMembers, type TreeMember } from '../lib/familyTreeMembers'
+import { formatBioForDisplay } from '../lib/bio'
+import { memberPrivacyLabel } from '../lib/memberPrivacy'
+import {
+  memberRelationshipLabel,
+  roleLabel,
+  subscribeTreeMembers,
+  type TreeMember,
+} from '../lib/familyTreeMembers'
 import { resolveUserProfileForForm } from '../lib/userProfile'
 import { hasSelfOnTree } from '../lib/treeStorage'
 import type { DashboardContext } from './HomePage'
@@ -14,6 +21,7 @@ export default function PeoplePage() {
   const { openModal, treeVersion } = useOutletContext<DashboardContext>()
   const [members, setMembers] = useState<TreeMember[]>([])
   const [selfName, setSelfName] = useState('')
+  const [selfBio, setSelfBio] = useState('')
   const [query, setQuery] = useState('')
   const selfOnTree = useMemo(() => hasSelfOnTree(), [treeVersion])
 
@@ -32,6 +40,7 @@ export default function PeoplePage() {
         .filter(Boolean)
         .join(' ')
       setSelfName(name || user.displayName?.trim() || 'You')
+      setSelfBio(profile.bio?.trim() ?? '')
     })()
     return () => {
       cancelled = true
@@ -91,6 +100,7 @@ export default function PeoplePage() {
               <div className="people-row-body">
                 <strong>{selfName}</strong>
                 <span>You · Living</span>
+                <span className="people-row-bio">{formatBioForDisplay(selfBio)}</span>
               </div>
               <Link to="/home/profile" className="people-row-action">
                 Edit profile
@@ -106,10 +116,13 @@ export default function PeoplePage() {
                 <div className="people-row-body">
                   <strong>{member.displayName}</strong>
                   <span>
-                    {roleLabel(member.role)} ·{' '}
+                    {memberRelationshipLabel(member) ?? roleLabel(member.role)} ·{' '}
                     {member.memberStatus === 'deceased' ? 'Deceased' : 'Living'}
                     {member.profileClaimed ? ' · Profile claimed' : ''}
+                    {' · '}
+                    {memberPrivacyLabel(member.privacy)}
                   </span>
+                  <span className="people-row-bio">{formatBioForDisplay(member.bio)}</span>
                 </div>
                 <span className="people-row-action people-row-muted">
                   {member.profileClaimed ? 'View only' : 'Pending'}

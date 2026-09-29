@@ -13,7 +13,11 @@ export type FamilyMemberSubmitFields = Omit<FamilyMemberInviteInput, 'role'> & {
   photoFile?: File | null
 }
 
-export function useFamilyMemberInviteSubmit(role: InviteRole, onClose: () => void) {
+export function useFamilyMemberInviteSubmit(
+  role: InviteRole,
+  onClose: () => void,
+  onAdded?: () => void,
+) {
   const { user } = useAuth()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -42,7 +46,8 @@ export function useFamilyMemberInviteSubmit(role: InviteRole, onClose: () => voi
           inviteeEmail: inviteeEmail || undefined,
           photoURL,
         })
-        onClose()
+        if (onAdded) onAdded()
+        else onClose()
       } catch (err) {
         const message = getCallableErrorMessage(err)
         if (message.includes('storage/unauthorized') || message.includes('403')) {
@@ -54,7 +59,7 @@ export function useFamilyMemberInviteSubmit(role: InviteRole, onClose: () => voi
         setSubmitting(false)
       }
     },
-    [onClose, role, user],
+    [onAdded, onClose, role, user],
   )
 
   const onSubmit = useCallback(

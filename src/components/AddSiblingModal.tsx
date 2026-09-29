@@ -1,32 +1,77 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
+import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
+import { useSiblingRelationshipPreview } from '../hooks/useSiblingRelationshipPreview'
+import MemberPrivacyFields from './MemberPrivacyFields'
 import {
   ContactFields,
+  MemberBioField,
   OccupationEducationFields,
   ParentSelectFields,
   PersonalInfoFields,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
-type Props = { open: boolean; onClose: () => void }
+type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
-export default function AddSiblingModal({ open, onClose }: Props) {
+export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
+  const [dateOfDeath, setDateOfDeath] = useState('')
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [bio, setBio] = useState('')
+  const [fatherId, setFatherId] = useState('')
+  const [motherId, setMotherId] = useState('')
   const photo = usePhotoPicker()
 
-  const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('sibling', onClose)
+  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
+  const { submitting, error, submit } = useFamilyMemberInviteSubmit('sibling', onClose, onAdded)
+
+  const sharedParents = useMemo(
+    () => ({
+      fatherMemberId: fatherId || null,
+      motherMemberId: motherId || null,
+    }),
+    [fatherId, motherId],
+  )
+
+  const { relationship, label: relationshipLabel } = useSiblingRelationshipPreview(
+    open,
+    sharedParents,
+    gender,
+  )
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    await submit({
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email,
+      memberStatus: status,
+      photoFile: photo.file,
+      privacy,
+      bio: bio.trim() || undefined,
+      sharedFatherMemberId: fatherId || undefined,
+      sharedMotherMemberId: motherId || undefined,
+      siblingRelationship: relationship,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    })
+  }
 
   useEffect(() => {
     if (open) return
     photo.reset()
+    setFatherId('')
+    setMotherId('')
   }, [open, photo.reset])
 
   return (
@@ -34,51 +79,37 @@ export default function AddSiblingModal({ open, onClose }: Props) {
       open={open}
       onClose={onClose}
       title="Add a Sibling"
-      description="Add your sibling to your family tree. Living siblings receive an email invite to join."
+      description="Add your sibling to your family tree. We infer brother, sister, half-, or step-sibling from the parents you share."
       submitLabel="Add Sibling"
-      onSubmit={onSubmit({
-        firstName,
-        middleName,
-        lastName,
-        inviteeEmail: email,
-        memberStatus: status,
-        photoFile: photo.file,
-      })}
+      onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}
     >
       <section className="modal-section">
-        <h3>1. Select Parents</h3>
-        <p className="field-hint">Choose the parents for this sibling from your family tree.</p>
-        <ParentSelectFields />
+        <h3>1. Select shared parents</h3>
+        <p className="field-hint">
+          Choose the parents you share with this sibling (your mother and/or father on the tree).
+          Relationship type updates automatically.
+        </p>
+        <ParentSelectFields
+          active={open}
+          mode="sibling"
+          fatherId={fatherId}
+          motherId={motherId}
+          onFatherId={setFatherId}
+          onMotherId={setMotherId}
+        />
       </section>
 
       <section className="modal-section">
-        <h3>2. Sibling Details</h3>
-        <div className="form-row form-row-sibling-details">
-          <div className="form-stack">
-            <label className="field">
-              <span>Relationship Type</span>
-              <select defaultValue="">
-                <option value="">Select relationship type</option>
-                <option value="brother">Brother</option>
-                <option value="sister">Sister</option>
-                <option value="half-brother">Half-brother</option>
-                <option value="half-sister">Half-sister</option>
-              </select>
-              <span className="field-hint">e.g Brother, Sister, Half-brother, Half-sister</span>
-            </label>
-            <label className="field">
-              <span>Order in Birth</span>
-              <select defaultValue="">
-                <option value="">Select birth order</option>
-                <option value="1">First born</option>
-                <option value="2">Second born</option>
-                <option value="3">Third born</option>
-              </select>
-              <span className="field-hint">e.g First born, Second born, etc</span>
-            </label>
-          </div>
+        <h3>2. Relationship (automatic)</h3>
+        <div className="relationship-auto-box" role="status" aria-live="polite">
+          <span className="relationship-auto-label">Detected relationship</span>
+          <strong className="relationship-auto-value">{relationshipLabel}</strong>
+          <p className="field-hint">
+            Based on shared parents and gender. Add your parents with Father/Mother roles for
+            best accuracy; step-parents are detected from parent type.
+          </p>
         </div>
       </section>
 
@@ -90,12 +121,14 @@ export default function AddSiblingModal({ open, onClose }: Props) {
           middleName={middleName}
           lastName={lastName}
           dob={dob}
+          dateOfDeath={dateOfDeath}
           gender={gender}
           status={status}
           onFirstName={setFirstName}
           onMiddleName={setMiddleName}
           onLastName={setLastName}
           onDob={setDob}
+          onDateOfDeath={setDateOfDeath}
           onGender={setGender}
           onStatus={setStatus}
         />
@@ -119,6 +152,17 @@ export default function AddSiblingModal({ open, onClose }: Props) {
         <h3>5. Additional Information (Optional)</h3>
         <OccupationEducationFields />
       </section>
+
+      <section className="modal-section">
+        <h3>6. About this person (Optional)</h3>
+        <MemberBioField bio={bio} onBioChange={setBio} idPrefix="sibling" />
+      </section>
+
+      <MemberPrivacyFields
+        privacy={privacy}
+        onPrivacyChange={setPrivacy}
+        sectionNumber={7}
+      />
     </ModalFrame>
   )
 }

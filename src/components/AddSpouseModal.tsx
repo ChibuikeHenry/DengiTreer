@@ -1,27 +1,50 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
+import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
+import MemberPrivacyFields from './MemberPrivacyFields'
 import {
   ContactFields,
+  MemberBioField,
   OccupationEducationFields,
   PersonalInfoFields,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
-type Props = { open: boolean; onClose: () => void }
+type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
-export default function AddSpouseModal({ open, onClose }: Props) {
+export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
+  const [dateOfDeath, setDateOfDeath] = useState('')
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [bio, setBio] = useState('')
   const photo = usePhotoPicker()
 
-  const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('spouse', onClose)
+  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
+  const { submitting, error, submit } = useFamilyMemberInviteSubmit('spouse', onClose, onAdded)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    await submit({
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email,
+      memberStatus: status,
+      photoFile: photo.file,
+      privacy,
+      bio: bio.trim() || undefined,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    })
+  }
 
   useEffect(() => {
     if (open) return
@@ -35,14 +58,7 @@ export default function AddSpouseModal({ open, onClose }: Props) {
       title="Add a Spouse"
       description="Add a new relative to your family tree. Living spouses receive an email invite to join with their role."
       submitLabel="Add Spouse"
-      onSubmit={onSubmit({
-        firstName,
-        middleName,
-        lastName,
-        inviteeEmail: email,
-        memberStatus: status,
-        photoFile: photo.file,
-      })}
+      onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}
     >
@@ -54,12 +70,14 @@ export default function AddSpouseModal({ open, onClose }: Props) {
           middleName={middleName}
           lastName={lastName}
           dob={dob}
+          dateOfDeath={dateOfDeath}
           gender={gender}
           status={status}
           onFirstName={setFirstName}
           onMiddleName={setMiddleName}
           onLastName={setLastName}
           onDob={setDob}
+          onDateOfDeath={setDateOfDeath}
           onGender={setGender}
           onStatus={setStatus}
         />
@@ -101,6 +119,17 @@ export default function AddSpouseModal({ open, onClose }: Props) {
         <h3>4. Additional Information (Optional)</h3>
         <OccupationEducationFields />
       </section>
+
+      <section className="modal-section">
+        <h3>5. About this person (Optional)</h3>
+        <MemberBioField bio={bio} onBioChange={setBio} idPrefix="spouse" />
+      </section>
+
+      <MemberPrivacyFields
+        privacy={privacy}
+        onPrivacyChange={setPrivacy}
+        sectionNumber={6}
+      />
     </ModalFrame>
   )
 }

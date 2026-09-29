@@ -1,30 +1,53 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
+import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
+import MemberPrivacyFields from './MemberPrivacyFields'
 import {
   ContactFields,
+  MemberBioField,
   OccupationEducationFields,
   ParentSelectFields,
   PersonalInfoFields,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import { normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
-type Props = { open: boolean; onClose: () => void }
+type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
-export default function AddChildModal({ open, onClose }: Props) {
+export default function AddChildModal({ open, onClose, onAdded }: Props) {
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
+  const [dateOfDeath, setDateOfDeath] = useState('')
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
+  const [bio, setBio] = useState('')
   const [fatherId, setFatherId] = useState('')
   const [motherId, setMotherId] = useState('')
   const photo = usePhotoPicker()
 
-  const { submitting, error, onSubmit } = useFamilyMemberInviteSubmit('child', onClose)
+  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
+  const { submitting, error, submit } = useFamilyMemberInviteSubmit('child', onClose, onAdded)
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    await submit({
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email,
+      memberStatus: status,
+      photoFile: photo.file,
+      privacy,
+      bio: bio.trim() || undefined,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    })
+  }
 
   useEffect(() => {
     if (open) return
@@ -40,14 +63,7 @@ export default function AddChildModal({ open, onClose }: Props) {
       title="Add a Child"
       description="Add your child to your family tree. Living children can be invited by email to join."
       submitLabel="Add Child"
-      onSubmit={onSubmit({
-        firstName,
-        middleName,
-        lastName,
-        inviteeEmail: email,
-        memberStatus: status,
-        photoFile: photo.file,
-      })}
+      onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}
     >
@@ -58,6 +74,7 @@ export default function AddChildModal({ open, onClose }: Props) {
         </p>
         <ParentSelectFields
           active={open}
+          mode="child"
           fatherId={fatherId}
           motherId={motherId}
           onFatherId={setFatherId}
@@ -73,12 +90,14 @@ export default function AddChildModal({ open, onClose }: Props) {
           middleName={middleName}
           lastName={lastName}
           dob={dob}
+          dateOfDeath={dateOfDeath}
           gender={gender}
           status={status}
           onFirstName={setFirstName}
           onMiddleName={setMiddleName}
           onLastName={setLastName}
           onDob={setDob}
+          onDateOfDeath={setDateOfDeath}
           onGender={setGender}
           onStatus={setStatus}
         />
@@ -115,6 +134,17 @@ export default function AddChildModal({ open, onClose }: Props) {
         <h3>5. Additional Information (Optional)</h3>
         <OccupationEducationFields />
       </section>
+
+      <section className="modal-section">
+        <h3>6. About this person (Optional)</h3>
+        <MemberBioField bio={bio} onBioChange={setBio} idPrefix="child" />
+      </section>
+
+      <MemberPrivacyFields
+        privacy={privacy}
+        onPrivacyChange={setPrivacy}
+        sectionNumber={7}
+      />
     </ModalFrame>
   )
 }

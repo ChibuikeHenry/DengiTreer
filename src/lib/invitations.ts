@@ -8,8 +8,23 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from './firebase'
+import type { MemberPrivacy } from './memberPrivacy'
+import { parseMemberPrivacy } from './memberPrivacy'
+import {
+  parseParentKind,
+  parseParentSlot,
+  type ParentKind,
+  type ParentSlot,
+  type SiblingRelationship,
+} from './siblingRelationship'
 
-export type InviteRole = 'spouse' | 'parent' | 'child' | 'sibling' | 'member'
+export type InviteRole =
+  | 'spouse'
+  | 'parent'
+  | 'grandparent'
+  | 'child'
+  | 'sibling'
+  | 'member'
 
 export type FamilyMemberInviteInput = {
   role: InviteRole
@@ -20,6 +35,15 @@ export type FamilyMemberInviteInput = {
   memberStatus: 'living' | 'deceased'
   personalMessage?: string
   photoURL?: string
+  privacy?: MemberPrivacy
+  bio?: string
+  parentSlot?: ParentSlot
+  parentKind?: ParentKind
+  sharedFatherMemberId?: string
+  sharedMotherMemberId?: string
+  siblingRelationship?: SiblingRelationship
+  dateOfBirth?: string
+  dateOfDeath?: string
 }
 
 export type InvitationRecord = {
@@ -35,6 +59,15 @@ export type InvitationRecord = {
   photoURL: string | null
   joinedUid: string | null
   profileClaimed: boolean
+  privacy: MemberPrivacy
+  bio: string
+  parentSlot: ParentSlot | null
+  parentKind: ParentKind | null
+  sharedFatherMemberId: string | null
+  sharedMotherMemberId: string | null
+  siblingRelationship: SiblingRelationship | null
+  dateOfBirth: string | null
+  dateOfDeath: string | null
   createdAt: Date | null
 }
 
@@ -65,6 +98,11 @@ const acceptInvitationFn = httpsCallable<
   { token: string },
   { ok: boolean; role: InviteRole; roleLabel: string; profileClaimed?: boolean }
 >(functions, 'acceptInvitation')
+
+const updateFamilyMemberPrivacyFn = httpsCallable<
+  { token: string; privacy: MemberPrivacy },
+  { ok: boolean }
+>(functions, 'updateFamilyMemberPrivacy')
 
 const updatePendingFamilyMemberProfileFn = httpsCallable<
   {
@@ -125,6 +163,11 @@ export async function acceptInvitation(token: string) {
   return result.data
 }
 
+export async function updateFamilyMemberPrivacy(token: string, privacy: MemberPrivacy) {
+  const result = await updateFamilyMemberPrivacyFn({ token, privacy })
+  return result.data
+}
+
 export async function updatePendingFamilyMemberProfile(input: {
   token: string
   firstName: string
@@ -157,6 +200,15 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
     photoURL: (data.photoURL as string | null) ?? null,
     joinedUid,
     profileClaimed,
+    privacy: parseMemberPrivacy(data.privacy),
+    bio: String(data.bio ?? '').trim(),
+    parentSlot: data.parentSlot ? parseParentSlot(data.parentSlot) : null,
+    parentKind: data.parentKind ? parseParentKind(data.parentKind) : null,
+    sharedFatherMemberId: (data.sharedFatherMemberId as string | null) ?? null,
+    sharedMotherMemberId: (data.sharedMotherMemberId as string | null) ?? null,
+    siblingRelationship: (data.siblingRelationship as SiblingRelationship | null) ?? null,
+    dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth) : null,
+    dateOfDeath: data.dateOfDeath ? String(data.dateOfDeath) : null,
     createdAt: timestampToDate(data.createdAt as Timestamp | undefined),
   }
 }
@@ -256,6 +308,8 @@ export function inviteRoleLabel(role: InviteRole): string {
       return 'Spouse'
     case 'parent':
       return 'Parent'
+    case 'grandparent':
+      return 'Grandparent'
     case 'child':
       return 'Child'
     case 'sibling':

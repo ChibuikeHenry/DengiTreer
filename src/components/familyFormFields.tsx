@@ -1,5 +1,9 @@
 import type { ChangeEvent } from 'react'
-import { useTreeParentPickOptions, type ParentPickOption } from '../hooks/useTreeParentPickOptions'
+import {
+  useTreeParentPickOptions,
+  type ParentPickMode,
+  type ParentPickOption,
+} from '../hooks/useTreeParentPickOptions'
 import { DashIcons } from './DashboardLayout'
 
 type PersonalInfoProps = {
@@ -7,6 +11,7 @@ type PersonalInfoProps = {
   middleName: string
   lastName: string
   dob: string
+  dateOfDeath?: string
   gender: string
   status: 'living' | 'deceased'
   namePrefix?: string
@@ -14,6 +19,7 @@ type PersonalInfoProps = {
   onMiddleName: (v: string) => void
   onLastName: (v: string) => void
   onDob: (v: string) => void
+  onDateOfDeath?: (v: string) => void
   onGender: (v: string) => void
   onStatus: (v: 'living' | 'deceased') => void
 }
@@ -23,6 +29,7 @@ export function PersonalInfoFields({
   middleName,
   lastName,
   dob,
+  dateOfDeath = '',
   gender,
   status,
   namePrefix = 'member',
@@ -30,6 +37,7 @@ export function PersonalInfoFields({
   onMiddleName,
   onLastName,
   onDob,
+  onDateOfDeath,
   onGender,
   onStatus,
 }: PersonalInfoProps) {
@@ -68,6 +76,16 @@ export function PersonalInfoFields({
           <span>Date of Birth</span>
           <input type="date" value={dob} onChange={(e) => onDob(e.target.value)} />
         </label>
+        {status === 'deceased' && onDateOfDeath ? (
+          <label className="field">
+            <span>Date of Death</span>
+            <input
+              type="date"
+              value={dateOfDeath}
+              onChange={(e) => onDateOfDeath(e.target.value)}
+            />
+          </label>
+        ) : null}
         <label className="field">
           <span>Gender</span>
           <select value={gender} onChange={(e) => onGender(e.target.value)} required>
@@ -105,6 +123,8 @@ export function PersonalInfoFields({
 
 type ParentSelectFieldsProps = {
   active?: boolean
+  /** child = you & spouse/co-parent; sibling = your parents on the tree */
+  mode?: ParentPickMode
   fatherId?: string
   motherId?: string
   onFatherId?: (id: string) => void
@@ -118,12 +138,14 @@ function parentOptionLabel(option: ParentPickOption) {
 
 export function ParentSelectFields({
   active = true,
+  mode = 'child',
   fatherId = '',
   motherId = '',
   onFatherId,
   onMotherId,
 }: ParentSelectFieldsProps) {
-  const { fathers, mothers } = useTreeParentPickOptions(active)
+  const { fathers, mothers } = useTreeParentPickOptions(active, mode)
+  const isSibling = mode === 'sibling'
 
   return (
     <div className="form-row form-row-2">
@@ -132,7 +154,7 @@ export function ParentSelectFields({
         <select
           value={fatherId}
           onChange={(e) => onFatherId?.(e.target.value)}
-          required={fathers.length > 0}
+          required={!isSibling && fathers.length > 0}
         >
           <option value="">Select father</option>
           {fathers.map((option) => (
@@ -143,7 +165,9 @@ export function ParentSelectFields({
         </select>
         {fathers.length === 0 ? (
           <span className="field-hint">
-            Add yourself and invite your spouse (or co-parent) to see choices here.
+            {isSibling
+              ? 'Add your parents to the tree first, then you can link siblings to them.'
+              : 'Add yourself and invite your spouse (or co-parent) to see choices here.'}
           </span>
         ) : null}
       </label>
@@ -152,7 +176,7 @@ export function ParentSelectFields({
         <select
           value={motherId}
           onChange={(e) => onMotherId?.(e.target.value)}
-          required={mothers.length > 0}
+          required={!isSibling && mothers.length > 0}
         >
           <option value="">Select mother</option>
           {mothers.map((option) => (
@@ -163,7 +187,9 @@ export function ParentSelectFields({
         </select>
         {mothers.length === 0 ? (
           <span className="field-hint">
-            Only people on your tree that you added or invited appear in this list.
+            {isSibling
+              ? 'Add your parents to the tree first, then you can link siblings to them.'
+              : 'Only people on your tree that you added or invited appear in this list.'}
           </span>
         ) : null}
       </label>
@@ -214,6 +240,30 @@ export function PhotoUploadField({
       </label>
       {error ? <span className="field-hint photo-upload-error">{error}</span> : null}
     </div>
+  )
+}
+
+type MemberBioFieldProps = {
+  bio: string
+  onBioChange: (value: string) => void
+  idPrefix?: string
+}
+
+export function MemberBioField({ bio, onBioChange, idPrefix = 'member' }: MemberBioFieldProps) {
+  const id = `${idPrefix}-bio`
+  return (
+    <label className="field">
+      <span>Short bio</span>
+      <textarea
+        id={id}
+        rows={3}
+        maxLength={280}
+        placeholder="A few words about this person — where they live, what they love, or their role in the family."
+        value={bio}
+        onChange={(e) => onBioChange(e.target.value)}
+      />
+      <span className="field-hint">{bio.trim().length}/280 characters</span>
+    </label>
   )
 }
 

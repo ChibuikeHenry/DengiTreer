@@ -1,71 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useOutletContext } from 'react-router-dom'
 import ProfileAvatar from '../components/ProfileAvatar'
+import PedigreeTreeDiagram from '../components/PedigreeTreeDiagram'
 import { useAuth } from '../context/AuthContext'
+import { formatBioForDisplay } from '../lib/bio'
 import {
   computeTreeStats,
-  membersByRole,
+  memberRelationshipLabel,
   roleLabel,
   subscribeTreeMembers,
   type TreeMember,
 } from '../lib/familyTreeMembers'
 import {
+  DEFAULT_MEMBER_PRIVACY,
+  memberPrivacyLabel,
+  parseMemberPrivacy,
+  type MemberPrivacy,
+} from '../lib/memberPrivacy'
+import {
   hasSavedProfileName,
-  profileFirstName,
   profileFullName,
   resolveUserProfileForForm,
 } from '../lib/userProfile'
 import { hasSelfOnTree } from '../lib/treeStorage'
-import type { InviteRole } from '../lib/invitations'
 import type { DashboardContext } from './HomePage'
-
-function TreePerson({
-  member,
-  slotClass,
-}: {
-  member: TreeMember
-  slotClass: string
-}) {
-  return (
-    <div className={`tree-person ${slotClass}`}>
-      <ProfileAvatar
-        photoURL={member.photoURL}
-        name={member.displayName}
-        size="tree"
-        className="tree-person-avatar"
-      />
-      <span className="tree-person-name">
-        {profileFirstName(member.displayName, roleLabel(member.role))}
-      </span>
-      {!member.profileClaimed ? (
-        <span className="tree-person-role">{roleLabel(member.role)}</span>
-      ) : null}
-    </div>
-  )
-}
-
-function TreeSlot({
-  slotRole,
-  member,
-  openModal,
-}: {
-  slotRole: InviteRole
-  member?: TreeMember
-  openModal: DashboardContext['openModal']
-}) {
-  const modalRole = slotRole as 'parent' | 'child' | 'sibling' | 'spouse'
-  const slotClass = `tree-person-${slotRole}`
-
-  if (member) {
-    return <TreePerson member={member} slotClass={slotClass} />
-  }
-
-  return (
-    <button type="button" className={`node node-${slotRole} ${slotClass}`} onClick={() => openModal(modalRole)}>
-      + Add {roleLabel(slotRole)}
-    </button>
-  )
-}
 
 function StarterDiagram({
   openModal,
@@ -73,36 +31,31 @@ function StarterDiagram({
   selfPhotoURL,
   selfName,
   selfHasProfileName,
+  selfBio,
+  selfPrivacy,
+  selfDateOfBirth,
 }: {
   openModal: DashboardContext['openModal']
   members: TreeMember[]
   selfPhotoURL: string | null
   selfName: string
   selfHasProfileName: boolean
+  selfBio: string
+  selfPrivacy: MemberPrivacy
+  selfDateOfBirth: string | null
 }) {
-  const selfLabel = selfHasProfileName ? profileFirstName(selfName, 'You') : 'You'
-  const byRole = membersByRole(members)
-
   return (
     <div className="ft-canvas ft-canvas-starter">
-      <div className="tree-diagram tree-diagram-lg">
-        <span className="tree-line tree-line-v-top" aria-hidden="true" />
-        <span className="tree-line tree-line-v-bottom" aria-hidden="true" />
-        <span className="tree-line tree-line-h" aria-hidden="true" />
-        <Link to="/home/profile" className="tree-person tree-person-you tree-person-link">
-          <ProfileAvatar
-            photoURL={selfPhotoURL}
-            name={selfName}
-            size="tree"
-            className="tree-person-avatar tree-person-avatar-you"
-          />
-          <span className="tree-person-name">{selfLabel}</span>
-        </Link>
-        <TreeSlot slotRole="parent" member={byRole.parent} openModal={openModal} />
-        <TreeSlot slotRole="child" member={byRole.child} openModal={openModal} />
-        <TreeSlot slotRole="sibling" member={byRole.sibling} openModal={openModal} />
-        <TreeSlot slotRole="spouse" member={byRole.spouse} openModal={openModal} />
-      </div>
+      <PedigreeTreeDiagram
+        members={members}
+        openModal={openModal}
+        selfPhotoURL={selfPhotoURL}
+        selfName={selfName}
+        selfHasProfileName={selfHasProfileName}
+        selfBio={selfBio}
+        selfPrivacy={selfPrivacy}
+        selfDateOfBirth={selfDateOfBirth}
+      />
     </div>
   )
 }
@@ -116,6 +69,9 @@ export default function FamilyTreePage() {
   const [selfPhotoURL, setSelfPhotoURL] = useState<string | null>(null)
   const [selfName, setSelfName] = useState('')
   const [selfHasProfileName, setSelfHasProfileName] = useState(false)
+  const [selfBio, setSelfBio] = useState('')
+  const [selfPrivacy, setSelfPrivacy] = useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
+  const [selfDateOfBirth, setSelfDateOfBirth] = useState<string | null>(null)
 
   const selfAdded = useMemo(() => hasSelfOnTree(), [treeVersion])
   const selfListLabel = selfHasProfileName ? selfName : 'You'
@@ -133,6 +89,9 @@ export default function FamilyTreePage() {
       setSelfPhotoURL(null)
       setSelfName('')
       setSelfHasProfileName(false)
+      setSelfBio('')
+      setSelfPrivacy(DEFAULT_MEMBER_PRIVACY)
+      setSelfDateOfBirth(null)
       return
     }
     let cancelled = false
@@ -143,6 +102,13 @@ export default function FamilyTreePage() {
       setSelfName(name)
       setSelfHasProfileName(hasSavedProfileName(profile))
       setSelfPhotoURL(user.photoURL ?? profile.photoURL ?? null)
+      setSelfBio(profile.bio?.trim() ?? '')
+      setSelfPrivacy(
+        parseMemberPrivacy(
+          profile.profilePrivacy ?? profile.defaultMemberPrivacy ?? DEFAULT_MEMBER_PRIVACY,
+        ),
+      )
+      setSelfDateOfBirth(profile.dateOfBirth?.trim() || null)
     })()
     return () => {
       cancelled = true
@@ -223,6 +189,9 @@ export default function FamilyTreePage() {
               selfPhotoURL={selfPhotoURL}
               selfName={selfName}
               selfHasProfileName={selfHasProfileName}
+              selfBio={selfBio}
+              selfPrivacy={selfPrivacy}
+              selfDateOfBirth={selfDateOfBirth}
             />
           )
         ) : (
@@ -234,7 +203,10 @@ export default function FamilyTreePage() {
                     <ProfileAvatar photoURL={selfPhotoURL} name={selfName || 'You'} size="sm" />
                     <span>
                       <strong>{selfListLabel}</strong>
-                      <span>Profile · Living</span>
+                      <span>
+                        Profile · Living · {memberPrivacyLabel(selfPrivacy)}
+                      </span>
+                      <span className="ft-list-bio">{formatBioForDisplay(selfBio)}</span>
                     </span>
                   </Link>
                 </li>
@@ -248,10 +220,13 @@ export default function FamilyTreePage() {
                     <span>
                       <strong>{member.displayName}</strong>
                       <span>
-                        {roleLabel(member.role)} ·{' '}
+                        {memberRelationshipLabel(member) ?? roleLabel(member.role)} ·{' '}
                         {member.memberStatus === 'living' ? 'Living' : 'Deceased'}
                         {member.inviteStatus === 'pending' ? ' · Invite pending' : ''}
+                        {' · '}
+                        {memberPrivacyLabel(member.privacy)}
                       </span>
+                      <span className="ft-list-bio">{formatBioForDisplay(member.bio)}</span>
                     </span>
                   </li>
                 ))}

@@ -1,9 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ContactFields } from './familyFormFields'
+import { ContactFields, MemberBioField } from './familyFormFields'
+import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
+import MemberPrivacyFields from './MemberPrivacyFields'
 import { DashIcons } from './DashboardLayout'
+import { normalizeDateField } from '../lib/lifeDates'
+import type { ParentKind, ParentSlot } from '../lib/siblingRelationship'
 
 const parentTypes = [
   {
@@ -25,19 +29,20 @@ const parentTypes = [
 
 const relationships = ['Mother', 'Father', 'Unknown / Not Known'] as const
 const UNKNOWN_RELATIONSHIP = 'Unknown / Not Known'
-const privacyOptions = [
-  'Family members only',
-  'Immediate family only',
-  'Only me',
-  'Everyone in my network',
-] as const
+
+function relationshipToParentSlot(relationship: string): ParentSlot {
+  if (relationship === 'Father') return 'father'
+  if (relationship === 'Mother') return 'mother'
+  return 'unknown'
+}
 
 type AddParentModalProps = {
   open: boolean
   onClose: () => void
+  onAdded?: () => void
 }
 
-export default function AddParentModal({ open, onClose }: AddParentModalProps) {
+export default function AddParentModal({ open, onClose, onAdded }: AddParentModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const [parentTypeOpen, setParentTypeOpen] = useState(false)
@@ -50,15 +55,15 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
   const [dob, setDob] = useState('')
+  const [dateOfDeath, setDateOfDeath] = useState('')
   const [gender, setGender] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [privacy, setPrivacy] = useState<(typeof privacyOptions)[number]>(
-    'Family members only',
-  )
+  const [bio, setBio] = useState('')
+  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
   const photo = usePhotoPicker()
-  const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose)
+  const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose, onAdded)
 
   useEffect(() => {
     if (open) return
@@ -100,6 +105,8 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
     const resolvedLast = lastName.trim() || (isUnknownParent ? 'Parent' : '')
     if (!resolvedFirst || !resolvedLast) return
 
+    const parentKind: ParentKind = parentType?.value ?? 'biological'
+
     await submit({
       firstName: resolvedFirst,
       middleName: middleName.trim(),
@@ -107,6 +114,12 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
       inviteeEmail: email.trim() || undefined,
       memberStatus: status,
       photoFile: photo.file,
+      privacy,
+      bio: bio.trim() || undefined,
+      parentSlot: relationshipToParentSlot(relationship),
+      parentKind,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
     })
   }
 
@@ -220,6 +233,16 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
                   onChange={(e) => setDob(e.target.value)}
                 />
               </label>
+              {status === 'deceased' ? (
+                <label className="field">
+                  <span>Date of Death</span>
+                  <input
+                    type="date"
+                    value={dateOfDeath}
+                    onChange={(e) => setDateOfDeath(e.target.value)}
+                  />
+                </label>
+              ) : null}
               <label className="field">
                 <span>Gender</span>
                 <select
@@ -322,25 +345,15 @@ export default function AddParentModal({ open, onClose }: AddParentModalProps) {
           </section>
 
           <section className="modal-section">
-            <h3>5. Privacy settings</h3>
-            <p className="field-hint">Who can view this person&apos;s information?</p>
-            <label className="field">
-              <span className="sr-only">Privacy</span>
-              <select
-                value={privacy}
-                onChange={(e) =>
-                  setPrivacy(e.target.value as (typeof privacyOptions)[number])
-                }
-              >
-                {privacyOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="privacy-note">You can change this later in privacy settings.</p>
+            <h3>5. About this person (Optional)</h3>
+            <MemberBioField bio={bio} onBioChange={setBio} idPrefix="parent" />
           </section>
+
+          <MemberPrivacyFields
+            privacy={privacy}
+            onPrivacyChange={setPrivacy}
+            sectionNumber={6}
+          />
 
           {error ? (
             <p className="modal-form-error" role="alert">

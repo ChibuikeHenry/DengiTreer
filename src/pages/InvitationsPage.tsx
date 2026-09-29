@@ -8,8 +8,13 @@ import {
   inviteRoleLabel,
   subscribeReceivedInvitations,
   subscribeSentInvitations,
+  updateFamilyMemberPrivacy,
   type InvitationRecord,
 } from '../lib/invitations'
+import {
+  MEMBER_PRIVACY_OPTIONS,
+  type MemberPrivacy,
+} from '../lib/memberPrivacy'
 import { canInviterEditInvitation, isProfileClaimed } from '../lib/profileClaim'
 
 type Tab = 'sent' | 'received'
@@ -38,6 +43,7 @@ export default function InvitationsPage() {
   const [listError, setListError] = useState('')
   const [composeError, setComposeError] = useState('')
   const [creatingLink, setCreatingLink] = useState(false)
+  const [privacyUpdatingId, setPrivacyUpdatingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user?.uid) return
@@ -94,6 +100,18 @@ export default function InvitationsPage() {
       await navigator.clipboard.writeText(inviteLink)
     } catch {
       /* ignore */
+    }
+  }
+
+  async function handlePrivacyChange(item: InvitationRecord, privacy: MemberPrivacy) {
+    setPrivacyUpdatingId(item.id)
+    setListError('')
+    try {
+      await updateFamilyMemberPrivacy(item.token, privacy)
+    } catch (err) {
+      setListError(getCallableErrorMessage(err))
+    } finally {
+      setPrivacyUpdatingId(null)
     }
   }
 
@@ -242,6 +260,27 @@ export default function InvitationsPage() {
                     {formatInviteDate(item.createdAt) || '—'}
                     {item.role !== 'member' ? ` · ${inviteRoleLabel(item.role)}` : ''}
                   </span>
+                  {tab === 'sent' && item.role !== 'member' ? (
+                    <label className="inv-privacy">
+                      <span className="sr-only">Who can view {displayName(item)}</span>
+                      <select
+                        value={item.privacy}
+                        disabled={privacyUpdatingId === item.id}
+                        onChange={(e) =>
+                          void handlePrivacyChange(
+                            item,
+                            e.target.value as MemberPrivacy,
+                          )
+                        }
+                      >
+                        {MEMBER_PRIVACY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
                 <span
                   className={`inv-badge inv-badge-${

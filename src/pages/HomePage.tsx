@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Outlet, useNavigate, useOutletContext } from 'react-router-dom'
 import AddChildModal from '../components/AddChildModal'
+import AddGrandparentModal from '../components/AddGrandparentModal'
 import AddParentModal from '../components/AddParentModal'
 import AddSiblingModal from '../components/AddSiblingModal'
 import AddSpouseModal from '../components/AddSpouseModal'
@@ -11,7 +12,13 @@ import { acceptPersistedInvitationIfAny } from '../lib/invitations'
 import { setSelfOnTree } from '../lib/treeStorage'
 import '../dashboard.css'
 
-export type MemberModalKind = 'yourself' | 'parent' | 'spouse' | 'sibling' | 'child'
+export type MemberModalKind =
+  | 'yourself'
+  | 'grandparent'
+  | 'parent'
+  | 'spouse'
+  | 'sibling'
+  | 'child'
 
 export type DashboardContext = {
   openModal: (kind: MemberModalKind) => void
@@ -33,6 +40,11 @@ export function HomeDashboard() {
   const closeModal = useCallback(() => setActiveModal(null), [])
   const openModal = useCallback((kind: MemberModalKind) => setActiveModal(kind), [])
 
+  const closeModalAfterInvite = useCallback(() => {
+    setTreeVersion((v) => v + 1)
+    setActiveModal(null)
+  }, [])
+
   const handleSelfAdded = useCallback(() => {
     setSelfOnTree()
     setTreeVersion((v) => v + 1)
@@ -51,10 +63,31 @@ export function HomeDashboard() {
         onClose={closeModal}
         onSuccess={handleSelfAdded}
       />
-      <AddParentModal open={activeModal === 'parent'} onClose={closeModal} />
-      <AddSpouseModal open={activeModal === 'spouse'} onClose={closeModal} />
-      <AddSiblingModal open={activeModal === 'sibling'} onClose={closeModal} />
-      <AddChildModal open={activeModal === 'child'} onClose={closeModal} />
+      <AddGrandparentModal
+        open={activeModal === 'grandparent'}
+        onClose={closeModal}
+        onAdded={closeModalAfterInvite}
+      />
+      <AddParentModal
+        open={activeModal === 'parent'}
+        onClose={closeModal}
+        onAdded={closeModalAfterInvite}
+      />
+      <AddSpouseModal
+        open={activeModal === 'spouse'}
+        onClose={closeModal}
+        onAdded={closeModalAfterInvite}
+      />
+      <AddSiblingModal
+        open={activeModal === 'sibling'}
+        onClose={closeModal}
+        onAdded={closeModalAfterInvite}
+      />
+      <AddChildModal
+        open={activeModal === 'child'}
+        onClose={closeModal}
+        onAdded={closeModalAfterInvite}
+      />
     </DashboardLayout>
   )
 }

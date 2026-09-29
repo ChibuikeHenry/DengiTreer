@@ -43,7 +43,7 @@ function spouseMembers(members: TreeMember[]): ParentPickOption[] {
     }))
 }
 
-export function partitionParentOptions(
+export function partitionChildParentOptions(
   self: ParentPickOption | null,
   members: TreeMember[],
 ): { fathers: ParentPickOption[]; mothers: ParentPickOption[] } {
@@ -58,7 +58,37 @@ export function partitionParentOptions(
   return { fathers, mothers }
 }
 
-export function useTreeParentPickOptions(enabled: boolean) {
+/** Shared parents on the tree — never you or your spouse/co-parent. */
+export function partitionSiblingParentOptions(
+  members: TreeMember[],
+  currentUserUid?: string | null,
+): { fathers: ParentPickOption[]; mothers: ParentPickOption[] } {
+  const parents: ParentPickOption[] = members
+    .filter((member) => member.role === 'parent')
+    .filter((member) => member.role !== 'spouse' && member.role !== 'child')
+    .filter(
+      (member) =>
+        !currentUserUid || !member.joinedUid || member.joinedUid !== currentUserUid,
+    )
+    .map((member) => ({
+      id: member.id,
+      displayName: member.displayName,
+      gender: null,
+    }))
+
+  const fathers = parents.filter((option) => matchesParentSlot(option.gender, 'father'))
+  const mothers = parents.filter((option) => matchesParentSlot(option.gender, 'mother'))
+
+  return { fathers, mothers }
+}
+
+export type ParentPickMode = 'child' | 'sibling'
+
+/** @deprecated Use partitionChildParentOptions */
+export const partitionParentOptions = partitionChildParentOptions
+
+/** Co-parents when adding a child (you + spouse). */
+export function useChildCoParentPickOptions(enabled: boolean) {
   const { user } = useAuth()
   const [members, setMembers] = useState<TreeMember[]>([])
   const [selfOption, setSelfOption] = useState<ParentPickOption | null>(null)
@@ -102,10 +132,37 @@ export function useTreeParentPickOptions(enabled: boolean) {
     }
   }, [enabled, user])
 
-  const { fathers, mothers } = useMemo(
-    () => partitionParentOptions(selfOption, members),
+  return useMemo(
+    () => partitionChildParentOptions(selfOption, members),
     [members, selfOption],
   )
+}
 
-  return { fathers, mothers }
+/** Your mother/father on the tree when adding a sibling. */
+export function useSiblingSharedParentPickOptions(enabled: boolean) {
+  const { user } = useAuth()
+  const [members, setMembers] = useState<TreeMember[]>([])
+
+  useEffect(() => {
+    if (!enabled || !user?.uid) {
+      setMembers([])
+      return
+    }
+    return subscribeTreeMembers(user.uid, setMembers)
+  }, [enabled, user?.uid])
+
+  return useMemo(
+    () => partitionSiblingParentOptions(members, user?.uid),
+    [members, user?.uid],
+  )
+}
+
+export function useTreeParentPickOptions(
+  enabled: boolean,
+  mode: ParentPickMode = 'child',
+) {
+  const childOptions = useChildCoParentPickOptions(enabled && mode === 'child')
+  const siblingOptions = useSiblingSharedParentPickOptions(enabled && mode === 'sibling')
+
+  return mode === 'sibling' ? siblingOptions : childOptions
 }
