@@ -167,8 +167,8 @@ export default function AboutUsPage() {
 
             <div className="about-hero-visual">
               <img
-                src="/images/about-hero-family.png"
-                alt="Multi-generational family smiling together"
+                src="/images/about-hero-team-tree.png"
+                alt="The team behind DengiTree illustrated as a family tree with team member profiles"
                 width={675}
                 height={412}
               />
