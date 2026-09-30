@@ -16,6 +16,8 @@ export type UserProfile = {
   defaultMemberPrivacy?: MemberPrivacy
   treeFatherMemberId?: string
   treeMotherMemberId?: string
+  invitedByUid?: string
+  familyRole?: string
 }
 
 export function parseDisplayName(displayName: string | null | undefined): {
@@ -131,6 +133,8 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
     treeMotherMemberId: data.treeMotherMemberId
       ? String(data.treeMotherMemberId)
       : undefined,
+    invitedByUid: data.invitedByUid ? String(data.invitedByUid) : undefined,
+    familyRole: data.familyRole ? String(data.familyRole) : undefined,
   }
 }
 
@@ -159,6 +163,8 @@ export async function resolveUserProfileForForm(user: {
       defaultMemberPrivacy: stored.defaultMemberPrivacy,
       treeFatherMemberId: stored.treeFatherMemberId,
       treeMotherMemberId: stored.treeMotherMemberId,
+      invitedByUid: stored.invitedByUid,
+      familyRole: stored.familyRole,
     }
   } catch {
     return fromAuth

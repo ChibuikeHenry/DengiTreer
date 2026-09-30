@@ -111,9 +111,21 @@ const updatePendingFamilyMemberProfileFn = httpsCallable<
     middleName?: string
     lastName: string
     photoURL?: string | null
+    bio?: string
+    dateOfBirth?: string | null
+    dateOfDeath?: string | null
+    memberStatus?: 'living' | 'deceased'
+    privacy?: MemberPrivacy
+    parentKind?: ParentKind
+    parentSlot?: ParentSlot
   },
   { ok: boolean }
 >(functions, 'updatePendingFamilyMemberProfile')
+
+const claimPendingInvitationsForEmailFn = httpsCallable<
+  void,
+  { claimedCount: number }
+>(functions, 'claimPendingInvitationsForEmail')
 
 export function inviteTokenStorageKey() {
   return 'dengitree-invite-token'
@@ -174,8 +186,20 @@ export async function updatePendingFamilyMemberProfile(input: {
   middleName?: string
   lastName: string
   photoURL?: string | null
+  bio?: string
+  dateOfBirth?: string | null
+  dateOfDeath?: string | null
+  memberStatus?: 'living' | 'deceased'
+  privacy?: MemberPrivacy
+  parentKind?: ParentKind
+  parentSlot?: ParentSlot
 }) {
   const result = await updatePendingFamilyMemberProfileFn(input)
+  return result.data
+}
+
+export async function claimPendingInvitationsForEmail() {
+  const result = await claimPendingInvitationsForEmailFn()
   return result.data
 }
 
@@ -214,10 +238,26 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
 }
 
 export async function acceptPersistedInvitationIfAny() {
+  const { setSelfOnTree } = await import('./treeStorage')
   const token = readPersistedInviteToken()
-  if (!token) return null
-  const data = await acceptInvitation(token)
-  clearPersistedInviteToken()
+  if (token) {
+    try {
+      await acceptInvitation(token)
+      setSelfOnTree()
+    } catch {
+      /* ignore */
+    }
+    clearPersistedInviteToken()
+  }
+
+  try {
+    const claimedRes = await claimPendingInvitationsForEmail()
+    if (claimedRes && claimedRes.claimedCount > 0) {
+      setSelfOnTree()
+    }
+  } catch {
+    /* ignore */
+  }
 
   const { auth } = await import('./firebase')
   const { fetchUserProfile } = await import('./userProfile')
@@ -226,6 +266,9 @@ export async function acceptPersistedInvitationIfAny() {
   if (auth.currentUser) {
     const profile = await fetchUserProfile(auth.currentUser.uid)
     if (profile) {
+      if (profile.invitedByUid) {
+        setSelfOnTree()
+      }
       const displayName = [profile.firstName, profile.middleName, profile.lastName]
         .map((part) => part.trim())
         .filter(Boolean)
@@ -237,7 +280,7 @@ export async function acceptPersistedInvitationIfAny() {
     }
   }
 
-  return data
+  return null
 }
 
 function timestampToDate(value: Timestamp | null | undefined): Date | null {

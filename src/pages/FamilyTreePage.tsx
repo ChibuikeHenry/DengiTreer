@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useOutletContext } from 'react-router-dom'
+import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import ProfileAvatar from '../components/ProfileAvatar'
 import PedigreeTreeDiagram from '../components/PedigreeTreeDiagram'
 import { useAuth } from '../context/AuthContext'
@@ -34,6 +35,7 @@ function StarterDiagram({
   selfBio,
   selfPrivacy,
   selfDateOfBirth,
+  onSelectMember,
 }: {
   openModal: DashboardContext['openModal']
   members: TreeMember[]
@@ -43,6 +45,7 @@ function StarterDiagram({
   selfBio: string
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
+  onSelectMember?: (member: TreeMember) => void
 }) {
   return (
     <div className="ft-canvas ft-canvas-starter">
@@ -55,6 +58,7 @@ function StarterDiagram({
         selfBio={selfBio}
         selfPrivacy={selfPrivacy}
         selfDateOfBirth={selfDateOfBirth}
+        onSelectMember={onSelectMember}
       />
     </div>
   )
@@ -72,6 +76,7 @@ export default function FamilyTreePage() {
   const [selfBio, setSelfBio] = useState('')
   const [selfPrivacy, setSelfPrivacy] = useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
   const [selfDateOfBirth, setSelfDateOfBirth] = useState<string | null>(null)
+  const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
 
   const selfAdded = useMemo(() => hasSelfOnTree(), [treeVersion])
   const selfListLabel = selfHasProfileName ? selfName : 'You'
@@ -192,6 +197,7 @@ export default function FamilyTreePage() {
               selfBio={selfBio}
               selfPrivacy={selfPrivacy}
               selfDateOfBirth={selfDateOfBirth}
+              onSelectMember={setEditingMember}
             />
           )
         ) : (
@@ -212,22 +218,60 @@ export default function FamilyTreePage() {
                 </li>
                 {members.map((member) => (
                   <li key={member.id} className="ft-list-person">
-                    <ProfileAvatar
-                      photoURL={member.photoURL}
-                      name={member.displayName}
-                      size="sm"
-                    />
-                    <span>
-                      <strong>{member.displayName}</strong>
-                      <span>
-                        {memberRelationshipLabel(member) ?? roleLabel(member.role)}
-                        {member.memberStatus === 'deceased' ? ' · Deceased' : ''}
-                        {member.inviteStatus === 'pending' ? ' · Invite pending' : ''}
-                        {' · '}
-                        {memberPrivacyLabel(member.privacy)}
-                      </span>
-                      <span className="ft-list-bio">{formatBioForDisplay(member.bio)}</span>
-                    </span>
+                    {member.inviterCanEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingMember(member)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          width: '100%',
+                          cursor: 'pointer',
+                          font: 'inherit',
+                          color: 'inherit',
+                        }}
+                      >
+                        <ProfileAvatar
+                          photoURL={member.photoURL}
+                          name={member.displayName}
+                          size="sm"
+                        />
+                        <span>
+                          <strong>{member.displayName}</strong>
+                          <span>
+                            {memberRelationshipLabel(member) ?? roleLabel(member.role)}
+                            {member.memberStatus === 'deceased' ? ' · Deceased' : ''}
+                            {member.inviteStatus === 'pending' ? ' · Invite pending' : ''}
+                            {' · '}
+                            {memberPrivacyLabel(member.privacy)}
+                          </span>
+                          <span className="ft-list-bio">{formatBioForDisplay(member.bio)}</span>
+                        </span>
+                      </button>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%' }}>
+                        <ProfileAvatar
+                          photoURL={member.photoURL}
+                          name={member.displayName}
+                          size="sm"
+                        />
+                        <span>
+                          <strong>{member.displayName}</strong>
+                          <span>
+                            {memberRelationshipLabel(member) ?? roleLabel(member.role)}
+                            {' · Profile claimed · View only'}
+                            {' · '}
+                            {memberPrivacyLabel(member.privacy)}
+                          </span>
+                          <span className="ft-list-bio">{formatBioForDisplay(member.bio)}</span>
+                        </span>
+                      </div>
+                    )}
                   </li>
                 ))}
               </>
@@ -237,6 +281,13 @@ export default function FamilyTreePage() {
           </ul>
         )}
       </div>
+
+      <EditFamilyMemberModal
+        open={editingMember !== null}
+        member={editingMember}
+        onClose={() => setEditingMember(null)}
+        onUpdated={() => {}}
+      />
 
       <aside className="ft-sidebar">
         <section className="ft-widget">

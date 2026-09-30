@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
+import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import ProfileAvatar from '../components/ProfileAvatar'
 import UpcomingBadge from '../components/UpcomingBadge'
 import { DashIcons } from '../components/DashboardLayout'
@@ -23,6 +24,7 @@ export default function PeoplePage() {
   const [selfName, setSelfName] = useState('')
   const [selfBio, setSelfBio] = useState('')
   const [query, setQuery] = useState('')
+  const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
   const selfOnTree = useMemo(() => hasSelfOnTree(), [treeVersion])
 
   useEffect(() => {
@@ -124,14 +126,34 @@ export default function PeoplePage() {
                   </span>
                   <span className="people-row-bio">{formatBioForDisplay(member.bio)}</span>
                 </div>
-                <span className="people-row-action people-row-muted">
-                  {member.profileClaimed ? 'View only' : 'Pending'}
-                  {!member.profileClaimed ? <UpcomingBadge label="Edit soon" /> : null}
-                </span>
+                {member.inviterCanEdit ? (
+                  <button
+                    type="button"
+                    className="people-row-action"
+                    onClick={() => setEditingMember(member)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    Edit profile
+                  </button>
+                ) : (
+                  <span
+                    className="people-row-action people-row-muted"
+                    title="This person has signed up and claimed their profile. Only they can edit their profile."
+                  >
+                    View only · Profile claimed
+                  </span>
+                )}
               </li>
             ))}
           </ul>
         ) : null}
+
+        <EditFamilyMemberModal
+          open={editingMember !== null}
+          member={editingMember}
+          onClose={() => setEditingMember(null)}
+          onUpdated={() => {}}
+        />
 
         {!selfOnTree && members.length === 0 ? (
           <div className="upcoming-empty">

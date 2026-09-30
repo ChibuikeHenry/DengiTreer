@@ -9,6 +9,6 @@ export function isProfileClaimed(record: Pick<InvitationRecord, 'status' | 'prof
 export function canInviterEditInvitation(
   record: Pick<InvitationRecord, 'status' | 'profileClaimed' | 'joinedUid' | 'memberStatus'>,
 ): boolean {
-  if (record.memberStatus === 'deceased') return true
-  return !isProfileClaimed(record)
+  if (isProfileClaimed(record)) return false
+  return true
 }

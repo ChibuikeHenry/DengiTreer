@@ -7,7 +7,7 @@ import {
   type SiblingRelationship,
 } from './siblingRelationship'
 import { subscribeSentInvitations, type InvitationRecord } from './invitations'
-import { isProfileClaimed } from './profileClaim'
+import { canInviterEditInvitation, isProfileClaimed } from './profileClaim'
 import { fetchUserProfile } from './userProfile'
 
 export type TreeMember = {
@@ -70,7 +70,7 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     inviteStatus: record.status,
     joinedUid: record.joinedUid,
     profileClaimed: claimed,
-    inviterCanEdit: record.memberStatus === 'deceased' || !claimed,
+    inviterCanEdit: canInviterEditInvitation(record),
     privacy: record.privacy,
     bio: record.bio,
     parentSlot: record.parentSlot,
@@ -122,16 +122,50 @@ export function subscribeTreeMembers(
   onChange: (members: TreeMember[]) => void,
   onError?: (error: Error) => void,
 ) {
-  return subscribeSentInvitations(
+  let unsub1: (() => void) | null = null
+  let unsub2: (() => void) | null = null
+
+  let recs1: InvitationRecord[] = []
+  let recs2: InvitationRecord[] = []
+
+  function notify() {
+    const map = new Map<string, InvitationRecord>()
+    for (const r of recs1) map.set(r.id, r)
+    for (const r of recs2) map.set(r.id, r)
+
+    const records = Array.from(map.values())
+    const members = records
+      .map((record) => mapInvitationToTreeMember(record))
+      .filter((member): member is TreeMember => member !== null)
+    void enrichClaimedMembers(members).then(onChange)
+  }
+
+  unsub1 = subscribeSentInvitations(
     uid,
     (records) => {
-      const members = records
-        .map((record) => mapInvitationToTreeMember(record))
-        .filter((member): member is TreeMember => member !== null)
-      void enrichClaimedMembers(members).then(onChange)
+      recs1 = records
+      notify()
     },
     onError,
   )
+
+  void fetchUserProfile(uid).then((profile) => {
+    if (profile?.invitedByUid && profile.invitedByUid !== uid) {
+      unsub2 = subscribeSentInvitations(
+        profile.invitedByUid,
+        (records) => {
+          recs2 = records
+          notify()
+        },
+        onError,
+      )
+    }
+  })
+
+  return () => {
+    unsub1?.()
+    unsub2?.()
+  }
 }
 
 const groupedTreeRoles = ['parent', 'child', 'sibling', 'spouse'] as const

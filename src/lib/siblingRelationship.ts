@@ -91,40 +91,37 @@ function isStepParent(meta: ParentMemberMeta | undefined): boolean {
 export function inferSiblingRelationship(
   siblingGender: string,
   shared: ParentLinkIds,
-  userParents: ParentLinkIds,
+  _userParents: ParentLinkIds,
   parentMetaById: Map<string, ParentMemberMeta>,
 ): SiblingRelationship {
   const gender = normalizeGender(siblingGender)
   const sharedFather = shared.fatherMemberId?.trim() || null
   const sharedMother = shared.motherMemberId?.trim() || null
-  const userFather = userParents.fatherMemberId?.trim() || null
-  const userMother = userParents.motherMemberId?.trim() || null
-
-  const sharesFather = Boolean(sharedFather && userFather && sharedFather === userFather)
-  const sharesMother = Boolean(sharedMother && userMother && sharedMother === userMother)
-  const sharedCount = (sharesFather ? 1 : 0) + (sharesMother ? 1 : 0)
 
   const stepInvolved =
     isStepParent(sharedFather ? parentMetaById.get(sharedFather) : undefined) ||
-    isStepParent(sharedMother ? parentMetaById.get(sharedMother) : undefined) ||
-    (sharesFather && isStepParent(userFather ? parentMetaById.get(userFather) : undefined)) ||
-    (sharesMother && isStepParent(userMother ? parentMetaById.get(userMother) : undefined))
+    isStepParent(sharedMother ? parentMetaById.get(sharedMother) : undefined)
 
-  if (sharedCount >= 2) {
-    return genderedSibling(stepInvolved ? 'step' : 'full', gender)
-  }
-
-  if (sharedCount === 1) {
-    return genderedSibling(stepInvolved ? 'step' : 'half', gender)
-  }
-
-  if (sharedFather || sharedMother) {
+  // If a step-parent is involved, return step-brother / step-sister
+  if (stepInvolved) {
     return genderedSibling('step', gender)
   }
 
-  if (gender === 'female') return 'sister'
-  if (gender === 'male') return 'brother'
-  return 'sibling'
+  const hasFather = Boolean(sharedFather)
+  const hasMother = Boolean(sharedMother)
+
+  // If both father and mother are selected, they share both parents -> full sibling
+  if (hasFather && hasMother) {
+    return genderedSibling('full', gender)
+  }
+
+  // If only one parent is selected, they share one parent -> half sibling
+  if (hasFather || hasMother) {
+    return genderedSibling('half', gender)
+  }
+
+  // If no parents are selected, default to full sibling
+  return genderedSibling('full', gender)
 }
 
 export function resolveUserParentLinks(

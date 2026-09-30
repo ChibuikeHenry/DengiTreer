@@ -15,6 +15,8 @@ import {
   MEMBER_PRIVACY_OPTIONS,
   type MemberPrivacy,
 } from '../lib/memberPrivacy'
+import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
+import type { TreeMember } from '../lib/familyTreeMembers'
 import { canInviterEditInvitation, isProfileClaimed } from '../lib/profileClaim'
 
 type Tab = 'sent' | 'received'
@@ -44,6 +46,7 @@ export default function InvitationsPage() {
   const [composeError, setComposeError] = useState('')
   const [creatingLink, setCreatingLink] = useState(false)
   const [privacyUpdatingId, setPrivacyUpdatingId] = useState<string | null>(null)
+  const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
 
   useEffect(() => {
     if (!user?.uid) return
@@ -303,8 +306,38 @@ export default function InvitationsPage() {
                       : 'Pending'}
                 </span>
                 {tab === 'sent' && canInviterEditInvitation(item) ? (
-                  <button type="button" className="inv-menu" aria-label="More options">
-                    ⋮
+                  <button
+                    type="button"
+                    className="inv-menu"
+                    aria-label="Edit details"
+                    title="Edit member details before they sign up"
+                    onClick={() =>
+                      setEditingMember({
+                        id: item.token,
+                        firstName: item.inviteeFirstName || item.inviteeName?.split(' ')[0] || '',
+                        lastName: item.inviteeLastName || item.inviteeName?.split(' ').slice(-1)[0] || '',
+                        displayName: item.inviteeName || 'Family member',
+                        role: item.role,
+                        photoURL: item.photoURL,
+                        memberStatus: item.memberStatus,
+                        inviteStatus: item.status,
+                        joinedUid: item.joinedUid,
+                        profileClaimed: isProfileClaimed(item),
+                        inviterCanEdit: canInviterEditInvitation(item),
+                        privacy: item.privacy,
+                        bio: item.bio,
+                        parentSlot: item.parentSlot,
+                        parentKind: item.parentKind,
+                        sharedFatherMemberId: item.sharedFatherMemberId,
+                        sharedMotherMemberId: item.sharedMotherMemberId,
+                        siblingRelationship: item.siblingRelationship,
+                        dateOfBirth: item.dateOfBirth,
+                        dateOfDeath: item.dateOfDeath,
+                      })
+                    }
+                    style={{ fontSize: '0.8rem', padding: '4px 8px', cursor: 'pointer' }}
+                  >
+                    Edit
                   </button>
                 ) : null}
               </li>
@@ -318,6 +351,13 @@ export default function InvitationsPage() {
           </p>
         )}
       </section>
+
+      <EditFamilyMemberModal
+        open={editingMember !== null}
+        member={editingMember}
+        onClose={() => setEditingMember(null)}
+        onUpdated={() => {}}
+      />
 
       <p className="inv-foot-link">
         <Link to="/home">Back to Home</Link>

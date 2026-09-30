@@ -34,15 +34,46 @@ function orderHousehold(members: TreeMember[]): TreeMember[] {
   ]
 }
 
-function PedigreeMemberNode({ member }: { member: TreeMember }) {
+function PedigreeMemberNode({
+  member,
+  onSelectMember,
+}: {
+  member: TreeMember
+  onSelectMember?: (member: TreeMember) => void
+}) {
   const yearsLabel = formatLifeYearsLine(
     member.dateOfBirth,
     member.dateOfDeath,
     member.memberStatus,
   )
 
+  const isClickable = Boolean(onSelectMember)
+
   return (
-    <div className="ped-person">
+    <div
+      className="ped-person"
+      onClick={() => onSelectMember?.(member)}
+      style={isClickable ? { cursor: 'pointer' } : undefined}
+      title={
+        member.inviterCanEdit
+          ? 'Click to edit member details'
+          : member.profileClaimed
+            ? 'Profile claimed · View only'
+            : undefined
+      }
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onSelectMember?.(member)
+              }
+            }
+          : undefined
+      }
+    >
       <TreePersonDetails
         photoURL={member.photoURL}
         displayName={member.displayName}
@@ -97,13 +128,19 @@ function AddCircle({
   )
 }
 
-function PartnerRow({ members }: { members: TreeMember[] }) {
+function PartnerRow({
+  members,
+  onSelectMember,
+}: {
+  members: TreeMember[]
+  onSelectMember?: (member: TreeMember) => void
+}) {
   return (
     <div className="ped-row">
       {members.map((member, index) => (
         <Fragment key={member.id}>
           {index > 0 ? <Join /> : null}
-          <PedigreeMemberNode member={member} />
+          <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
         </Fragment>
       ))}
     </div>
@@ -114,15 +151,17 @@ function PartnerRow({ members }: { members: TreeMember[] }) {
 function ChildRow({
   members,
   openModal,
+  onSelectMember,
 }: {
   members: TreeMember[]
   openModal: DashboardContext['openModal']
+  onSelectMember?: (member: TreeMember) => void
 }) {
   return (
     <div className="ped-kidrow">
       {members.map((member) => (
         <div key={member.id} className="ped-kid">
-          <PedigreeMemberNode member={member} />
+          <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
         </div>
       ))}
       <div className="ped-kid">
@@ -141,6 +180,7 @@ export default function PedigreeTreeDiagram({
   selfBio,
   selfPrivacy,
   selfDateOfBirth,
+  onSelectMember,
 }: {
   members: TreeMember[]
   openModal: DashboardContext['openModal']
@@ -150,6 +190,7 @@ export default function PedigreeTreeDiagram({
   selfBio: string
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
+  onSelectMember?: (member: TreeMember) => void
 }) {
   const grandparents = orderHousehold(members.filter((m) => m.role === 'grandparent'))
   const parents = orderHousehold(members.filter((m) => m.role === 'parent'))
@@ -166,7 +207,7 @@ export default function PedigreeTreeDiagram({
   const kids = (inline: boolean) => (
     <div className={`ped-kids${inline ? ' is-inline' : ''}`}>
       <div className={`ped-stem${inline ? '' : ' ped-stem-long'}`} aria-hidden="true" />
-      <ChildRow members={children} openModal={openModal} />
+      <ChildRow members={children} openModal={openModal} onSelectMember={onSelectMember} />
     </div>
   )
 
@@ -176,7 +217,7 @@ export default function PedigreeTreeDiagram({
         {/* grandparents */}
         <div className="ped-slot">
           {grandparents.length > 0 ? (
-            <PartnerRow members={grandparents} />
+            <PartnerRow members={grandparents} onSelectMember={onSelectMember} />
           ) : (
             <AddCircle label="Add Grandparent" onClick={() => openModal('grandparent')} />
           )}
@@ -198,7 +239,7 @@ export default function PedigreeTreeDiagram({
         {/* parents */}
         <div className="ped-slot">
           {parents.length > 0 ? (
-            <PartnerRow members={parents} />
+            <PartnerRow members={parents} onSelectMember={onSelectMember} />
           ) : (
             <AddCircle label="Add Parent" onClick={() => openModal('parent')} />
           )}
@@ -221,7 +262,7 @@ export default function PedigreeTreeDiagram({
             {siblings.map((member, index) => (
               <Fragment key={member.id}>
                 {index > 0 ? <Join /> : null}
-                <PedigreeMemberNode member={member} />
+                <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
               </Fragment>
             ))}
             {siblings.length > 0 ? <Join /> : null}
@@ -249,7 +290,7 @@ export default function PedigreeTreeDiagram({
             {spouses.map((member, index) => (
               <Fragment key={member.id}>
                 {index > 0 ? <Join /> : null}
-                <PedigreeMemberNode member={member} />
+                <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
               </Fragment>
             ))}
             {spouses.length > 0 ? <Join /> : null}

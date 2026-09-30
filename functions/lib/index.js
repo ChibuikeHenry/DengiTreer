@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateFamilyMemberPrivacy = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -325,6 +325,10 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
         ? undefined
         : String(data.photoURL).trim() || null;
     const bio = data.bio === undefined ? undefined : String(data.bio ?? '').trim() || null;
+    const dateOfBirth = data.dateOfBirth === undefined ? undefined : String(data.dateOfBirth ?? '').trim() || null;
+    const dateOfDeath = data.dateOfDeath === undefined ? undefined : String(data.dateOfDeath ?? '').trim() || null;
+    const memberStatus = data.memberStatus === 'deceased' ? 'deceased' : 'living';
+    const privacy = data.privacy ? parseMemberPrivacy(data.privacy) : undefined;
     const ref = db.collection('invitations').doc(token);
     const uid = request.auth.uid;
     await db.runTransaction(async (tx) => {
@@ -336,7 +340,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
         if (doc.inviterUid !== uid) {
             throw new https_1.HttpsError('permission-denied', 'You can only edit people you invited.');
         }
-        if (doc.status !== 'pending' || doc.profileClaimed === true) {
+        if (doc.status !== 'pending' || doc.profileClaimed === true || doc.joinedUid != null) {
             throw new https_1.HttpsError('failed-precondition', 'This person has claimed their profile. You can no longer edit their details.');
         }
         const invitationUpdate = {
@@ -344,6 +348,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             inviteeMiddleName: middleName || null,
             inviteeLastName: lastName,
             inviteeName: inviteeName,
+            memberStatus,
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         };
         if (photoURL !== undefined) {
@@ -351,6 +356,23 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
         }
         if (bio !== undefined) {
             invitationUpdate.bio = bio;
+        }
+        if (dateOfBirth !== undefined) {
+            invitationUpdate.dateOfBirth = dateOfBirth;
+        }
+        if (dateOfDeath !== undefined) {
+            invitationUpdate.dateOfDeath = dateOfDeath;
+        }
+        if (privacy !== undefined) {
+            invitationUpdate.privacy = privacy;
+        }
+        if (doc.role === 'parent') {
+            if (data.parentKind !== undefined) {
+                invitationUpdate.parentKind = parseParentKind(data.parentKind);
+            }
+            if (data.parentSlot !== undefined) {
+                invitationUpdate.parentSlot = parseParentSlot(data.parentSlot);
+            }
         }
         tx.update(ref, invitationUpdate);
         const familyMemberRef = db
@@ -365,6 +387,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
                 middleName: middleName || null,
                 lastName,
                 displayName: inviteeName,
+                memberStatus,
             };
             if (photoURL !== undefined) {
                 familyUpdate.photoURL = photoURL;
@@ -372,10 +395,97 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             if (bio !== undefined) {
                 familyUpdate.bio = bio;
             }
+            if (dateOfBirth !== undefined) {
+                familyUpdate.dateOfBirth = dateOfBirth;
+            }
+            if (dateOfDeath !== undefined) {
+                familyUpdate.dateOfDeath = dateOfDeath;
+            }
+            if (privacy !== undefined) {
+                familyUpdate.privacy = privacy;
+            }
+            if (doc.role === 'parent') {
+                if (data.parentKind !== undefined) {
+                    familyUpdate.parentKind = parseParentKind(data.parentKind);
+                }
+                if (data.parentSlot !== undefined) {
+                    familyUpdate.parentSlot = parseParentSlot(data.parentSlot);
+                }
+            }
             tx.update(familyMemberRef, familyUpdate);
         }
     });
     return { ok: true };
+});
+exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to claim invitations.');
+    }
+    const userEmail = typeof request.auth.token.email === 'string'
+        ? request.auth.token.email.toLowerCase()
+        : null;
+    if (!userEmail)
+        return { claimedCount: 0 };
+    const joinedUid = request.auth.uid;
+    const snap = await db
+        .collection('invitations')
+        .where('inviteeEmail', '==', userEmail)
+        .where('status', '==', 'pending')
+        .get();
+    if (snap.empty) {
+        return { claimedCount: 0 };
+    }
+    let count = 0;
+    for (const docSnap of snap.docs) {
+        const doc = docSnap.data();
+        if (doc.profileClaimed === true || doc.joinedUid != null)
+            continue;
+        const token = docSnap.id;
+        const inviterUid = String(doc.inviterUid ?? '');
+        const role = doc.role ?? 'member';
+        const invitePhoto = doc.photoURL;
+        const inviteBio = String(doc.bio ?? '').trim();
+        const firstName = String(doc.inviteeFirstName ?? '').trim();
+        const middleName = String(doc.inviteeMiddleName ?? '').trim();
+        const lastName = String(doc.inviteeLastName ?? '').trim();
+        await db.runTransaction(async (tx) => {
+            tx.update(docSnap.ref, {
+                status: 'joined',
+                joinedAt: firestore_1.FieldValue.serverTimestamp(),
+                joinedUid,
+                profileClaimed: true,
+            });
+            tx.set(db.collection('users').doc(joinedUid), {
+                familyRole: role,
+                invitedByUid: inviterUid || null,
+                inviteToken: token,
+                profileClaimed: true,
+                claimedInviteToken: token,
+                ...(firstName ? { firstName } : {}),
+                ...(middleName ? { middleName } : {}),
+                ...(lastName ? { lastName } : {}),
+                ...(invitePhoto ? { photoURL: invitePhoto } : {}),
+                ...(inviteBio ? { bio: inviteBio } : {}),
+                updatedAt: firestore_1.FieldValue.serverTimestamp(),
+            }, { merge: true });
+            if (inviterUid && role !== 'member') {
+                const familyMemberRef = db
+                    .collection('users')
+                    .doc(inviterUid)
+                    .collection('familyMembers')
+                    .doc(token);
+                const familySnap = await tx.get(familyMemberRef);
+                if (familySnap.exists) {
+                    tx.update(familyMemberRef, {
+                        claimedByUid: joinedUid,
+                        claimedAt: firestore_1.FieldValue.serverTimestamp(),
+                    });
+                }
+            }
+        });
+        count++;
+    }
+    return { claimedCount: count };
 });
 exports.updateFamilyMemberPrivacy = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
