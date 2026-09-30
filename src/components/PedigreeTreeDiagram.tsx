@@ -1,40 +1,40 @@
-import { Fragment } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import TreePersonDetails from './TreePersonDetails'
-import {
-  profileFirstName,
-} from '../lib/userProfile'
-import {
-  treeMemberRoleLabel,
-  roleLabel,
-  type TreeMember,
-} from '../lib/familyTreeMembers'
+import { profileFirstName } from '../lib/userProfile'
+import { treeMemberRoleLabel, type TreeMember } from '../lib/familyTreeMembers'
 import { formatLifeYearsLine } from '../lib/lifeDates'
 import type { MemberPrivacy } from '../lib/memberPrivacy'
 import type { DashboardContext } from '../pages/HomePage'
+import './pedigree-tree.css'
 
-function pedigreeRoleLine(
-  roleText: string,
-  memberStatus: 'living' | 'deceased',
-): string {
-  return `${roleText} (${memberStatus === 'living' ? 'Living' : 'Deceased'})`
+function roleLine(roleText: string, memberStatus: 'living' | 'deceased'): string {
+  return memberStatus === 'deceased' ? `${roleText} (Deceased)` : roleText
 }
 
-function orderByParentSlot(members: TreeMember[]): TreeMember[] {
-  const father = members.filter((p) => p.parentSlot === 'father')
-  const mother = members.filter((p) => p.parentSlot === 'mother')
-  const rest = members.filter(
-    (p) => p.parentSlot !== 'father' && p.parentSlot !== 'mother',
+/** Step partners sit outside the biological couple so the stem hits father–mother. */
+function orderHousehold(members: TreeMember[]): TreeMember[] {
+  const primaryFather =
+    members.find((p) => p.parentSlot === 'father' && p.parentKind !== 'step') ??
+    members.find((p) => p.parentSlot === 'father')
+  const primaryMother =
+    members.find((p) => p.parentSlot === 'mother' && p.parentKind !== 'step') ??
+    members.find((p) => p.parentSlot === 'mother')
+  const used = new Set(
+    [primaryFather?.id, primaryMother?.id].filter((id): id is string => Boolean(id)),
   )
-  return [...father, ...mother, ...rest]
-}
-
-function treeNameLabel(member: TreeMember): string {
-  return profileFirstName(member.displayName, roleLabel(member.role))
+  const extras = members.filter((p) => !used.has(p.id))
+  const left = extras.filter((p) => p.parentSlot === 'mother' || p.parentKind === 'step')
+  const right = extras.filter((p) => !left.includes(p))
+  return [
+    ...left,
+    ...(primaryFather ? [primaryFather] : []),
+    ...(primaryMother ? [primaryMother] : []),
+    ...right,
+  ]
 }
 
 function PedigreeMemberNode({ member }: { member: TreeMember }) {
-  const roleText = treeMemberRoleLabel(member)
   const yearsLabel = formatLifeYearsLine(
     member.dateOfBirth,
     member.dateOfDeath,
@@ -42,51 +42,67 @@ function PedigreeMemberNode({ member }: { member: TreeMember }) {
   )
 
   return (
-    <div className="pedigree-node">
+    <div className="ped-person">
       <TreePersonDetails
         photoURL={member.photoURL}
         displayName={member.displayName}
-        nameLabel={treeNameLabel(member)}
+        nameLabel={member.displayName}
         bio=""
         privacy={member.privacy}
         variant="pedigree"
-        roleLabel={pedigreeRoleLine(roleText, member.memberStatus)}
+        roleLabel={roleLine(treeMemberRoleLabel(member), member.memberStatus)}
         yearsLabel={yearsLabel}
       />
     </div>
   )
 }
 
-function AddPedigreeChip({
+/** Horizontal line between two neighbours. `childrenDrop` hangs a stem + children off its middle. */
+function Join({ childrenDrop }: { childrenDrop?: ReactNode }) {
+  return (
+    <div
+      className={`ped-join${childrenDrop ? ' ped-join-drop' : ''}`}
+      aria-hidden={childrenDrop ? undefined : true}
+    >
+      {childrenDrop}
+    </div>
+  )
+}
+
+/**
+ * Vertical line between generations.
+ * - from-join: starts on the line joining a couple (not below their labels)
+ * - to-join:   dashed, from an "Add" circle down to a couple's joining line
+ */
+function Stem({ mode }: { mode?: 'from-join' | 'to-join' }) {
+  return <div className={`ped-stem${mode ? ` ped-stem-${mode}` : ''}`} aria-hidden="true" />
+}
+
+function AddCircle({
   label,
   onClick,
+  className = '',
 }: {
   label: string
   onClick: () => void
+  className?: string
 }) {
   return (
-    <button type="button" className="pedigree-add-chip" onClick={onClick}>
-      {label}
+    <button type="button" className={`ped-add ${className}`.trim()} onClick={onClick}>
+      <span className="ped-add-ring" aria-hidden="true">
+        +
+      </span>
+      <span className="ped-add-label">{label}</span>
     </button>
   )
 }
 
-function HorizontalLine() {
-  return <span className="pedigree-h-line" aria-hidden="true" />
-}
-
-function VerticalStem() {
-  return <span className="pedigree-v-stem" aria-hidden="true" />
-}
-
-function MemberPairRow({ members }: { members: TreeMember[] }) {
-  if (members.length === 0) return null
-
+function PartnerRow({ members }: { members: TreeMember[] }) {
   return (
-    <div className="pedigree-pair-row">
+    <div className="ped-row">
       {members.map((member, index) => (
         <Fragment key={member.id}>
-          {index > 0 ? <HorizontalLine /> : null}
+          {index > 0 ? <Join /> : null}
           <PedigreeMemberNode member={member} />
         </Fragment>
       ))}
@@ -94,32 +110,23 @@ function MemberPairRow({ members }: { members: TreeMember[] }) {
   )
 }
 
-function TierBlock({
+/** Children hang off a horizontal bracket, each with its own short drop. */
+function ChildRow({
   members,
-  slotRole,
   openModal,
-  emptyLabel,
-  addLabel,
-  showStemAfter = false,
 }: {
   members: TreeMember[]
-  slotRole: 'grandparent' | 'parent' | 'child'
   openModal: DashboardContext['openModal']
-  emptyLabel: string
-  addLabel: string
-  showStemAfter?: boolean
 }) {
-  const hasMembers = members.length > 0
-
   return (
-    <div className={`pedigree-tier${hasMembers ? ' has-members' : ''}`}>
-      {hasMembers ? <MemberPairRow members={members} /> : null}
-      {hasMembers && showStemAfter ? <VerticalStem /> : null}
-      <div className="pedigree-tier-actions">
-        <AddPedigreeChip
-          label={hasMembers ? addLabel : emptyLabel}
-          onClick={() => openModal(slotRole)}
-        />
+    <div className="ped-kidrow">
+      {members.map((member) => (
+        <div key={member.id} className="ped-kid">
+          <PedigreeMemberNode member={member} />
+        </div>
+      ))}
+      <div className="ped-kid">
+        <AddCircle label="Add Child" onClick={() => openModal('child')} />
       </div>
     </div>
   )
@@ -144,8 +151,8 @@ export default function PedigreeTreeDiagram({
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
 }) {
-  const grandparents = orderByParentSlot(members.filter((m) => m.role === 'grandparent'))
-  const parents = orderByParentSlot(members.filter((m) => m.role === 'parent'))
+  const grandparents = orderHousehold(members.filter((m) => m.role === 'grandparent'))
+  const parents = orderHousehold(members.filter((m) => m.role === 'parent'))
   const siblings = members.filter((m) => m.role === 'sibling')
   const spouses = members.filter((m) => m.role === 'spouse')
   const children = members.filter((m) => m.role === 'child')
@@ -154,81 +161,107 @@ export default function PedigreeTreeDiagram({
   const selfNameLabel = selfHasProfileName
     ? profileFirstName(selfDisplayName, 'You')
     : 'YOU'
-  const selfYearsLabel = formatLifeYearsLine(selfDateOfBirth, null, 'living')
+  const selfYears = formatLifeYearsLine(selfDateOfBirth, null, 'living')
 
-  const hasGrandparents = grandparents.length > 0
-  const hasParents = parents.length > 0
+  const kids = (inline: boolean) => (
+    <div className={`ped-kids${inline ? ' is-inline' : ''}`}>
+      <div className={`ped-stem${inline ? '' : ' ped-stem-long'}`} aria-hidden="true" />
+      <ChildRow members={children} openModal={openModal} />
+    </div>
+  )
 
   return (
-    <div className="pedigree-tree" role="img" aria-label="Family tree diagram">
-      <div className="pedigree-stack">
-        <TierBlock
-          members={grandparents}
-          slotRole="grandparent"
-          openModal={openModal}
-          emptyLabel="+ Add Grandparent"
-          addLabel="+ Add another grandparent"
-          showStemAfter={hasGrandparents}
-        />
-
-        <TierBlock
-          members={parents}
-          slotRole="parent"
-          openModal={openModal}
-          emptyLabel="+ Add Parent"
-          addLabel="+ Add another parent"
-          showStemAfter={hasParents}
-        />
-
-        <div className="pedigree-tier pedigree-tier-peer has-members">
-          <div className="pedigree-peer-row">
-            {siblings.map((member, index) => (
-              <Fragment key={member.id}>
-                {index > 0 ? <HorizontalLine /> : null}
-                <PedigreeMemberNode member={member} />
-              </Fragment>
-            ))}
-            {siblings.length > 0 ? <HorizontalLine /> : null}
-            <Link to="/home/profile" className="pedigree-node pedigree-node-self">
-              <TreePersonDetails
-                photoURL={selfPhotoURL}
-                displayName={selfDisplayName}
-                nameLabel={selfNameLabel}
-                bio={selfBio}
-                privacy={selfPrivacy}
-                avatarClassName="tree-person-avatar-you"
-                variant="pedigree"
-                roleLabel={
-                  selfHasProfileName ? pedigreeRoleLine('You', 'living') : undefined
-                }
-                yearsLabel={selfHasProfileName ? selfYearsLabel : null}
-                youBadge={!selfHasProfileName}
-              />
-            </Link>
-            {spouses.map((member) => (
-              <Fragment key={member.id}>
-                <HorizontalLine />
-                <PedigreeMemberNode member={member} />
-              </Fragment>
-            ))}
-          </div>
-          <VerticalStem />
-          <div className="pedigree-tier-actions pedigree-tier-actions-split">
-            <AddPedigreeChip label="+ Add Sibling" onClick={() => openModal('sibling')} />
-            <AddPedigreeChip
-              label={spouses.length === 0 ? '+ Add Spouse' : '+ Add another spouse'}
-              onClick={() => openModal('spouse')}
+    <div className="pedigree-tree" role="group" aria-label="Family tree diagram">
+      <div className="ped-col">
+        {/* grandparents */}
+        <div className="ped-slot">
+          {grandparents.length > 0 ? (
+            <PartnerRow members={grandparents} />
+          ) : (
+            <AddCircle label="Add Grandparent" onClick={() => openModal('grandparent')} />
+          )}
+          {grandparents.length > 0 ? (
+            <AddCircle
+              className="ped-add-side"
+              label="Add Grandparent"
+              onClick={() => openModal('grandparent')}
             />
-          </div>
+          ) : null}
         </div>
 
-        <TierBlock
-          members={children}
-          slotRole="child"
-          openModal={openModal}
-          emptyLabel="+ Add Child"
-          addLabel="+ Add another child"
-        />
+        {grandparents.length > 0 ? (
+          <Stem mode={grandparents.length > 1 ? 'from-join' : undefined} />
+        ) : parents.length > 0 ? (
+          <Stem mode={parents.length > 1 ? 'to-join' : undefined} />
+        ) : null}
+
+        {/* parents */}
+        <div className="ped-slot">
+          {parents.length > 0 ? (
+            <PartnerRow members={parents} />
+          ) : (
+            <AddCircle label="Add Parent" onClick={() => openModal('parent')} />
+          )}
+          {parents.length > 0 ? (
+            <AddCircle
+              className="ped-add-side"
+              label="Add Parent"
+              onClick={() => openModal('parent')}
+            />
+          ) : null}
+        </div>
+
+        {parents.length > 0 ? (
+          <Stem mode={parents.length > 1 ? 'from-join' : undefined} />
+        ) : null}
+
+        {/* siblings + you + spouse + children */}
+        <div className="ped-anchor">
+          <div className="ped-row ped-blood">
+            {siblings.map((member, index) => (
+              <Fragment key={member.id}>
+                {index > 0 ? <Join /> : null}
+                <PedigreeMemberNode member={member} />
+              </Fragment>
+            ))}
+            {siblings.length > 0 ? <Join /> : null}
+            <div className="ped-you-slot">
+              <Link to="/home/profile" className="ped-person ped-person-self">
+                <TreePersonDetails
+                  photoURL={selfPhotoURL}
+                  displayName={selfDisplayName}
+                  nameLabel={selfHasProfileName ? selfDisplayName : selfNameLabel}
+                  bio={selfBio}
+                  privacy={selfPrivacy}
+                  avatarClassName="tree-person-avatar-you"
+                  variant="pedigree"
+                  roleLabel={selfHasProfileName ? roleLine('You', 'living') : undefined}
+                  yearsLabel={selfHasProfileName ? selfYears : null}
+                  youBadge={!selfHasProfileName}
+                />
+              </Link>
+              {spouses.length === 0 ? kids(true) : null}
+            </div>
+          </div>
+
+          <div className="ped-side">
+            <Join childrenDrop={spouses.length > 0 ? kids(false) : null} />
+            {spouses.map((member, index) => (
+              <Fragment key={member.id}>
+                {index > 0 ? <Join /> : null}
+                <PedigreeMemberNode member={member} />
+              </Fragment>
+            ))}
+            {spouses.length > 0 ? <Join /> : null}
+            <AddCircle label="Add Spouse" onClick={() => openModal('spouse')} />
+          </div>
+
+          <AddCircle
+            className="ped-add-sibling"
+            label="Add Sibling"
+            onClick={() => openModal('sibling')}
+          />
+        </div>
       </div>
     </div>
   )
