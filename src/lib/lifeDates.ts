@@ -18,10 +18,7 @@ export function formatLifeYearsLine(
   if (birthYear != null && deathYear != null) {
     return `(${birthYear}-${deathYear})`
   }
-  if (birthYear != null && memberStatus === 'living') {
-    return `(${birthYear}-)`
-  }
-  if (birthYear != null) {
+  if (birthYear != null && memberStatus === 'deceased') {
     return `(${birthYear})`
   }
   return null

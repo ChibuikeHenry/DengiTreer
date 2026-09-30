@@ -33,13 +33,16 @@ function matchesParentSlot(
   return gender === 'female'
 }
 
-function spouseMembers(members: TreeMember[]): ParentPickOption[] {
+function spouseMembers(
+  members: TreeMember[],
+  selfGender: ParentPickOption['gender'],
+): ParentPickOption[] {
   return members
     .filter((member) => member.role === 'spouse')
     .map((member) => ({
       id: member.id,
       displayName: member.displayName,
-      gender: null,
+      gender: selfGender === 'male' ? 'female' : selfGender === 'female' ? 'male' : null,
     }))
 }
 
@@ -47,7 +50,7 @@ export function partitionChildParentOptions(
   self: ParentPickOption | null,
   members: TreeMember[],
 ): { fathers: ParentPickOption[]; mothers: ParentPickOption[] } {
-  const spouses = spouseMembers(members)
+  const spouses = spouseMembers(members, self?.gender ?? null)
   const candidates: ParentPickOption[] = []
   if (self) candidates.push(self)
   candidates.push(...spouses)
@@ -58,26 +61,33 @@ export function partitionChildParentOptions(
   return { fathers, mothers }
 }
 
-/** Shared parents on the tree — never you or your spouse/co-parent. */
+/** Shared parents on the tree — strictly filter father/mother slots so fathers only show in father select and mothers in mother select. */
 export function partitionSiblingParentOptions(
   members: TreeMember[],
   currentUserUid?: string | null,
 ): { fathers: ParentPickOption[]; mothers: ParentPickOption[] } {
-  const parents: ParentPickOption[] = members
+  const parents = members
     .filter((member) => member.role === 'parent')
-    .filter((member) => member.role !== 'spouse' && member.role !== 'child')
     .filter(
       (member) =>
         !currentUserUid || !member.joinedUid || member.joinedUid !== currentUserUid,
     )
-    .map((member) => ({
-      id: member.id,
-      displayName: member.displayName,
-      gender: null,
+
+  const fathers: ParentPickOption[] = parents
+    .filter((m) => m.parentSlot === 'father' || (!m.parentSlot || m.parentSlot === 'unknown'))
+    .map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      gender: 'male',
     }))
 
-  const fathers = parents.filter((option) => matchesParentSlot(option.gender, 'father'))
-  const mothers = parents.filter((option) => matchesParentSlot(option.gender, 'mother'))
+  const mothers: ParentPickOption[] = parents
+    .filter((m) => m.parentSlot === 'mother' || (!m.parentSlot || m.parentSlot === 'unknown'))
+    .map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      gender: 'female',
+    }))
 
   return { fathers, mothers }
 }
@@ -120,10 +130,16 @@ export function useChildCoParentPickOptions(enabled: boolean) {
         displayNameFromProfile(profile) ||
         user.displayName?.trim() ||
         'You'
+      const gender: ParentPickOption['gender'] =
+        profile.gender === 'male'
+          ? 'male'
+          : profile.gender === 'female'
+          ? 'female'
+          : null
       setSelfOption({
         id: 'self',
         displayName: name,
-        gender: null,
+        gender,
       })
     })()
 

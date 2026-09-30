@@ -4,7 +4,6 @@ import { ContactFields, MemberBioField } from './familyFormFields'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
-import MemberPrivacyFields from './MemberPrivacyFields'
 import { DashIcons } from './DashboardLayout'
 import { normalizeDateField } from '../lib/lifeDates'
 import type { ParentKind, ParentSlot } from '../lib/siblingRelationship'
@@ -61,7 +60,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [bio, setBio] = useState('')
-  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
+  const [privacy] = useDefaultMemberPrivacy(open)
   const photo = usePhotoPicker()
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose, onAdded)
 
@@ -348,12 +347,6 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
             <h3>5. About this person (Optional)</h3>
             <MemberBioField bio={bio} onBioChange={setBio} idPrefix="parent" />
           </section>
-
-          <MemberPrivacyFields
-            privacy={privacy}
-            onPrivacyChange={setPrivacy}
-            sectionNumber={6}
-          />
 
           {error ? (
             <p className="modal-form-error" role="alert">

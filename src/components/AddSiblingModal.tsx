@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import { useSiblingRelationshipPreview } from '../hooks/useSiblingRelationshipPreview'
-import MemberPrivacyFields from './MemberPrivacyFields'
 import {
   ContactFields,
   MemberBioField,
@@ -31,7 +30,7 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
   const [motherId, setMotherId] = useState('')
   const photo = usePhotoPicker()
 
-  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
+  const [privacy] = useDefaultMemberPrivacy(open)
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('sibling', onClose, onAdded)
 
   const sharedParents = useMemo(
@@ -157,12 +156,6 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
         <h3>6. About this person (Optional)</h3>
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="sibling" />
       </section>
-
-      <MemberPrivacyFields
-        privacy={privacy}
-        onPrivacyChange={setPrivacy}
-        sectionNumber={7}
-      />
     </ModalFrame>
   )
 }

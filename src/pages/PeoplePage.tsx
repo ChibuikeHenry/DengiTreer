@@ -99,7 +99,7 @@ export default function PeoplePage() {
               <ProfileAvatar photoURL={user?.photoURL} name={selfName} size="md" />
               <div className="people-row-body">
                 <strong>{selfName}</strong>
-                <span>You · Living</span>
+                <span>You</span>
                 <span className="people-row-bio">{formatBioForDisplay(selfBio)}</span>
               </div>
               <Link to="/home/profile" className="people-row-action">
@@ -116,8 +116,8 @@ export default function PeoplePage() {
                 <div className="people-row-body">
                   <strong>{member.displayName}</strong>
                   <span>
-                    {memberRelationshipLabel(member) ?? roleLabel(member.role)} ·{' '}
-                    {member.memberStatus === 'deceased' ? 'Deceased' : 'Living'}
+                    {memberRelationshipLabel(member) ?? roleLabel(member.role)}
+                    {member.memberStatus === 'deceased' ? ' · Deceased' : ''}
                     {member.profileClaimed ? ' · Profile claimed' : ''}
                     {' · '}
                     {memberPrivacyLabel(member.privacy)}

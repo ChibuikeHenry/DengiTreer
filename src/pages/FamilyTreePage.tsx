@@ -204,7 +204,7 @@ export default function FamilyTreePage() {
                     <span>
                       <strong>{selfListLabel}</strong>
                       <span>
-                        Profile · Living · {memberPrivacyLabel(selfPrivacy)}
+                        Profile · {memberPrivacyLabel(selfPrivacy)}
                       </span>
                       <span className="ft-list-bio">{formatBioForDisplay(selfBio)}</span>
                     </span>
@@ -220,8 +220,8 @@ export default function FamilyTreePage() {
                     <span>
                       <strong>{member.displayName}</strong>
                       <span>
-                        {memberRelationshipLabel(member) ?? roleLabel(member.role)} ·{' '}
-                        {member.memberStatus === 'living' ? 'Living' : 'Deceased'}
+                        {memberRelationshipLabel(member) ?? roleLabel(member.role)}
+                        {member.memberStatus === 'deceased' ? ' · Deceased' : ''}
                         {member.inviteStatus === 'pending' ? ' · Invite pending' : ''}
                         {' · '}
                         {memberPrivacyLabel(member.privacy)}
