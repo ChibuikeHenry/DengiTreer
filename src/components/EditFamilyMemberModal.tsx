@@ -39,6 +39,7 @@ export default function EditFamilyMemberModal({
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [email, setEmail] = useState('')
   const [gender, setGender] = useState('')
   const [dob, setDob] = useState('')
   const [dod, setDod] = useState('')
@@ -55,6 +56,7 @@ export default function EditFamilyMemberModal({
     setFirstName(member.firstName)
     setMiddleName('')
     setLastName(member.lastName)
+    setEmail(member.inviteeEmail ?? '')
     setGender('')
     setDob(member.dateOfBirth ?? '')
     setDod(member.dateOfDeath ?? '')
@@ -93,6 +95,7 @@ export default function EditFamilyMemberModal({
         firstName: firstName.trim(),
         middleName: middleName.trim(),
         lastName: lastName.trim(),
+        inviteeEmail: email.trim() || null,
         photoURL,
         bio: bio.trim(),
         dateOfBirth: dob.trim() || null,
@@ -174,8 +177,11 @@ export default function EditFamilyMemberModal({
       ) : null}
 
       <section className="modal-section">
-        <h3>2. Profile Photo</h3>
+        <h3>2. Contact Information & Photo</h3>
         <ContactFields
+          email={email}
+          onEmail={setEmail}
+          emailOptionalHint={status === 'living'}
           photoPreviewUrl={photo.previewUrl ?? member.photoURL}
           onPhotoSelect={photo.selectFile}
           photoError={photo.error}

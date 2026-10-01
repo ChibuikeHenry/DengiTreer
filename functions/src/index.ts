@@ -427,6 +427,7 @@ type UpdatePendingMemberInput = {
   privacy?: MemberPrivacy
   parentKind?: ParentKind
   parentSlot?: ParentSlot
+  inviteeEmail?: string | null
 }
 
 export const updatePendingFamilyMemberProfile = onCall(async (request) => {
@@ -462,11 +463,27 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
   const ref = db.collection('invitations').doc(token)
   const uid = request.auth.uid
 
+  let emailToSend: {
+    to: string
+    inviterName: string
+    inviteeFirstName: string
+    role: InviteRole
+    joinUrl: string
+    personalMessage?: string | null
+  } | null = null
+
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Invitation not found.')
     }
+
+    const familyMemberRef = db
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .doc(token)
+    const familySnap = await tx.get(familyMemberRef)
 
     const doc = snap.data()!
     if (doc.inviterUid !== uid) {
@@ -488,6 +505,14 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       memberStatus,
       updatedAt: FieldValue.serverTimestamp(),
     }
+    let newEmail: string | null = null
+    if (data.inviteeEmail !== undefined) {
+      newEmail = String(data.inviteeEmail ?? '').trim().toLowerCase() || null
+      invitationUpdate.inviteeEmail = newEmail
+    } else if (doc.inviteeEmail) {
+      newEmail = String(doc.inviteeEmail).trim().toLowerCase() || null
+    }
+
     if (photoURL !== undefined) {
       invitationUpdate.photoURL = photoURL
     }
@@ -514,12 +539,6 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
 
     tx.update(ref, invitationUpdate)
 
-    const familyMemberRef = db
-      .collection('users')
-      .doc(uid)
-      .collection('familyMembers')
-      .doc(token)
-    const familySnap = await tx.get(familyMemberRef)
     if (familySnap.exists) {
       const familyUpdate: Record<string, unknown> = {
         firstName,
@@ -527,6 +546,9 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
         lastName,
         displayName: inviteeName,
         memberStatus,
+      }
+      if (data.inviteeEmail !== undefined) {
+        familyUpdate.inviteeEmail = newEmail
       }
       if (photoURL !== undefined) {
         familyUpdate.photoURL = photoURL
@@ -553,7 +575,23 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       }
       tx.update(familyMemberRef, familyUpdate)
     }
+
+    if (newEmail && memberStatus === 'living') {
+      const joinUrl = `${APP_ORIGIN}/join/${token}`
+      emailToSend = {
+        to: newEmail,
+        inviterName: doc.inviterName || 'A family member',
+        inviteeFirstName: firstName || doc.inviteeFirstName || '',
+        role: doc.role,
+        joinUrl,
+        personalMessage: doc.personalMessage || null,
+      }
+    }
   })
+
+  if (emailToSend) {
+    await queueInviteEmail(emailToSend)
+  }
 
   return { ok: true }
 })

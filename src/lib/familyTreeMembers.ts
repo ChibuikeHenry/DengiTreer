@@ -31,6 +31,7 @@ export type TreeMember = {
   siblingRelationship: SiblingRelationship | null
   dateOfBirth: string | null
   dateOfDeath: string | null
+  inviteeEmail: string | null
 }
 
 const treeRoles = new Set<InviteRole>([
@@ -80,6 +81,7 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     siblingRelationship: record.siblingRelationship,
     dateOfBirth: record.dateOfBirth,
     dateOfDeath: record.dateOfDeath,
+    inviteeEmail: record.inviteeEmail,
   }
 }
 

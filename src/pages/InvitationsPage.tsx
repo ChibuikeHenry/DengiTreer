@@ -333,6 +333,7 @@ export default function InvitationsPage() {
                         siblingRelationship: item.siblingRelationship,
                         dateOfBirth: item.dateOfBirth,
                         dateOfDeath: item.dateOfDeath,
+                        inviteeEmail: item.inviteeEmail,
                       })
                     }
                     style={{ fontSize: '0.8rem', padding: '4px 8px', cursor: 'pointer' }}

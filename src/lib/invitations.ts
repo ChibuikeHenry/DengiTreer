@@ -118,6 +118,7 @@ const updatePendingFamilyMemberProfileFn = httpsCallable<
     privacy?: MemberPrivacy
     parentKind?: ParentKind
     parentSlot?: ParentSlot
+    inviteeEmail?: string | null
   },
   { ok: boolean }
 >(functions, 'updatePendingFamilyMemberProfile')
@@ -193,6 +194,7 @@ export async function updatePendingFamilyMemberProfile(input: {
   privacy?: MemberPrivacy
   parentKind?: ParentKind
   parentSlot?: ParentSlot
+  inviteeEmail?: string | null
 }) {
   const result = await updatePendingFamilyMemberProfileFn(input)
   return result.data

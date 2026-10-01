@@ -1,0 +1,228 @@
+.join-invite-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #f3f6f0 0%, #e8ede3 100%);
+  color: #1a1f16;
+}
+
+.join-invite-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem 4rem;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.join-invite-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1.75rem;
+}
+
+.join-invite-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  background: rgba(52, 97, 29, 0.1);
+  color: #34611d;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.join-invite-title {
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  font-weight: 800;
+  color: #1a1f16;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  max-width: 820px;
+  margin: 0;
+}
+
+.join-invite-subtitle {
+  font-size: clamp(1.1rem, 2.5vw, 1.35rem);
+  line-height: 1.5;
+  color: #4a5443;
+  max-width: 680px;
+  margin: 0;
+}
+
+.join-invite-role-tag {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: #34611d;
+  color: #ffffff;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.join-invite-meta {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #34611d;
+  background: #ffffff;
+  padding: 0.5rem 1.25rem;
+  border-radius: 9999px;
+  border: 1px solid #d0dbc7;
+  margin: 0;
+}
+
+.join-invite-message-box {
+  width: 100%;
+  max-width: 620px;
+  padding: 1.5rem 1.75rem;
+  background: #ffffff;
+  border-left: 4px solid #34611d;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  text-align: left;
+  box-sizing: border-box;
+}
+
+.join-invite-message-box blockquote {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #2a3326;
+  font-style: italic;
+}
+
+.join-invite-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 440px;
+  margin-top: 0.5rem;
+}
+
+.btn-join-primary {
+  width: 100%;
+  padding: 1.1rem 2rem;
+  border-radius: 12px;
+  background: #34611d;
+  color: #ffffff;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-decoration: none;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(52, 97, 29, 0.25);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.btn-join-primary:hover {
+  background: #2a5017;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(52, 97, 29, 0.35);
+}
+
+.join-login-text {
+  font-size: 1rem;
+  color: #5c6456;
+  margin: 0;
+}
+
+.join-login-text a {
+  color: #34611d;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.join-login-text a:hover {
+  text-decoration: underline;
+}
+
+.join-invite-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 900px;
+  margin-top: 2.5rem;
+}
+
+.join-feature-card {
+  background: #ffffff;
+  padding: 1.5rem;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  text-align: left;
+  border: 1px solid #e2e7dc;
+}
+
+.join-feature-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a1f16;
+}
+
+.join-feature-card p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6b7364;
+  line-height: 1.5;
+}
+
+/* State screens (loading / error) */
+.join-invite-state {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f7f8f4;
+}
+
+.join-invite-state-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.join-invite-error-card {
+  background: #ffffff;
+  padding: 2.5rem 2rem;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+  max-width: 460px;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.join-invite-error-card h1 {
+  margin-top: 0;
+  font-size: 1.5rem;
+  color: #1a1f16;
+}
+
+@media (max-width: 640px) {
+  .join-invite-hero {
+    padding: 2rem 1rem 3rem;
+  }
+
+  .join-invite-container {
+    gap: 1.25rem;
+  }
+
+  .join-invite-features {
+    grid-template-columns: 1fr;
+  }
+}

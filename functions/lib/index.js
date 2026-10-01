@@ -331,11 +331,18 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
     const privacy = data.privacy ? parseMemberPrivacy(data.privacy) : undefined;
     const ref = db.collection('invitations').doc(token);
     const uid = request.auth.uid;
+    let emailToSend = null;
     await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists) {
             throw new https_1.HttpsError('not-found', 'Invitation not found.');
         }
+        const familyMemberRef = db
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .doc(token);
+        const familySnap = await tx.get(familyMemberRef);
         const doc = snap.data();
         if (doc.inviterUid !== uid) {
             throw new https_1.HttpsError('permission-denied', 'You can only edit people you invited.');
@@ -351,6 +358,14 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             memberStatus,
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         };
+        let newEmail = null;
+        if (data.inviteeEmail !== undefined) {
+            newEmail = String(data.inviteeEmail ?? '').trim().toLowerCase() || null;
+            invitationUpdate.inviteeEmail = newEmail;
+        }
+        else if (doc.inviteeEmail) {
+            newEmail = String(doc.inviteeEmail).trim().toLowerCase() || null;
+        }
         if (photoURL !== undefined) {
             invitationUpdate.photoURL = photoURL;
         }
@@ -375,12 +390,6 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             }
         }
         tx.update(ref, invitationUpdate);
-        const familyMemberRef = db
-            .collection('users')
-            .doc(uid)
-            .collection('familyMembers')
-            .doc(token);
-        const familySnap = await tx.get(familyMemberRef);
         if (familySnap.exists) {
             const familyUpdate = {
                 firstName,
@@ -389,6 +398,9 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
                 displayName: inviteeName,
                 memberStatus,
             };
+            if (data.inviteeEmail !== undefined) {
+                familyUpdate.inviteeEmail = newEmail;
+            }
             if (photoURL !== undefined) {
                 familyUpdate.photoURL = photoURL;
             }
@@ -414,7 +426,21 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             }
             tx.update(familyMemberRef, familyUpdate);
         }
+        if (newEmail && memberStatus === 'living') {
+            const joinUrl = `${APP_ORIGIN}/join/${token}`;
+            emailToSend = {
+                to: newEmail,
+                inviterName: doc.inviterName || 'A family member',
+                inviteeFirstName: firstName || doc.inviteeFirstName || '',
+                role: doc.role,
+                joinUrl,
+                personalMessage: doc.personalMessage || null,
+            };
+        }
     });
+    if (emailToSend) {
+        await queueInviteEmail(emailToSend);
+    }
     return { ok: true };
 });
 exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) => {
