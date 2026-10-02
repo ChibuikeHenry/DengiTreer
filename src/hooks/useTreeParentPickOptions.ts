@@ -117,7 +117,7 @@ export function useChildCoParentPickOptions(enabled: boolean) {
       return
     }
 
-    if (!hasSelfOnTree()) {
+    if (!hasSelfOnTree() && members.length === 0) {
       setSelfOption(null)
       return
     }

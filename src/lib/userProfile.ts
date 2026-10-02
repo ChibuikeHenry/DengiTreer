@@ -18,6 +18,8 @@ export type UserProfile = {
   treeMotherMemberId?: string
   invitedByUid?: string
   familyRole?: string
+  claimedInviteToken?: string
+  inviteToken?: string
 }
 
 export function parseDisplayName(displayName: string | null | undefined): {
@@ -135,6 +137,10 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
       : undefined,
     invitedByUid: data.invitedByUid ? String(data.invitedByUid) : undefined,
     familyRole: data.familyRole ? String(data.familyRole) : undefined,
+    claimedInviteToken: data.claimedInviteToken
+      ? String(data.claimedInviteToken)
+      : undefined,
+    inviteToken: data.inviteToken ? String(data.inviteToken) : undefined,
   }
 }
 
@@ -165,6 +171,8 @@ export async function resolveUserProfileForForm(user: {
       treeMotherMemberId: stored.treeMotherMemberId,
       invitedByUid: stored.invitedByUid,
       familyRole: stored.familyRole,
+      claimedInviteToken: stored.claimedInviteToken,
+      inviteToken: stored.inviteToken,
     }
   } catch {
     return fromAuth

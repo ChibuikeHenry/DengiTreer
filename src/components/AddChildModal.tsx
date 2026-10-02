@@ -14,6 +14,24 @@ import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
+const BIRTH_ORDER_OPTIONS = [
+  { value: '1', label: 'First born' },
+  { value: '2', label: 'Second born' },
+  { value: '3', label: 'Third born' },
+  { value: '4', label: 'Fourth born' },
+  { value: '5', label: 'Fifth born' },
+  { value: '6', label: 'Sixth born' },
+  { value: '7', label: 'Seventh born' },
+  { value: '8', label: 'Eighth born' },
+  { value: '9', label: 'Ninth born' },
+  { value: '10', label: 'Tenth born' },
+  { value: '11', label: '11th born' },
+  { value: '12', label: '12th born' },
+  { value: '13', label: '13th born' },
+  { value: '14', label: '14th born' },
+  { value: '15+', label: '15th born or later' },
+]
+
 export default function AddChildModal({ open, onClose, onAdded }: Props) {
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
@@ -27,6 +45,7 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
   const [bio, setBio] = useState('')
   const [fatherId, setFatherId] = useState('')
   const [motherId, setMotherId] = useState('')
+  const [birthOrder, setBirthOrder] = useState('')
   const photo = usePhotoPicker()
 
   const [privacy] = useDefaultMemberPrivacy(open)
@@ -53,6 +72,7 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
     photo.reset()
     setFatherId('')
     setMotherId('')
+    setBirthOrder('')
   }, [open, photo.reset])
 
   return (
@@ -106,10 +126,13 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
         <h3>3. Relationship details</h3>
         <label className="field">
           <span>Order in Birth</span>
-          <select defaultValue="">
+          <select value={birthOrder} onChange={(e) => setBirthOrder(e.target.value)}>
             <option value="">Select birth order</option>
-            <option value="1">First born</option>
-            <option value="2">Second born</option>
+            {BIRTH_ORDER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
           <span className="field-hint">e.g First born, Second born, etc.</span>
         </label>

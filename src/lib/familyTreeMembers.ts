@@ -1,14 +1,21 @@
 import type { InviteRole } from './invitations'
-import { parseMemberPrivacy, type MemberPrivacy } from './memberPrivacy'
+import {
+  DEFAULT_MEMBER_PRIVACY,
+  parseMemberPrivacy,
+  type MemberPrivacy,
+} from './memberPrivacy'
 import {
   siblingRelationshipLabel,
   type ParentKind,
   type ParentSlot,
   type SiblingRelationship,
 } from './siblingRelationship'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { db } from './firebase'
 import { subscribeSentInvitations, type InvitationRecord } from './invitations'
 import { canInviterEditInvitation, isProfileClaimed } from './profileClaim'
 import { fetchUserProfile } from './userProfile'
+import { setSelfOnTree } from './treeStorage'
 
 export type TreeMember = {
   id: string
@@ -119,6 +126,41 @@ async function enrichClaimedMembers(members: TreeMember[]): Promise<TreeMember[]
   return Promise.all(members.map((member) => enrichClaimedMember(member)))
 }
 
+/** how `other` (a role relative to the inviter) appears to the viewer, given the viewer's role relative to the inviter */
+const VIEWER_ROLE_TABLE: Partial<
+  Record<InviteRole, Partial<Record<InviteRole, InviteRole>>>
+> = {
+  child: { parent: 'grandparent', spouse: 'parent', child: 'sibling' },
+  parent: { grandparent: 'parent', parent: 'spouse', sibling: 'child' },
+  sibling: { grandparent: 'grandparent', parent: 'parent', sibling: 'sibling' },
+  spouse: { child: 'child' },
+}
+
+export function roleForViewer(
+  viewerRoleToInviter: InviteRole | 'member',
+  otherRoleToInviter: InviteRole,
+): InviteRole | null {
+  if (viewerRoleToInviter === 'member') return null
+  return VIEWER_ROLE_TABLE[viewerRoleToInviter]?.[otherRoleToInviter] ?? null
+}
+
+export function getReciprocalRole(role: InviteRole): InviteRole {
+  switch (role) {
+    case 'child':
+      return 'parent'
+    case 'parent':
+      return 'child'
+    case 'sibling':
+      return 'sibling'
+    case 'spouse':
+      return 'spouse'
+    case 'grandparent':
+      return 'member'
+    default:
+      return 'member'
+  }
+}
+
 export function subscribeTreeMembers(
   uid: string,
   onChange: (members: TreeMember[]) => void,
@@ -126,20 +168,59 @@ export function subscribeTreeMembers(
 ) {
   let unsub1: (() => void) | null = null
   let unsub2: (() => void) | null = null
+  let unsubUser: (() => void) | null = null
+  let subscribedInviterUid: string | null = null
 
   let recs1: InvitationRecord[] = []
   let recs2: InvitationRecord[] = []
+  let inviterMember: TreeMember | null = null
+  let inviterRelation: InviteRole | 'member' = 'member'
+  let claimedInviteToken: string | null = null
 
   function notify() {
-    const map = new Map<string, InvitationRecord>()
-    for (const r of recs1) map.set(r.id, r)
-    for (const r of recs2) map.set(r.id, r)
+    const keep = (r: InvitationRecord) =>
+      r.joinedUid !== uid && r.id !== claimedInviteToken
 
-    const records = Array.from(map.values())
-    const members = records
-      .map((record) => mapInvitationToTreeMember(record))
-      .filter((member): member is TreeMember => member !== null)
-    void enrichClaimedMembers(members).then(onChange)
+    // people the viewer invited: roles are already relative to the viewer
+    const own = recs1
+      .filter(keep)
+      .map(mapInvitationToTreeMember)
+      .filter((m): m is TreeMember => m !== null)
+
+    // people the inviter invited: re-map roles to the viewer's point of view
+    const viaInviter = recs2
+      .filter(keep)
+      .map(mapInvitationToTreeMember)
+      .filter((m): m is TreeMember => m !== null)
+      .flatMap((m) => {
+        const role = roleForViewer(inviterRelation, m.role)
+        if (!role) return []
+        let parentSlot = m.parentSlot
+        if (
+          inviterRelation === 'child' &&
+          role === 'parent' &&
+          !parentSlot &&
+          inviterMember?.parentSlot &&
+          inviterMember.parentSlot !== 'unknown'
+        ) {
+          parentSlot = inviterMember.parentSlot === 'father' ? 'mother' : 'father'
+        }
+        return [{ ...m, role, parentSlot, inviterCanEdit: false }]
+      })
+
+    const seen = new Set<string>()
+    const allMembers = [
+      ...(inviterMember ? [inviterMember] : []),
+      ...own,
+      ...viaInviter,
+    ].filter((m) => {
+      const key = m.joinedUid ?? m.id
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    void enrichClaimedMembers(allMembers).then(onChange)
   }
 
   unsub1 = subscribeSentInvitations(
@@ -148,25 +229,127 @@ export function subscribeTreeMembers(
       recs1 = records
       notify()
     },
-    onError,
+    (err) => {
+      console.warn('Error subscribing to sent invitations:', err)
+      onError?.(err)
+    },
   )
 
-  void fetchUserProfile(uid).then((profile) => {
-    if (profile?.invitedByUid && profile.invitedByUid !== uid) {
-      unsub2 = subscribeSentInvitations(
-        profile.invitedByUid,
-        (records) => {
-          recs2 = records
-          notify()
-        },
-        onError,
-      )
+  async function syncInviterTree(
+    invitedByUid: string,
+    familyRole: InviteRole | 'member',
+  ) {
+    inviterRelation = familyRole
+    setSelfOnTree()
+
+    try {
+      const inviterProfile = await fetchUserProfile(invitedByUid)
+      if (inviterProfile) {
+        const reciprocalRole = getReciprocalRole(familyRole)
+        const nameFromProfile = [
+          inviterProfile.firstName,
+          inviterProfile.middleName,
+          inviterProfile.lastName,
+        ]
+          .map((p) => (p || '').trim())
+          .filter(Boolean)
+          .join(' ')
+
+        const inviterName =
+          nameFromProfile ||
+          (inviterProfile.email ? inviterProfile.email.split('@')[0] : 'Family member')
+
+        inviterMember = {
+          id: `inviter-${invitedByUid}`,
+          firstName: inviterProfile.firstName || '',
+          lastName: inviterProfile.lastName || '',
+          displayName: inviterName,
+          role: reciprocalRole,
+          photoURL: inviterProfile.photoURL ?? null,
+          memberStatus: 'living',
+          inviteStatus: 'joined',
+          joinedUid: invitedByUid,
+          profileClaimed: true,
+          inviterCanEdit: false,
+          privacy: inviterProfile.profilePrivacy
+            ? parseMemberPrivacy(inviterProfile.profilePrivacy)
+            : DEFAULT_MEMBER_PRIVACY,
+          bio: inviterProfile.bio?.trim() || '',
+          parentSlot:
+            reciprocalRole === 'parent' ? parentSlotFromGender(inviterProfile.gender) : null,
+          parentKind: null,
+          sharedFatherMemberId: null,
+          sharedMotherMemberId: null,
+          siblingRelationship: null,
+          dateOfBirth: inviterProfile.dateOfBirth?.trim() || null,
+          dateOfDeath: null,
+          inviteeEmail: inviterProfile.email || null,
+        }
+        notify()
+      }
+    } catch (err) {
+      console.warn('Error fetching inviter profile:', err)
     }
-  })
+
+    if (subscribedInviterUid === invitedByUid) return
+    unsub2?.()
+    subscribedInviterUid = invitedByUid
+    unsub2 = subscribeSentInvitations(
+      invitedByUid,
+      (records) => {
+        recs2 = records
+        notify()
+      },
+      (err) => {
+        console.warn('Error subscribing to inviter invitations:', err)
+        onError?.(err)
+      },
+    )
+  }
+
+  function clearInviterTree() {
+    unsub2?.()
+    unsub2 = null
+    subscribedInviterUid = null
+    inviterMember = null
+    inviterRelation = 'member'
+    recs2 = []
+    notify()
+  }
+
+  unsubUser = onSnapshot(
+    doc(db, 'users', uid),
+    (snap) => {
+      if (!snap.exists()) {
+        claimedInviteToken = null
+        clearInviterTree()
+        return
+      }
+
+      const data = snap.data()
+      claimedInviteToken =
+        (data.claimedInviteToken ? String(data.claimedInviteToken) : null) ||
+        (data.inviteToken ? String(data.inviteToken) : null)
+
+      const invitedByUid = data.invitedByUid ? String(data.invitedByUid) : null
+      const familyRole = (data.familyRole as InviteRole | undefined) ?? 'member'
+
+      if (invitedByUid && invitedByUid !== uid) {
+        void syncInviterTree(invitedByUid, familyRole)
+      } else {
+        clearInviterTree()
+      }
+    },
+    (err) => {
+      console.warn('Error subscribing to user profile in subscribeTreeMembers:', err)
+      onError?.(err)
+    },
+  )
 
   return () => {
     unsub1?.()
     unsub2?.()
+    unsubUser?.()
   }
 }
 
@@ -265,4 +448,24 @@ export function roleLabel(role: InviteRole): string {
     default:
       return 'Member'
   }
+}
+
+export function positionLabel(role: string | null | undefined): string | null {
+  if (
+    role === 'spouse' ||
+    role === 'parent' ||
+    role === 'grandparent' ||
+    role === 'child' ||
+    role === 'sibling'
+  ) {
+    return roleLabel(role)
+  }
+  return null
+}
+
+function parentSlotFromGender(gender: string | null | undefined): ParentSlot | null {
+  const value = gender?.trim().toLowerCase()
+  if (value === 'male') return 'father'
+  if (value === 'female') return 'mother'
+  return null
 }

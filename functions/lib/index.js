@@ -226,6 +226,77 @@ exports.getInvitationByToken = (0, https_1.onCall)(async (request) => {
         personalMessage: doc.personalMessage,
     };
 });
+const FAMILY_ROLE_RANK = {
+    child: 0,
+    spouse: 1,
+    sibling: 2,
+    parent: 3,
+    grandparent: 4,
+    member: 5,
+};
+function asInviteRole(value) {
+    const role = String(value ?? 'member');
+    if (role === 'spouse' ||
+        role === 'parent' ||
+        role === 'grandparent' ||
+        role === 'child' ||
+        role === 'sibling' ||
+        role === 'member') {
+        return role;
+    }
+    return 'member';
+}
+async function callerEmail(uid, token) {
+    const fromToken = typeof token?.email === 'string' ? token.email.trim().toLowerCase() : '';
+    if (fromToken)
+        return fromToken;
+    const snap = await db.collection('users').doc(uid).get();
+    const fromProfile = String(snap.data()?.email ?? '')
+        .trim()
+        .toLowerCase();
+    return fromProfile || null;
+}
+function buildClaimUserPatch(existing, invite, options) {
+    const role = asInviteRole(invite.role);
+    const inviterUid = String(invite.inviterUid ?? '').trim();
+    const existingInviter = String(existing?.invitedByUid ?? '').trim();
+    const setAnchor = Boolean(inviterUid) && (options.forceAnchor || !existingInviter);
+    const patch = {
+        profileClaimed: true,
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
+    };
+    if (setAnchor) {
+        patch.familyRole = role;
+        patch.invitedByUid = inviterUid;
+        patch.inviteToken = options.token;
+        patch.claimedInviteToken = options.token;
+        if (!String(existing?.profilePrivacy ?? '').trim()) {
+            patch.profilePrivacy = parseMemberPrivacy(invite.privacy);
+        }
+    }
+    const firstName = String(invite.inviteeFirstName ?? '').trim();
+    const middleName = String(invite.inviteeMiddleName ?? '').trim();
+    const lastName = String(invite.inviteeLastName ?? '').trim();
+    const photoURL = String(invite.photoURL ?? '').trim();
+    const bio = String(invite.bio ?? '').trim();
+    const dateOfBirth = String(invite.dateOfBirth ?? '').trim();
+    const email = String(invite.inviteeEmail ?? '').trim().toLowerCase();
+    if (firstName && !String(existing?.firstName ?? '').trim())
+        patch.firstName = firstName;
+    if (middleName && !String(existing?.middleName ?? '').trim())
+        patch.middleName = middleName;
+    if (lastName && !String(existing?.lastName ?? '').trim())
+        patch.lastName = lastName;
+    if (photoURL && !String(existing?.photoURL ?? '').trim())
+        patch.photoURL = photoURL;
+    if (bio && !String(existing?.bio ?? '').trim())
+        patch.bio = bio;
+    if (dateOfBirth && !String(existing?.dateOfBirth ?? '').trim())
+        patch.dateOfBirth = dateOfBirth;
+    if (email && !String(existing?.email ?? '').trim())
+        patch.email = email;
+    return patch;
+}
 exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Sign in to accept this invitation.');
@@ -235,67 +306,53 @@ exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
     }
     const ref = db.collection('invitations').doc(token);
-    const userEmail = typeof request.auth.token.email === 'string'
-        ? request.auth.token.email.toLowerCase()
-        : null;
-    let role = 'member';
+    const userEmail = await callerEmail(request.auth.uid, request.auth.token);
     const joinedUid = request.auth.uid;
+    let role = 'member';
     await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists) {
             throw new https_1.HttpsError('not-found', 'Invitation not found.');
         }
-        const doc = snap.data();
-        if (doc.status !== 'pending') {
+        const invite = snap.data();
+        const alreadyJoinedByMe = invite.status !== 'pending' && invite.joinedUid === joinedUid;
+        if (invite.status !== 'pending' && !alreadyJoinedByMe) {
             throw new https_1.HttpsError('failed-precondition', 'Invitation already accepted.');
         }
-        const inviteeEmail = doc.inviteeEmail;
-        if (inviteeEmail && userEmail && inviteeEmail !== userEmail) {
+        const inviteeEmail = String(invite.inviteeEmail ?? '')
+            .trim()
+            .toLowerCase();
+        if (inviteeEmail && userEmail !== inviteeEmail) {
             throw new https_1.HttpsError('permission-denied', 'Sign in with the email address this invitation was sent to.');
         }
-        role = doc.role;
-        const inviterUid = String(doc.inviterUid ?? '');
-        const invitePhoto = doc.photoURL;
-        const inviteBio = String(doc.bio ?? '').trim();
-        const firstName = String(doc.inviteeFirstName ?? '').trim();
-        const middleName = String(doc.inviteeMiddleName ?? '').trim();
-        const lastName = String(doc.inviteeLastName ?? '').trim();
-        const displayName = String(doc.inviteeName ?? '').trim() ||
+        role = asInviteRole(invite.role);
+        const inviterUid = String(invite.inviterUid ?? '').trim();
+        const userRef = db.collection('users').doc(joinedUid);
+        const userSnap = await tx.get(userRef);
+        const familyMemberRef = inviterUid && role !== 'member'
+            ? db.collection('users').doc(inviterUid).collection('familyMembers').doc(token)
+            : null;
+        const familySnap = familyMemberRef ? await tx.get(familyMemberRef) : null;
+        const firstName = String(invite.inviteeFirstName ?? '').trim();
+        const middleName = String(invite.inviteeMiddleName ?? '').trim();
+        const lastName = String(invite.inviteeLastName ?? '').trim();
+        const displayName = String(invite.inviteeName ?? '').trim() ||
             [firstName, middleName, lastName].filter(Boolean).join(' ');
-        tx.update(ref, {
-            status: 'joined',
-            joinedAt: firestore_1.FieldValue.serverTimestamp(),
-            joinedUid,
-            profileClaimed: true,
-        });
-        tx.set(db.collection('users').doc(joinedUid), {
-            familyRole: role,
-            invitedByUid: inviterUid || null,
-            inviteToken: token,
-            profileClaimed: true,
-            claimedInviteToken: token,
-            firstName: firstName || null,
-            middleName: middleName || null,
-            lastName: lastName || null,
-            photoURL: invitePhoto?.trim() || null,
-            bio: inviteBio || null,
-            profilePrivacy: parseMemberPrivacy(doc.privacy),
-            updatedAt: firestore_1.FieldValue.serverTimestamp(),
-        }, { merge: true });
-        if (inviterUid && role !== 'member') {
-            const familyMemberRef = db
-                .collection('users')
-                .doc(inviterUid)
-                .collection('familyMembers')
-                .doc(token);
-            const familySnap = await tx.get(familyMemberRef);
-            if (familySnap.exists) {
-                tx.update(familyMemberRef, {
-                    claimedByUid: joinedUid,
-                    claimedAt: firestore_1.FieldValue.serverTimestamp(),
-                    displayName: displayName || familySnap.data()?.displayName || null,
-                });
-            }
+        if (!alreadyJoinedByMe) {
+            tx.update(ref, {
+                status: 'joined',
+                joinedAt: firestore_1.FieldValue.serverTimestamp(),
+                joinedUid,
+                profileClaimed: true,
+            });
+        }
+        tx.set(userRef, buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: true }), { merge: true });
+        if (familySnap?.exists && familyMemberRef) {
+            tx.update(familyMemberRef, {
+                claimedByUid: joinedUid,
+                claimedAt: firestore_1.FieldValue.serverTimestamp(),
+                displayName: displayName || familySnap.data()?.displayName || null,
+            });
         }
     });
     return {
@@ -447,69 +504,76 @@ exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) =>
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Sign in to claim invitations.');
     }
-    const userEmail = typeof request.auth.token.email === 'string'
-        ? request.auth.token.email.toLowerCase()
-        : null;
+    const userEmail = await callerEmail(request.auth.uid, request.auth.token);
     if (!userEmail)
         return { claimedCount: 0 };
     const joinedUid = request.auth.uid;
     const snap = await db
         .collection('invitations')
         .where('inviteeEmail', '==', userEmail)
-        .where('status', '==', 'pending')
         .get();
-    if (snap.empty) {
+    if (snap.empty)
         return { claimedCount: 0 };
-    }
+    const pending = snap.docs.filter((docSnap) => {
+        const data = docSnap.data();
+        return data.status === 'pending' && data.profileClaimed !== true && data.joinedUid == null;
+    });
+    const alreadyMine = snap.docs.filter((docSnap) => docSnap.data().joinedUid === joinedUid);
+    const byRole = (a, b) => FAMILY_ROLE_RANK[asInviteRole(a.data().role)] - FAMILY_ROLE_RANK[asInviteRole(b.data().role)];
+    pending.sort(byRole);
+    alreadyMine.sort(byRole);
     let count = 0;
-    for (const docSnap of snap.docs) {
-        const doc = docSnap.data();
-        if (doc.profileClaimed === true || doc.joinedUid != null)
-            continue;
-        const token = docSnap.id;
-        const inviterUid = String(doc.inviterUid ?? '');
-        const role = doc.role ?? 'member';
-        const invitePhoto = doc.photoURL;
-        const inviteBio = String(doc.bio ?? '').trim();
-        const firstName = String(doc.inviteeFirstName ?? '').trim();
-        const middleName = String(doc.inviteeMiddleName ?? '').trim();
-        const lastName = String(doc.inviteeLastName ?? '').trim();
-        await db.runTransaction(async (tx) => {
+    for (const docSnap of pending) {
+        const claimed = await db.runTransaction(async (tx) => {
+            const inviteSnap = await tx.get(docSnap.ref);
+            if (!inviteSnap.exists)
+                return false;
+            const invite = inviteSnap.data();
+            if (invite.status !== 'pending' || invite.profileClaimed === true || invite.joinedUid != null) {
+                return false;
+            }
+            const token = docSnap.id;
+            const role = asInviteRole(invite.role);
+            const inviterUid = String(invite.inviterUid ?? '').trim();
+            const userRef = db.collection('users').doc(joinedUid);
+            const userSnap = await tx.get(userRef);
+            const familyMemberRef = inviterUid && role !== 'member'
+                ? db.collection('users').doc(inviterUid).collection('familyMembers').doc(token)
+                : null;
+            const familySnap = familyMemberRef ? await tx.get(familyMemberRef) : null;
             tx.update(docSnap.ref, {
                 status: 'joined',
                 joinedAt: firestore_1.FieldValue.serverTimestamp(),
                 joinedUid,
                 profileClaimed: true,
             });
-            tx.set(db.collection('users').doc(joinedUid), {
-                familyRole: role,
-                invitedByUid: inviterUid || null,
-                inviteToken: token,
-                profileClaimed: true,
-                claimedInviteToken: token,
-                ...(firstName ? { firstName } : {}),
-                ...(middleName ? { middleName } : {}),
-                ...(lastName ? { lastName } : {}),
-                ...(invitePhoto ? { photoURL: invitePhoto } : {}),
-                ...(inviteBio ? { bio: inviteBio } : {}),
-                updatedAt: firestore_1.FieldValue.serverTimestamp(),
-            }, { merge: true });
-            if (inviterUid && role !== 'member') {
-                const familyMemberRef = db
-                    .collection('users')
-                    .doc(inviterUid)
-                    .collection('familyMembers')
-                    .doc(token);
-                const familySnap = await tx.get(familyMemberRef);
-                if (familySnap.exists) {
-                    tx.update(familyMemberRef, {
-                        claimedByUid: joinedUid,
-                        claimedAt: firestore_1.FieldValue.serverTimestamp(),
-                    });
-                }
+            tx.set(userRef, buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: false }), { merge: true });
+            if (familySnap?.exists && familyMemberRef) {
+                tx.update(familyMemberRef, {
+                    claimedByUid: joinedUid,
+                    claimedAt: firestore_1.FieldValue.serverTimestamp(),
+                });
             }
+            return true;
         });
-        count++;
+        if (claimed)
+            count++;
+    }
+    if (alreadyMine.length > 0) {
+        const best = alreadyMine[0];
+        await db.runTransaction(async (tx) => {
+            const userRef = db.collection('users').doc(joinedUid);
+            const userSnap = await tx.get(userRef);
+            if (String(userSnap.data()?.invitedByUid ?? '').trim())
+                return;
+            const inviteSnap = await tx.get(best.ref);
+            if (!inviteSnap.exists)
+                return;
+            tx.set(userRef, buildClaimUserPatch(userSnap.data(), inviteSnap.data(), {
+                token: best.id,
+                forceAnchor: false,
+            }), { merge: true });
+        });
     }
     return { claimedCount: count };
 });
@@ -534,16 +598,16 @@ exports.updateFamilyMemberPrivacy = (0, https_1.onCall)(async (request) => {
         if (doc.inviterUid !== uid) {
             throw new https_1.HttpsError('permission-denied', 'You can only update people you added.');
         }
-        tx.update(ref, {
-            privacy,
-            updatedAt: firestore_1.FieldValue.serverTimestamp(),
-        });
         const familyMemberRef = db
             .collection('users')
             .doc(uid)
             .collection('familyMembers')
             .doc(token);
         const familySnap = await tx.get(familyMemberRef);
+        tx.update(ref, {
+            privacy,
+            updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        });
         if (familySnap.exists) {
             tx.update(familyMemberRef, { privacy });
         }

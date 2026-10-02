@@ -134,7 +134,7 @@ export function inviteTokenStorageKey() {
 
 export function persistInviteToken(token: string) {
   try {
-    sessionStorage.setItem(inviteTokenStorageKey(), token)
+    localStorage.setItem(inviteTokenStorageKey(), token)
   } catch {
     /* ignore */
   }
@@ -142,7 +142,10 @@ export function persistInviteToken(token: string) {
 
 export function readPersistedInviteToken(): string | null {
   try {
-    return sessionStorage.getItem(inviteTokenStorageKey())
+    return (
+      localStorage.getItem(inviteTokenStorageKey()) ??
+      sessionStorage.getItem(inviteTokenStorageKey())
+    )
   } catch {
     return null
   }
@@ -150,6 +153,7 @@ export function readPersistedInviteToken(): string | null {
 
 export function clearPersistedInviteToken() {
   try {
+    localStorage.removeItem(inviteTokenStorageKey())
     sessionStorage.removeItem(inviteTokenStorageKey())
   } catch {
     /* ignore */
@@ -239,29 +243,50 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
   }
 }
 
-export async function acceptPersistedInvitationIfAny() {
+export async function acceptPersistedInvitationIfAny(): Promise<{
+  linkedToTree: boolean
+  acceptError: string | null
+}> {
   const { setSelfOnTree } = await import('./treeStorage')
+  const { auth } = await import('./firebase')
+  let linkedToTree = false
+  let acceptError: string | null = null
+
+  if (auth.currentUser) {
+    await auth.currentUser.getIdToken(true)
+  }
+
   const token = readPersistedInviteToken()
+  console.log('[invite] token in storage:', token)
+
   if (token) {
     try {
       await acceptInvitation(token)
+      console.log('[invite] accepted')
       setSelfOnTree()
-    } catch {
-      /* ignore */
+      linkedToTree = true
+      clearPersistedInviteToken()
+    } catch (err) {
+      console.error('[invite] accept failed', err)
+      acceptError = getCallableErrorMessage(err)
+      const code = (err as { code?: string })?.code
+      if (code === 'functions/not-found' || code === 'functions/already-exists') {
+        clearPersistedInviteToken()
+      }
     }
-    clearPersistedInviteToken()
   }
 
   try {
     const claimedRes = await claimPendingInvitationsForEmail()
+    console.log('[invite] claimed by email:', claimedRes)
     if (claimedRes && claimedRes.claimedCount > 0) {
       setSelfOnTree()
+      linkedToTree = true
     }
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.error('[invite] claim failed', err)
   }
 
-  const { auth } = await import('./firebase')
   const { fetchUserProfile } = await import('./userProfile')
   const { updateProfile } = await import('firebase/auth')
 
@@ -270,6 +295,7 @@ export async function acceptPersistedInvitationIfAny() {
     if (profile) {
       if (profile.invitedByUid) {
         setSelfOnTree()
+        linkedToTree = true
       }
       const displayName = [profile.firstName, profile.middleName, profile.lastName]
         .map((part) => part.trim())
@@ -282,7 +308,7 @@ export async function acceptPersistedInvitationIfAny() {
     }
   }
 
-  return null
+  return { linkedToTree, acceptError }
 }
 
 function timestampToDate(value: Timestamp | null | undefined): Date | null {

@@ -314,6 +314,89 @@ export const getInvitationByToken = onCall(async (request) => {
   }
 })
 
+const FAMILY_ROLE_RANK: Record<InviteRole, number> = {
+  child: 0,
+  spouse: 1,
+  sibling: 2,
+  parent: 3,
+  grandparent: 4,
+  member: 5,
+}
+
+function asInviteRole(value: unknown): InviteRole {
+  const role = String(value ?? 'member')
+  if (
+    role === 'spouse' ||
+    role === 'parent' ||
+    role === 'grandparent' ||
+    role === 'child' ||
+    role === 'sibling' ||
+    role === 'member'
+  ) {
+    return role
+  }
+  return 'member'
+}
+
+async function callerEmail(
+  uid: string,
+  token: Record<string, unknown> | undefined,
+): Promise<string | null> {
+  const fromToken =
+    typeof token?.email === 'string' ? token.email.trim().toLowerCase() : ''
+  if (fromToken) return fromToken
+
+  const snap = await db.collection('users').doc(uid).get()
+  const fromProfile = String(snap.data()?.email ?? '')
+    .trim()
+    .toLowerCase()
+  return fromProfile || null
+}
+
+function buildClaimUserPatch(
+  existing: FirebaseFirestore.DocumentData | undefined,
+  invite: FirebaseFirestore.DocumentData,
+  options: { token: string; forceAnchor: boolean },
+): Record<string, unknown> {
+  const role = asInviteRole(invite.role)
+  const inviterUid = String(invite.inviterUid ?? '').trim()
+  const existingInviter = String(existing?.invitedByUid ?? '').trim()
+  const setAnchor = Boolean(inviterUid) && (options.forceAnchor || !existingInviter)
+
+  const patch: Record<string, unknown> = {
+    profileClaimed: true,
+    updatedAt: FieldValue.serverTimestamp(),
+  }
+
+  if (setAnchor) {
+    patch.familyRole = role
+    patch.invitedByUid = inviterUid
+    patch.inviteToken = options.token
+    patch.claimedInviteToken = options.token
+    if (!String(existing?.profilePrivacy ?? '').trim()) {
+      patch.profilePrivacy = parseMemberPrivacy(invite.privacy)
+    }
+  }
+
+  const firstName = String(invite.inviteeFirstName ?? '').trim()
+  const middleName = String(invite.inviteeMiddleName ?? '').trim()
+  const lastName = String(invite.inviteeLastName ?? '').trim()
+  const photoURL = String(invite.photoURL ?? '').trim()
+  const bio = String(invite.bio ?? '').trim()
+  const dateOfBirth = String(invite.dateOfBirth ?? '').trim()
+  const email = String(invite.inviteeEmail ?? '').trim().toLowerCase()
+
+  if (firstName && !String(existing?.firstName ?? '').trim()) patch.firstName = firstName
+  if (middleName && !String(existing?.middleName ?? '').trim()) patch.middleName = middleName
+  if (lastName && !String(existing?.lastName ?? '').trim()) patch.lastName = lastName
+  if (photoURL && !String(existing?.photoURL ?? '').trim()) patch.photoURL = photoURL
+  if (bio && !String(existing?.bio ?? '').trim()) patch.bio = bio
+  if (dateOfBirth && !String(existing?.dateOfBirth ?? '').trim()) patch.dateOfBirth = dateOfBirth
+  if (email && !String(existing?.email ?? '').trim()) patch.email = email
+
+  return patch
+}
+
 export const acceptInvitation = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in to accept this invitation.')
@@ -325,13 +408,9 @@ export const acceptInvitation = onCall(async (request) => {
   }
 
   const ref = db.collection('invitations').doc(token)
-  const userEmail =
-    typeof request.auth.token.email === 'string'
-      ? request.auth.token.email.toLowerCase()
-      : null
-
-  let role: InviteRole = 'member'
+  const userEmail = await callerEmail(request.auth.uid, request.auth.token)
   const joinedUid = request.auth.uid
+  let role: InviteRole = 'member'
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
@@ -339,70 +418,62 @@ export const acceptInvitation = onCall(async (request) => {
       throw new HttpsError('not-found', 'Invitation not found.')
     }
 
-    const doc = snap.data()!
-    if (doc.status !== 'pending') {
+    const invite = snap.data()!
+    const alreadyJoinedByMe =
+      invite.status !== 'pending' && invite.joinedUid === joinedUid
+    if (invite.status !== 'pending' && !alreadyJoinedByMe) {
       throw new HttpsError('failed-precondition', 'Invitation already accepted.')
     }
 
-    const inviteeEmail = doc.inviteeEmail as string | null
-    if (inviteeEmail && userEmail && inviteeEmail !== userEmail) {
+    const inviteeEmail = String(invite.inviteeEmail ?? '')
+      .trim()
+      .toLowerCase()
+    if (inviteeEmail && userEmail !== inviteeEmail) {
       throw new HttpsError(
         'permission-denied',
         'Sign in with the email address this invitation was sent to.',
       )
     }
 
-    role = doc.role as InviteRole
-    const inviterUid = String(doc.inviterUid ?? '')
-    const invitePhoto = doc.photoURL as string | null | undefined
-    const inviteBio = String(doc.bio ?? '').trim()
-    const firstName = String(doc.inviteeFirstName ?? '').trim()
-    const middleName = String(doc.inviteeMiddleName ?? '').trim()
-    const lastName = String(doc.inviteeLastName ?? '').trim()
+    role = asInviteRole(invite.role)
+    const inviterUid = String(invite.inviterUid ?? '').trim()
+    const userRef = db.collection('users').doc(joinedUid)
+    const userSnap = await tx.get(userRef)
+
+    const familyMemberRef =
+      inviterUid && role !== 'member'
+        ? db.collection('users').doc(inviterUid).collection('familyMembers').doc(token)
+        : null
+    const familySnap = familyMemberRef ? await tx.get(familyMemberRef) : null
+
+    const firstName = String(invite.inviteeFirstName ?? '').trim()
+    const middleName = String(invite.inviteeMiddleName ?? '').trim()
+    const lastName = String(invite.inviteeLastName ?? '').trim()
     const displayName =
-      String(doc.inviteeName ?? '').trim() ||
+      String(invite.inviteeName ?? '').trim() ||
       [firstName, middleName, lastName].filter(Boolean).join(' ')
 
-    tx.update(ref, {
-      status: 'joined',
-      joinedAt: FieldValue.serverTimestamp(),
-      joinedUid,
-      profileClaimed: true,
-    })
+    if (!alreadyJoinedByMe) {
+      tx.update(ref, {
+        status: 'joined',
+        joinedAt: FieldValue.serverTimestamp(),
+        joinedUid,
+        profileClaimed: true,
+      })
+    }
 
     tx.set(
-      db.collection('users').doc(joinedUid),
-      {
-        familyRole: role,
-        invitedByUid: inviterUid || null,
-        inviteToken: token,
-        profileClaimed: true,
-        claimedInviteToken: token,
-        firstName: firstName || null,
-        middleName: middleName || null,
-        lastName: lastName || null,
-        photoURL: invitePhoto?.trim() || null,
-        bio: inviteBio || null,
-        profilePrivacy: parseMemberPrivacy(doc.privacy),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
+      userRef,
+      buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: true }),
       { merge: true },
     )
 
-    if (inviterUid && role !== 'member') {
-      const familyMemberRef = db
-        .collection('users')
-        .doc(inviterUid)
-        .collection('familyMembers')
-        .doc(token)
-      const familySnap = await tx.get(familyMemberRef)
-      if (familySnap.exists) {
-        tx.update(familyMemberRef, {
-          claimedByUid: joinedUid,
-          claimedAt: FieldValue.serverTimestamp(),
-          displayName: displayName || familySnap.data()?.displayName || null,
-        })
-      }
+    if (familySnap?.exists && familyMemberRef) {
+      tx.update(familyMemberRef, {
+        claimedByUid: joinedUid,
+        claimedAt: FieldValue.serverTimestamp(),
+        displayName: displayName || familySnap.data()?.displayName || null,
+      })
     }
   })
 
@@ -601,81 +672,89 @@ export const claimPendingInvitationsForEmail = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'Sign in to claim invitations.')
   }
 
-  const userEmail =
-    typeof request.auth.token.email === 'string'
-      ? request.auth.token.email.toLowerCase()
-      : null
-
+  const userEmail = await callerEmail(request.auth.uid, request.auth.token)
   if (!userEmail) return { claimedCount: 0 }
 
   const joinedUid = request.auth.uid
-
   const snap = await db
     .collection('invitations')
     .where('inviteeEmail', '==', userEmail)
-    .where('status', '==', 'pending')
     .get()
 
-  if (snap.empty) {
-    return { claimedCount: 0 }
-  }
+  if (snap.empty) return { claimedCount: 0 }
+
+  const pending = snap.docs.filter((docSnap) => {
+    const data = docSnap.data()
+    return data.status === 'pending' && data.profileClaimed !== true && data.joinedUid == null
+  })
+  const alreadyMine = snap.docs.filter((docSnap) => docSnap.data().joinedUid === joinedUid)
+  const byRole = (a: FirebaseFirestore.QueryDocumentSnapshot, b: FirebaseFirestore.QueryDocumentSnapshot) =>
+    FAMILY_ROLE_RANK[asInviteRole(a.data().role)] - FAMILY_ROLE_RANK[asInviteRole(b.data().role)]
+  pending.sort(byRole)
+  alreadyMine.sort(byRole)
 
   let count = 0
-  for (const docSnap of snap.docs) {
-    const doc = docSnap.data()
-    if (doc.profileClaimed === true || doc.joinedUid != null) continue
+  for (const docSnap of pending) {
+    const claimed = await db.runTransaction(async (tx) => {
+      const inviteSnap = await tx.get(docSnap.ref)
+      if (!inviteSnap.exists) return false
 
-    const token = docSnap.id
-    const inviterUid = String(doc.inviterUid ?? '')
-    const role = (doc.role as InviteRole) ?? 'member'
-    const invitePhoto = doc.photoURL as string | null | undefined
-    const inviteBio = String(doc.bio ?? '').trim()
-    const firstName = String(doc.inviteeFirstName ?? '').trim()
-    const middleName = String(doc.inviteeMiddleName ?? '').trim()
-    const lastName = String(doc.inviteeLastName ?? '').trim()
+      const invite = inviteSnap.data()!
+      if (invite.status !== 'pending' || invite.profileClaimed === true || invite.joinedUid != null) {
+        return false
+      }
 
-    await db.runTransaction(async (tx) => {
+      const token = docSnap.id
+      const role = asInviteRole(invite.role)
+      const inviterUid = String(invite.inviterUid ?? '').trim()
+      const userRef = db.collection('users').doc(joinedUid)
+      const userSnap = await tx.get(userRef)
+      const familyMemberRef =
+        inviterUid && role !== 'member'
+          ? db.collection('users').doc(inviterUid).collection('familyMembers').doc(token)
+          : null
+      const familySnap = familyMemberRef ? await tx.get(familyMemberRef) : null
+
       tx.update(docSnap.ref, {
         status: 'joined',
         joinedAt: FieldValue.serverTimestamp(),
         joinedUid,
         profileClaimed: true,
       })
-
       tx.set(
-        db.collection('users').doc(joinedUid),
-        {
-          familyRole: role,
-          invitedByUid: inviterUid || null,
-          inviteToken: token,
-          profileClaimed: true,
-          claimedInviteToken: token,
-          ...(firstName ? { firstName } : {}),
-          ...(middleName ? { middleName } : {}),
-          ...(lastName ? { lastName } : {}),
-          ...(invitePhoto ? { photoURL: invitePhoto } : {}),
-          ...(inviteBio ? { bio: inviteBio } : {}),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
+        userRef,
+        buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: false }),
         { merge: true },
       )
-
-      if (inviterUid && role !== 'member') {
-        const familyMemberRef = db
-          .collection('users')
-          .doc(inviterUid)
-          .collection('familyMembers')
-          .doc(token)
-        const familySnap = await tx.get(familyMemberRef)
-        if (familySnap.exists) {
-          tx.update(familyMemberRef, {
-            claimedByUid: joinedUid,
-            claimedAt: FieldValue.serverTimestamp(),
-          })
-        }
+      if (familySnap?.exists && familyMemberRef) {
+        tx.update(familyMemberRef, {
+          claimedByUid: joinedUid,
+          claimedAt: FieldValue.serverTimestamp(),
+        })
       }
+      return true
     })
-    count++
+    if (claimed) count++
+  }
+
+  if (alreadyMine.length > 0) {
+    const best = alreadyMine[0]
+    await db.runTransaction(async (tx) => {
+      const userRef = db.collection('users').doc(joinedUid)
+      const userSnap = await tx.get(userRef)
+      if (String(userSnap.data()?.invitedByUid ?? '').trim()) return
+
+      const inviteSnap = await tx.get(best.ref)
+      if (!inviteSnap.exists) return
+      tx.set(
+        userRef,
+        buildClaimUserPatch(userSnap.data(), inviteSnap.data()!, {
+          token: best.id,
+          forceAnchor: false,
+        }),
+        { merge: true },
+      )
+    })
   }
 
   return { claimedCount: count }
@@ -707,17 +786,18 @@ export const updateFamilyMemberPrivacy = onCall(async (request) => {
       throw new HttpsError('permission-denied', 'You can only update people you added.')
     }
 
-    tx.update(ref, {
-      privacy,
-      updatedAt: FieldValue.serverTimestamp(),
-    })
-
     const familyMemberRef = db
       .collection('users')
       .doc(uid)
       .collection('familyMembers')
       .doc(token)
     const familySnap = await tx.get(familyMemberRef)
+
+    tx.update(ref, {
+      privacy,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
     if (familySnap.exists) {
       tx.update(familyMemberRef, { privacy })
     }

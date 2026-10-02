@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import MarketingHeader from '../components/MarketingHeader'
 import {
+  acceptPersistedInvitationIfAny,
   fetchInvitationPreview,
   getCallableErrorMessage,
   persistInviteToken,
@@ -58,7 +59,16 @@ export default function JoinInvitePage() {
 
   useEffect(() => {
     if (authLoading || !user || !token) return
-    navigate('/home', { replace: true })
+
+    let cancelled = false
+    void (async () => {
+      await acceptPersistedInvitationIfAny()
+      if (!cancelled) navigate('/home', { replace: true })
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [authLoading, navigate, token, user])
 
   if (authLoading || loading) {

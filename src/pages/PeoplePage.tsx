@@ -9,6 +9,7 @@ import { formatBioForDisplay } from '../lib/bio'
 import { memberPrivacyLabel } from '../lib/memberPrivacy'
 import {
   memberRelationshipLabel,
+  positionLabel,
   roleLabel,
   subscribeTreeMembers,
   type TreeMember,
@@ -23,9 +24,14 @@ export default function PeoplePage() {
   const [members, setMembers] = useState<TreeMember[]>([])
   const [selfName, setSelfName] = useState('')
   const [selfBio, setSelfBio] = useState('')
+  const [selfPosition, setSelfPosition] = useState<string | null>(null)
+  const [joinedFamily, setJoinedFamily] = useState(false)
   const [query, setQuery] = useState('')
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
-  const selfOnTree = useMemo(() => hasSelfOnTree(), [treeVersion])
+  const selfOnTree = useMemo(
+    () => hasSelfOnTree() || members.length > 0 || joinedFamily,
+    [treeVersion, members.length, joinedFamily],
+  )
 
   useEffect(() => {
     if (!user?.uid) return
@@ -43,6 +49,8 @@ export default function PeoplePage() {
         .join(' ')
       setSelfName(name || user.displayName?.trim() || 'You')
       setSelfBio(profile.bio?.trim() ?? '')
+      setSelfPosition(positionLabel(profile.familyRole))
+      setJoinedFamily(Boolean(profile.invitedByUid))
     })()
     return () => {
       cancelled = true
@@ -101,7 +109,7 @@ export default function PeoplePage() {
               <ProfileAvatar photoURL={user?.photoURL} name={selfName} size="md" />
               <div className="people-row-body">
                 <strong>{selfName}</strong>
-                <span>You</span>
+                <span>{selfPosition ? `You · ${selfPosition}` : 'You'}</span>
                 <span className="people-row-bio">{formatBioForDisplay(selfBio)}</span>
               </div>
               <Link to="/home/profile" className="people-row-action">

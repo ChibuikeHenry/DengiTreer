@@ -8,6 +8,7 @@ import { formatBioForDisplay } from '../lib/bio'
 import {
   computeTreeStats,
   memberRelationshipLabel,
+  positionLabel,
   roleLabel,
   subscribeTreeMembers,
   type TreeMember,
@@ -35,6 +36,7 @@ function StarterDiagram({
   selfBio,
   selfPrivacy,
   selfDateOfBirth,
+  selfPositionLabel,
   onSelectMember,
 }: {
   openModal: DashboardContext['openModal']
@@ -45,6 +47,7 @@ function StarterDiagram({
   selfBio: string
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
+  selfPositionLabel: string | null
   onSelectMember?: (member: TreeMember) => void
 }) {
   return (
@@ -58,6 +61,7 @@ function StarterDiagram({
         selfBio={selfBio}
         selfPrivacy={selfPrivacy}
         selfDateOfBirth={selfDateOfBirth}
+        selfPositionLabel={selfPositionLabel}
         onSelectMember={onSelectMember}
       />
     </div>
@@ -76,9 +80,15 @@ export default function FamilyTreePage() {
   const [selfBio, setSelfBio] = useState('')
   const [selfPrivacy, setSelfPrivacy] = useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
   const [selfDateOfBirth, setSelfDateOfBirth] = useState<string | null>(null)
+  const [selfPosition, setSelfPosition] = useState<string | null>(null)
+  const [joinedFamily, setJoinedFamily] = useState(false)
+  const [profileReady, setProfileReady] = useState(false)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
 
-  const selfAdded = useMemo(() => hasSelfOnTree(), [treeVersion])
+  const selfAdded = useMemo(
+    () => hasSelfOnTree() || members.length > 0 || joinedFamily,
+    [treeVersion, members.length, joinedFamily],
+  )
   const selfListLabel = selfHasProfileName ? selfName : 'You'
 
   useEffect(() => {
@@ -97,6 +107,9 @@ export default function FamilyTreePage() {
       setSelfBio('')
       setSelfPrivacy(DEFAULT_MEMBER_PRIVACY)
       setSelfDateOfBirth(null)
+      setSelfPosition(null)
+      setJoinedFamily(false)
+      setProfileReady(false)
       return
     }
     let cancelled = false
@@ -114,6 +127,9 @@ export default function FamilyTreePage() {
         ),
       )
       setSelfDateOfBirth(profile.dateOfBirth?.trim() || null)
+      setSelfPosition(positionLabel(profile.familyRole))
+      setJoinedFamily(Boolean(profile.invitedByUid))
+      setProfileReady(true)
     })()
     return () => {
       cancelled = true
@@ -122,11 +138,12 @@ export default function FamilyTreePage() {
 
   useEffect(() => {
     const state = location.state as { openSelf?: boolean } | null
-    if (state?.openSelf && !hasSelfOnTree()) {
+    if (!state?.openSelf || !profileReady) return
+    if (!hasSelfOnTree() && !joinedFamily) {
       openModal('yourself')
-      window.history.replaceState({}, document.title)
     }
-  }, [location.state, openModal])
+    window.history.replaceState({}, document.title)
+  }, [joinedFamily, location.state, openModal, profileReady])
 
   const stats = computeTreeStats(selfAdded, members)
 
@@ -197,6 +214,7 @@ export default function FamilyTreePage() {
               selfBio={selfBio}
               selfPrivacy={selfPrivacy}
               selfDateOfBirth={selfDateOfBirth}
+              selfPositionLabel={selfPosition}
               onSelectMember={setEditingMember}
             />
           )
@@ -210,7 +228,7 @@ export default function FamilyTreePage() {
                     <span>
                       <strong>{selfListLabel}</strong>
                       <span>
-                        Profile · {memberPrivacyLabel(selfPrivacy)}
+                        {selfPosition ?? 'Profile'} · {memberPrivacyLabel(selfPrivacy)}
                       </span>
                       <span className="ft-list-bio">{formatBioForDisplay(selfBio)}</span>
                     </span>

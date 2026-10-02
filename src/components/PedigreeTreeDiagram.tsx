@@ -180,6 +180,7 @@ export default function PedigreeTreeDiagram({
   selfBio,
   selfPrivacy,
   selfDateOfBirth,
+  selfPositionLabel = null,
   onSelectMember,
 }: {
   members: TreeMember[]
@@ -190,6 +191,7 @@ export default function PedigreeTreeDiagram({
   selfBio: string
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
+  selfPositionLabel?: string | null
   onSelectMember?: (member: TreeMember) => void
 }) {
   const grandparents = orderHousehold(members.filter((m) => m.role === 'grandparent'))
@@ -276,7 +278,13 @@ export default function PedigreeTreeDiagram({
                   privacy={selfPrivacy}
                   avatarClassName="tree-person-avatar-you"
                   variant="pedigree"
-                  roleLabel={selfHasProfileName ? roleLine('You', 'living') : undefined}
+                  roleLabel={
+                    selfPositionLabel
+                      ? roleLine(selfPositionLabel, 'living')
+                      : selfHasProfileName
+                        ? roleLine('You', 'living')
+                        : undefined
+                  }
                   yearsLabel={selfHasProfileName ? selfYears : null}
                   youBadge={!selfHasProfileName}
                 />

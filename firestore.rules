@@ -2,26 +2,47 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function myUserPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function myInvitedByUid() {
+      return exists(myUserPath())
+        ? get(myUserPath()).data.get('invitedByUid', null)
+        : null;
+    }
+
     match /invitations/{token} {
-      allow read: if request.auth != null
-        && (
-          resource.data.inviterUid == request.auth.uid
-          || (resource.data.inviteeEmail != null
-            && resource.data.inviteeEmail == request.auth.token.email)
-        );
+      allow read: if isAuthed() && resource.data.inviterUid == request.auth.uid;
+      allow read: if isAuthed() && resource.data.joinedUid == request.auth.uid;
+      allow read: if isAuthed()
+        && resource.data.inviteeEmail != null
+        && resource.data.inviteeEmail == request.auth.token.email;
+      allow read: if isAuthed()
+        && myInvitedByUid() != null
+        && resource.data.inviterUid == myInvitedByUid();
       allow write: if false;
     }
 
     match /users/{uid} {
-      allow read: if request.auth != null
-        && (
-          request.auth.uid == uid
-          || resource.data.get('invitedByUid', null) == request.auth.uid
-        );
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if isAuthed() && (
+        request.auth.uid == uid
+        || resource.data.get('invitedByUid', null) == request.auth.uid
+        || (myInvitedByUid() != null && myInvitedByUid() == uid)
+        || (myInvitedByUid() != null && resource.data.get('invitedByUid', null) == myInvitedByUid())
+      );
+      allow write: if isAuthed() && request.auth.uid == uid;
 
       match /familyMembers/{memberId} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if isAuthed() && (
+          request.auth.uid == uid
+          || (myInvitedByUid() != null && myInvitedByUid() == uid)
+        );
         allow write: if false;
       }
     }

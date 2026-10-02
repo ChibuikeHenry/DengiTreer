@@ -8,8 +8,10 @@ import AddSpouseModal from '../components/AddSpouseModal'
 import AddYourselfModal from '../components/AddYourselfModal'
 import DashboardLayout, { DashIcons } from '../components/DashboardLayout'
 import { useAuth } from '../context/AuthContext'
+import { positionLabel } from '../lib/familyTreeMembers'
 import { acceptPersistedInvitationIfAny } from '../lib/invitations'
 import { setSelfOnTree } from '../lib/treeStorage'
+import { fetchUserProfile } from '../lib/userProfile'
 import '../dashboard.css'
 
 export type MemberModalKind =
@@ -33,7 +35,10 @@ export function HomeDashboard() {
 
   useEffect(() => {
     if (!user) return
-    void acceptPersistedInvitationIfAny()
+    void acceptPersistedInvitationIfAny().then(({ linkedToTree, acceptError }) => {
+      if (acceptError) console.error('Invitation not accepted:', acceptError)
+      if (linkedToTree) setTreeVersion((v) => v + 1)
+    })
   }, [user])
 
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
@@ -121,12 +126,31 @@ const gettingStartedItems = [
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { openModal } = useOutletContext<DashboardContext>()
+  const { openModal, treeVersion } = useOutletContext<DashboardContext>()
   const { user } = useAuth()
+  const [joinedFamily, setJoinedFamily] = useState(false)
+  const [position, setPosition] = useState<string | null>(null)
   const firstName =
     user?.displayName?.trim().split(/\s+/)[0] ||
     user?.email?.split('@')[0] ||
     'there'
+
+  useEffect(() => {
+    if (!user) {
+      setJoinedFamily(false)
+      setPosition(null)
+      return
+    }
+    let cancelled = false
+    void fetchUserProfile(user.uid).then((profile) => {
+      if (cancelled) return
+      setJoinedFamily(Boolean(profile?.invitedByUid))
+      setPosition(positionLabel(profile?.familyRole))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [user, treeVersion])
 
   function handleGettingStarted(action: (typeof gettingStartedItems)[number]['action']) {
     switch (action) {
@@ -156,22 +180,40 @@ export default function HomePage() {
       <div className="home-top-grid">
         <section className="home-card tree-card tree-card-v2">
           <div className="tree-card-body">
-            <p className="tree-card-eyebrow">Create your family tree</p>
+            <p className="tree-card-eyebrow">
+              {joinedFamily ? 'Your family tree' : 'Create your family tree'}
+            </p>
             <h2>
-              Start with you.
-              <br />
-              Grow together.
+              {joinedFamily ? (
+                <>
+                  You&apos;re in the family.
+                  <br />
+                  {position ? `As a ${position.toLowerCase()}.` : 'See your place.'}
+                </>
+              ) : (
+                <>
+                  Start with you.
+                  <br />
+                  Grow together.
+                </>
+              )}
             </h2>
             <p className="tree-card-desc">
-              Build your family network step by step. Add you family members, invite
-              relatives and preserve your family history.
+              {joinedFamily
+                ? 'The family tree you were invited to is ready. Open it to see your relatives and where you sit among them.'
+                : 'Build your family network step by step. Add you family members, invite relatives and preserve your family history.'}
             </p>
             <button
               type="button"
               className="tree-card-cta"
-              onClick={() => navigate('/home/tree', { state: { openSelf: true } })}
+              onClick={() =>
+                navigate(
+                  '/home/tree',
+                  joinedFamily ? undefined : { state: { openSelf: true } },
+                )
+              }
             >
-              Click Here to Start
+              {joinedFamily ? 'View family tree' : 'Click Here to Start'}
             </button>
           </div>
           <div className="tree-card-photo">
