@@ -45,6 +45,7 @@ const treeRoles = new Set<InviteRole>([
   'spouse',
   'parent',
   'grandparent',
+  'great-grandparent',
   'child',
   'sibling',
 ])
@@ -130,9 +131,9 @@ async function enrichClaimedMembers(members: TreeMember[]): Promise<TreeMember[]
 const VIEWER_ROLE_TABLE: Partial<
   Record<InviteRole, Partial<Record<InviteRole, InviteRole>>>
 > = {
-  child: { parent: 'grandparent', spouse: 'parent', child: 'sibling' },
-  parent: { grandparent: 'parent', parent: 'spouse', sibling: 'child' },
-  sibling: { grandparent: 'grandparent', parent: 'parent', sibling: 'sibling' },
+  child: { parent: 'grandparent', spouse: 'parent', child: 'sibling', grandparent: 'great-grandparent' },
+  parent: { grandparent: 'great-grandparent', parent: 'spouse', sibling: 'child' },
+  sibling: { grandparent: 'grandparent', parent: 'parent', sibling: 'sibling', 'great-grandparent': 'great-grandparent' },
   spouse: { child: 'child' },
 }
 
@@ -405,16 +406,62 @@ export function computeTreeStats(selfOnTree: boolean, members: TreeMember[]) {
 
 export function parentSlotLabel(member: TreeMember): string {
   if (member.role !== 'parent') return roleLabel(member.role)
-  if (member.parentSlot === 'father') return 'Father'
-  if (member.parentSlot === 'mother') return 'Mother'
+  const isStep = member.parentKind === 'step'
+  const isAdoptive = member.parentKind === 'adoptive'
+
+  if (member.parentSlot === 'father') {
+    if (isStep) return 'Step-father'
+    if (isAdoptive) return 'Adoptive Father'
+    return 'Father'
+  }
+  if (member.parentSlot === 'mother') {
+    if (isStep) return 'Step-mother'
+    if (isAdoptive) return 'Adoptive Mother'
+    return 'Mother'
+  }
+  if (isStep) return 'Step-parent'
+  if (isAdoptive) return 'Adoptive Parent'
   return 'Parent'
 }
 
 export function grandparentSlotLabel(member: TreeMember): string {
   if (member.role !== 'grandparent') return roleLabel(member.role)
-  if (member.parentSlot === 'father') return 'Grandfather'
-  if (member.parentSlot === 'mother') return 'Grandmother'
+  const isStep = member.parentKind === 'step'
+  const isAdoptive = member.parentKind === 'adoptive'
+
+  if (member.parentSlot === 'father') {
+    if (isStep) return 'Step-grandfather'
+    if (isAdoptive) return 'Adoptive Grandfather'
+    return 'Grandfather'
+  }
+  if (member.parentSlot === 'mother') {
+    if (isStep) return 'Step-grandmother'
+    if (isAdoptive) return 'Adoptive Grandmother'
+    return 'Grandmother'
+  }
+  if (isStep) return 'Step-grandparent'
+  if (isAdoptive) return 'Adoptive Grandparent'
   return 'Grandparent'
+}
+
+export function greatGrandparentSlotLabel(member: TreeMember): string {
+  if (member.role !== 'great-grandparent') return roleLabel(member.role)
+  const isStep = member.parentKind === 'step'
+  const isAdoptive = member.parentKind === 'adoptive'
+
+  if (member.parentSlot === 'father') {
+    if (isStep) return 'Step Great-grandfather'
+    if (isAdoptive) return 'Adoptive Great-grandfather'
+    return 'Great-grandfather'
+  }
+  if (member.parentSlot === 'mother') {
+    if (isStep) return 'Step Great-grandmother'
+    if (isAdoptive) return 'Adoptive Great-grandmother'
+    return 'Great-grandmother'
+  }
+  if (isStep) return 'Step Great-grandparent'
+  if (isAdoptive) return 'Adoptive Great-grandparent'
+  return 'Great-grandparent'
 }
 
 export function treeMemberRoleLabel(member: TreeMember): string {
@@ -423,6 +470,7 @@ export function treeMemberRoleLabel(member: TreeMember): string {
   }
   if (member.role === 'parent') return parentSlotLabel(member)
   if (member.role === 'grandparent') return grandparentSlotLabel(member)
+  if (member.role === 'great-grandparent') return greatGrandparentSlotLabel(member)
   return roleLabel(member.role)
 }
 
@@ -441,6 +489,8 @@ export function roleLabel(role: InviteRole): string {
       return 'Parent'
     case 'grandparent':
       return 'Grandparent'
+    case 'great-grandparent':
+      return 'Great-grandparent'
     case 'child':
       return 'Child'
     case 'sibling':

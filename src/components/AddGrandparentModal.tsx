@@ -11,12 +11,27 @@ import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { normalizeDateField } from '../lib/lifeDates'
 import type { ParentSlot } from '../lib/siblingRelationship'
 
-const relationships = ['Grandfather', 'Grandmother', 'Unknown / Not Known'] as const
+import type { InviteRole } from '../lib/invitations'
+
+const relationships = [
+  'Grandfather',
+  'Grandmother',
+  'Great-grandfather',
+  'Great-grandmother',
+  'Unknown / Not Known',
+] as const
 const UNKNOWN_RELATIONSHIP = 'Unknown / Not Known'
 
+function relationshipToRole(relationship: string): InviteRole {
+  if (relationship === 'Great-grandfather' || relationship === 'Great-grandmother') {
+    return 'great-grandparent'
+  }
+  return 'grandparent'
+}
+
 function relationshipToParentSlot(relationship: string): ParentSlot {
-  if (relationship === 'Grandfather') return 'father'
-  if (relationship === 'Grandmother') return 'mother'
+  if (relationship === 'Grandfather' || relationship === 'Great-grandfather') return 'father'
+  if (relationship === 'Grandmother' || relationship === 'Great-grandmother') return 'mother'
   return 'unknown'
 }
 
@@ -52,11 +67,14 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
     if (!relationship) return
 
     const isUnknown = relationship === UNKNOWN_RELATIONSHIP
+    const isGreat = relationship === 'Great-grandfather' || relationship === 'Great-grandmother'
     const resolvedFirst = firstName.trim() || (isUnknown ? 'Unknown' : '')
-    const resolvedLast = lastName.trim() || (isUnknown ? 'Grandparent' : '')
+    const resolvedLast =
+      lastName.trim() || (isUnknown ? 'Grandparent' : isGreat ? 'Great-grandparent' : 'Grandparent')
     if (!resolvedFirst || !resolvedLast) return
 
     await submit({
+      role: relationshipToRole(relationship),
       firstName: resolvedFirst,
       middleName: middleName.trim(),
       lastName: resolvedLast,

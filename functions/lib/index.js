@@ -37,6 +37,7 @@ function roleLabel(role) {
         spouse: 'Spouse',
         parent: 'Parent',
         grandparent: 'Grandparent',
+        'great-grandparent': 'Great-grandparent',
         child: 'Child',
         sibling: 'Sibling',
         member: 'Family Member',
@@ -79,7 +80,7 @@ async function queueInviteEmail(options) {
 async function createInvitationRecord(uid, authToken, data) {
     const role = data.role;
     if (!role ||
-        !['spouse', 'parent', 'grandparent', 'child', 'sibling', 'member'].includes(role)) {
+        !['spouse', 'parent', 'grandparent', 'great-grandparent', 'child', 'sibling', 'member'].includes(role)) {
         throw new https_1.HttpsError('invalid-argument', 'Invalid invitation role.');
     }
     const firstName = String(data.firstName ?? '').trim();
@@ -94,7 +95,9 @@ async function createInvitationRecord(uid, authToken, data) {
     const bio = String(data.bio ?? '').trim();
     const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null;
     const dateOfDeath = String(data.dateOfDeath ?? '').trim() || null;
-    const parentSlot = role === 'parent' || role === 'grandparent' ? parseParentSlot(data.parentSlot) : null;
+    const parentSlot = role === 'parent' || role === 'grandparent' || role === 'great-grandparent'
+        ? parseParentSlot(data.parentSlot)
+        : null;
     const parentKind = role === 'parent' ? parseParentKind(data.parentKind) : null;
     const sharedFatherMemberId = role === 'sibling' ? String(data.sharedFatherMemberId ?? '').trim() || null : null;
     const sharedMotherMemberId = role === 'sibling' ? String(data.sharedMotherMemberId ?? '').trim() || null : null;
@@ -232,13 +235,15 @@ const FAMILY_ROLE_RANK = {
     sibling: 2,
     parent: 3,
     grandparent: 4,
-    member: 5,
+    'great-grandparent': 5,
+    member: 6,
 };
 function asInviteRole(value) {
     const role = String(value ?? 'member');
     if (role === 'spouse' ||
         role === 'parent' ||
         role === 'grandparent' ||
+        role === 'great-grandparent' ||
         role === 'child' ||
         role === 'sibling' ||
         role === 'member') {

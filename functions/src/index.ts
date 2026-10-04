@@ -10,7 +10,7 @@ setGlobalOptions({ region: 'us-central1' })
 const db = getFirestore()
 const APP_ORIGIN = process.env.APP_ORIGIN ?? 'https://dengitree.web.app'
 
-type InviteRole = 'spouse' | 'parent' | 'grandparent' | 'child' | 'sibling' | 'member'
+type InviteRole = 'spouse' | 'parent' | 'grandparent' | 'great-grandparent' | 'child' | 'sibling' | 'member'
 
 type MemberPrivacy =
   | 'family_members'
@@ -58,6 +58,7 @@ function roleLabel(role: InviteRole): string {
     spouse: 'Spouse',
     parent: 'Parent',
     grandparent: 'Grandparent',
+    'great-grandparent': 'Great-grandparent',
     child: 'Child',
     sibling: 'Sibling',
     member: 'Family Member',
@@ -137,7 +138,7 @@ async function createInvitationRecord(
   const role = data.role
   if (
     !role ||
-    !['spouse', 'parent', 'grandparent', 'child', 'sibling', 'member'].includes(role)
+    !['spouse', 'parent', 'grandparent', 'great-grandparent', 'child', 'sibling', 'member'].includes(role)
   ) {
     throw new HttpsError('invalid-argument', 'Invalid invitation role.')
   }
@@ -155,7 +156,9 @@ async function createInvitationRecord(
   const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null
   const dateOfDeath = String(data.dateOfDeath ?? '').trim() || null
   const parentSlot =
-    role === 'parent' || role === 'grandparent' ? parseParentSlot(data.parentSlot) : null
+    role === 'parent' || role === 'grandparent' || role === 'great-grandparent'
+      ? parseParentSlot(data.parentSlot)
+      : null
   const parentKind = role === 'parent' ? parseParentKind(data.parentKind) : null
   const sharedFatherMemberId =
     role === 'sibling' ? String(data.sharedFatherMemberId ?? '').trim() || null : null
@@ -320,7 +323,8 @@ const FAMILY_ROLE_RANK: Record<InviteRole, number> = {
   sibling: 2,
   parent: 3,
   grandparent: 4,
-  member: 5,
+  'great-grandparent': 5,
+  member: 6,
 }
 
 function asInviteRole(value: unknown): InviteRole {
@@ -329,6 +333,7 @@ function asInviteRole(value: unknown): InviteRole {
     role === 'spouse' ||
     role === 'parent' ||
     role === 'grandparent' ||
+    role === 'great-grandparent' ||
     role === 'child' ||
     role === 'sibling' ||
     role === 'member'

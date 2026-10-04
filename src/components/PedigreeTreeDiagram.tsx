@@ -89,12 +89,19 @@ function PedigreeMemberNode({
 }
 
 /** Horizontal line between two neighbours. `childrenDrop` hangs a stem + children off its middle. */
-function Join({ childrenDrop }: { childrenDrop?: ReactNode }) {
+function Join({
+  childrenDrop,
+  hasStem = false,
+}: {
+  childrenDrop?: ReactNode
+  hasStem?: boolean
+}) {
   return (
     <div
       className={`ped-join${childrenDrop ? ' ped-join-drop' : ''}`}
       aria-hidden={childrenDrop ? undefined : true}
     >
+      {hasStem ? <div className="ped-join-stem" aria-hidden="true" /> : null}
       {childrenDrop}
     </div>
   )
@@ -131,15 +138,17 @@ function AddCircle({
 function PartnerRow({
   members,
   onSelectMember,
+  hasStems = false,
 }: {
   members: TreeMember[]
   onSelectMember?: (member: TreeMember) => void
+  hasStems?: boolean
 }) {
   return (
     <div className="ped-row">
       {members.map((member, index) => (
         <Fragment key={member.id}>
-          {index > 0 ? <Join /> : null}
+          {index > 0 ? <Join hasStem={hasStems} /> : null}
           <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
         </Fragment>
       ))}
@@ -194,6 +203,7 @@ export default function PedigreeTreeDiagram({
   selfPositionLabel?: string | null
   onSelectMember?: (member: TreeMember) => void
 }) {
+  const greatGrandparents = orderHousehold(members.filter((m) => m.role === 'great-grandparent'))
   const grandparents = orderHousehold(members.filter((m) => m.role === 'grandparent'))
   const parents = orderHousehold(members.filter((m) => m.role === 'parent'))
   const siblings = members.filter((m) => m.role === 'sibling')
@@ -216,10 +226,28 @@ export default function PedigreeTreeDiagram({
   return (
     <div className="pedigree-tree" role="group" aria-label="Family tree diagram">
       <div className="ped-col">
+        {/* great-grandparents */}
+        {greatGrandparents.length > 0 ? (
+          <>
+            <div className="ped-slot">
+              <PartnerRow
+                members={greatGrandparents}
+                onSelectMember={onSelectMember}
+                hasStems={greatGrandparents.length > 1}
+              />
+            </div>
+            {greatGrandparents.length === 1 ? <Stem /> : null}
+          </>
+        ) : null}
+
         {/* grandparents */}
         <div className="ped-slot">
           {grandparents.length > 0 ? (
-            <PartnerRow members={grandparents} onSelectMember={onSelectMember} />
+            <PartnerRow
+              members={grandparents}
+              onSelectMember={onSelectMember}
+              hasStems={grandparents.length > 1}
+            />
           ) : (
             <AddCircle label="Add Grandparent" onClick={() => openModal('grandparent')} />
           )}
@@ -232,16 +260,20 @@ export default function PedigreeTreeDiagram({
           ) : null}
         </div>
 
-        {grandparents.length > 0 ? (
-          <Stem mode={grandparents.length > 1 ? 'from-join' : undefined} />
-        ) : parents.length > 0 ? (
-          <Stem mode={parents.length > 1 ? 'to-join' : undefined} />
+        {grandparents.length === 1 ? (
+          <Stem />
+        ) : parents.length === 0 && grandparents.length > 0 ? (
+          <Stem mode="to-join" />
         ) : null}
 
         {/* parents */}
         <div className="ped-slot">
           {parents.length > 0 ? (
-            <PartnerRow members={parents} onSelectMember={onSelectMember} />
+            <PartnerRow
+              members={parents}
+              onSelectMember={onSelectMember}
+              hasStems={parents.length > 1}
+            />
           ) : (
             <AddCircle label="Add Parent" onClick={() => openModal('parent')} />
           )}
@@ -254,9 +286,7 @@ export default function PedigreeTreeDiagram({
           ) : null}
         </div>
 
-        {parents.length > 0 ? (
-          <Stem mode={parents.length > 1 ? 'from-join' : undefined} />
-        ) : null}
+        {parents.length === 1 ? <Stem /> : null}
 
         {/* siblings + you + spouse + children */}
         <div className="ped-anchor">

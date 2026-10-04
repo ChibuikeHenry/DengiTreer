@@ -22,6 +22,7 @@ export type InviteRole =
   | 'spouse'
   | 'parent'
   | 'grandparent'
+  | 'great-grandparent'
   | 'child'
   | 'sibling'
   | 'member'
@@ -381,6 +382,8 @@ export function inviteRoleLabel(role: InviteRole): string {
       return 'Parent'
     case 'grandparent':
       return 'Grandparent'
+    case 'great-grandparent':
+      return 'Great-grandparent'
     case 'child':
       return 'Child'
     case 'sibling':

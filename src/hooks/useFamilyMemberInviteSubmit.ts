@@ -10,11 +10,12 @@ import {
 import { uploadFamilyMemberPhoto } from '../lib/profilePhoto'
 
 export type FamilyMemberSubmitFields = Omit<FamilyMemberInviteInput, 'role'> & {
+  role?: InviteRole
   photoFile?: File | null
 }
 
 export function useFamilyMemberInviteSubmit(
-  role: InviteRole,
+  defaultRole: InviteRole,
   onClose: () => void,
   onAdded?: () => void,
 ) {
@@ -32,16 +33,17 @@ export function useFamilyMemberInviteSubmit(
       setError('')
       setSubmitting(true)
       try {
-        const { photoFile, ...inviteFields } = fields
+        const { photoFile, role: overrideRole, ...inviteFields } = fields
+        const targetRole = overrideRole ?? defaultRole
         let photoURL: string | undefined
 
         if (photoFile) {
-          photoURL = await uploadFamilyMemberPhoto(user.uid, role, photoFile)
+          photoURL = await uploadFamilyMemberPhoto(user.uid, targetRole, photoFile)
         }
 
         const inviteeEmail = inviteFields.inviteeEmail?.trim()
         await sendFamilyMemberInvite({
-          role,
+          role: targetRole,
           ...inviteFields,
           inviteeEmail: inviteeEmail || undefined,
           photoURL,
@@ -59,7 +61,7 @@ export function useFamilyMemberInviteSubmit(
         setSubmitting(false)
       }
     },
-    [onAdded, onClose, role, user],
+    [defaultRole, onAdded, onClose, user],
   )
 
   const onSubmit = useCallback(

@@ -113,6 +113,18 @@
   background: var(--ped-line);
 }
 
+.ped-join-stem {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: calc(var(--ped-node-h) - var(--ped-av) / 2 + var(--ped-rowgap));
+  background: var(--ped-line);
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* ---------- generation stems (top level only) ---------- */
 
 .ped-col > .ped-stem {
