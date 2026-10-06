@@ -350,6 +350,38 @@
   height: 100%;
 }
 
+.profile-avatar-male {
+  background: #ebf3fa;
+  border-color: #5b8fd4;
+  color: #5b8fd4;
+}
+
+.profile-avatar-male .profile-avatar-initials,
+.profile-avatar-male .profile-avatar-svg {
+  color: #3b74b8;
+}
+
+.profile-avatar-female {
+  background: #fdf2f7;
+  border-color: #e879a9;
+  color: #e879a9;
+}
+
+.profile-avatar-female .profile-avatar-initials,
+.profile-avatar-female .profile-avatar-svg {
+  color: #d15189;
+}
+
+.profile-avatar-you-tone {
+  background: #254019 !important;
+  border-color: #254019 !important;
+}
+
+.profile-avatar-you-tone .profile-avatar-initials,
+.profile-avatar-you-tone .profile-avatar-svg {
+  color: #fff;
+}
+
 .dash-user-meta {
   display: none;
   flex-direction: column;
@@ -982,6 +1014,10 @@
   box-shadow: 0 24px 60px rgba(26, 31, 22, 0.18);
 }
 
+.modal-panel-lg {
+  width: min(100%, 820px);
+}
+
 .modal-head {
   display: flex;
   justify-content: space-between;
@@ -1137,6 +1173,47 @@
 .form-row-sibling-details {
   grid-template-columns: 1fr;
   align-items: start;
+}
+
+.sibling-relationship-help {
+  margin-top: 0.85rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 12px;
+  background: #eef5e8;
+  border: 1px solid #d4e3c8;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #3d4636;
+}
+
+.sibling-relationship-help .sibling-help-title {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #2b501e;
+  margin-bottom: 0.6rem;
+}
+
+.sibling-help-item {
+  margin-bottom: 0.55rem;
+}
+
+.sibling-help-item:last-child {
+  margin-bottom: 0;
+}
+
+.sibling-help-item strong {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1a2315;
+  margin-bottom: 0.1rem;
+}
+
+.sibling-help-item p {
+  margin: 0;
+  font-size: 0.79rem;
+  color: #4a5643;
 }
 
 .photo-upload-compact .photo-box {
@@ -1811,6 +1888,7 @@
 
 .ft-canvas-starter {
   display: block;
+  position: relative;
   min-height: min(72vh, 560px);
   padding: 1.75rem 1.25rem 2rem;
   overflow-x: auto;
@@ -1821,14 +1899,63 @@
   border-radius: 16px;
 }
 
+.ft-gender-legend {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 0.4rem 1rem;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1.5px solid #a8ba9a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2e3e26;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ft-gender-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ft-gender-dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+}
+
+.ft-gender-dot-male {
+  background: #5b8fd4;
+}
+
+.ft-gender-dot-female {
+  background: #e879a9;
+}
+
 .tree-person-avatar-pedigree {
   border-color: #b8c9a8;
   background: #e2eadc;
 }
 
-.tree-person-avatar-pedigree .profile-avatar-initials {
+.tree-person-avatar-pedigree:not(.profile-avatar-male):not(.profile-avatar-female)
+  .profile-avatar-initials {
   color: #5a7350;
   font-weight: 700;
+}
+
+.tree-person-avatar-pedigree.profile-avatar-male {
+  background: #ebf3fa;
+  border-color: #5b8fd4;
+}
+
+.tree-person-avatar-pedigree.profile-avatar-female {
+  background: #fdf2f7;
+  border-color: #e879a9;
 }
 
 .pedigree-you-badge {

@@ -39,6 +39,7 @@ export type TreeMember = {
   dateOfBirth: string | null
   dateOfDeath: string | null
   inviteeEmail: string | null
+  gender: string | null
 }
 
 const treeRoles = new Set<InviteRole>([
@@ -90,6 +91,7 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     dateOfBirth: record.dateOfBirth,
     dateOfDeath: record.dateOfDeath,
     inviteeEmail: record.inviteeEmail,
+    gender: record.gender,
   }
 }
 
@@ -117,6 +119,7 @@ async function enrichClaimedMember(member: TreeMember): Promise<TreeMember> {
         ? parseMemberPrivacy(profile.profilePrivacy)
         : member.privacy,
       dateOfBirth: profile.dateOfBirth?.trim() || member.dateOfBirth,
+      gender: profile.gender ?? member.gender,
     }
   } catch {
     return member
@@ -478,6 +481,26 @@ export function memberRelationshipLabel(member: TreeMember): string | null {
   if (member.role === 'sibling' && member.siblingRelationship) {
     return siblingRelationshipLabel(member.siblingRelationship)
   }
+  return null
+}
+
+export function inferTreeMemberGender(
+  member: Pick<TreeMember, 'role' | 'parentSlot' | 'siblingRelationship' | 'gender'>,
+): 'male' | 'female' | null {
+  if (member.gender) {
+    const g = member.gender.trim().toLowerCase()
+    if (g === 'male' || g === 'female') return g as 'male' | 'female'
+  }
+  if (member.parentSlot === 'father') return 'male'
+  if (member.parentSlot === 'mother') return 'female'
+  const rel = member.siblingRelationship
+  if (rel === 'brother' || rel === 'half-brother' || rel === 'step-brother') return 'male'
+  if (rel === 'sister' || rel === 'half-sister' || rel === 'step-sister') return 'female'
+
+  const label = treeMemberRoleLabel(member as TreeMember).toLowerCase()
+  if (/\b(father|grandfather|brother|husband|son)\b/i.test(label)) return 'male'
+  if (/\b(mother|grandmother|sister|wife|daughter)\b/i.test(label)) return 'female'
+
   return null
 }
 

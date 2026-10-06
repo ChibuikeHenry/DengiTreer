@@ -9,8 +9,8 @@
 .pedigree-tree {
   --ped-av: 64px;
   --ped-w: 160px;        /* fixed width of every node */
-  --ped-gap: 32px;       /* visible length of a horizontal line between avatars' nodes */
-  --ped-rowgap: 40px;    /* vertical space between generations */
+  --ped-gap: 56px;       /* visible length of a horizontal line between avatars' nodes */
+  --ped-rowgap: 52px;    /* vertical space between generations */
   --ped-node-h: 130px;
   --ped-line: #3f5f2a;
   --ped-link: calc(var(--ped-gap) + var(--ped-w) - var(--ped-av));
@@ -69,7 +69,7 @@
   place-items: center;
   width: var(--ped-av);
   height: var(--ped-av);
-  border: 1.5px dashed var(--ped-line);
+  border: 2px dashed var(--ped-line);
   border-radius: 50%;
   background: rgb(255 255 255 / 0.7);
   color: var(--ped-line);
@@ -108,9 +108,15 @@
   position: relative;
   flex: none;
   width: var(--ped-link);
-  height: 2px;
-  margin: calc(var(--ped-av) / 2 - 1px) calc((var(--ped-av) - var(--ped-w)) / 2) 0;
+  height: 3px;
+  margin: calc(var(--ped-av) / 2 - 1.5px) calc((var(--ped-av) - var(--ped-w)) / 2) 0;
   background: var(--ped-line);
+}
+
+.ped-join.is-step-join {
+  background: none;
+  border-top: 3px dashed var(--ped-line);
+  height: 0;
 }
 
 .ped-join-stem {
@@ -118,7 +124,7 @@
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 2px;
+  width: 3px;
   height: calc(var(--ped-node-h) - var(--ped-av) / 2 + var(--ped-rowgap));
   background: var(--ped-line);
   pointer-events: none;
@@ -128,7 +134,7 @@
 /* ---------- generation stems (top level only) ---------- */
 
 .ped-col > .ped-stem {
-  width: 2px;
+  width: 3px;
   height: var(--ped-rowgap);
   margin: 0 auto;
   background: var(--ped-line);
@@ -146,7 +152,7 @@
   height: calc(var(--ped-rowgap) + var(--ped-av) / 2);
   margin-bottom: calc(var(--ped-av) / -2);
   background: none;
-  border-left: 2px dashed var(--ped-line);
+  border-left: 3px dashed var(--ped-line);
   width: 0;
 }
 
@@ -170,9 +176,9 @@
 .ped-add.ped-add-sibling::before {
   content: '';
   position: absolute;
-  top: calc(var(--ped-av) / 2 - 1px);
+  top: calc(var(--ped-av) / 2 - 1.5px);
   width: var(--ped-link);
-  border-top: 2px dashed var(--ped-line);
+  border-top: 3px dashed var(--ped-line);
 }
 
 .ped-add.ped-add-side::before {
@@ -209,7 +215,7 @@
 
 .ped-join-drop > .ped-kids {
   position: absolute;
-  top: 2px;
+  top: 3px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -230,7 +236,7 @@
 }
 
 .ped-kids .ped-stem {
-  width: 2px;
+  width: 3px;
   height: var(--ped-rowgap);
   background: var(--ped-line);
 }
@@ -257,7 +263,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 3px;
   background: var(--ped-line);
 }
 
@@ -266,8 +272,8 @@
   content: '';
   position: absolute;
   top: 0;
-  left: calc(50% - 1px);
-  width: 2px;
+  left: calc(50% - 1.5px);
+  width: 3px;
   height: 24px;
   background: var(--ped-line);
 }

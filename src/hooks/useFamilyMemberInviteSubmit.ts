@@ -41,11 +41,12 @@ export function useFamilyMemberInviteSubmit(
           photoURL = await uploadFamilyMemberPhoto(user.uid, targetRole, photoFile)
         }
 
-        const inviteeEmail = inviteFields.inviteeEmail?.trim()
+        const rawEmail = inviteFields.inviteeEmail?.trim()
+        const inviteeEmail = rawEmail && rawEmail.includes('@') ? rawEmail : undefined
         await sendFamilyMemberInvite({
           role: targetRole,
           ...inviteFields,
-          inviteeEmail: inviteeEmail || undefined,
+          inviteeEmail,
           photoURL,
         })
         if (onAdded) onAdded()

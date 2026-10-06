@@ -11,6 +11,7 @@ type ModalFrameProps = {
   onSubmit: (event: FormEvent) => void
   formError?: string
   submitting?: boolean
+  panelClassName?: string
   children: ReactNode
 }
 
@@ -23,6 +24,7 @@ export default function ModalFrame({
   onSubmit,
   formError,
   submitting = false,
+  panelClassName = '',
   children,
 }: ModalFrameProps) {
   const titleId = useId()
@@ -50,7 +52,7 @@ export default function ModalFrame({
   return (
     <div className="modal-backdrop" onClick={onClose} role="presentation">
       <div
-        className="modal-panel"
+        className={`modal-panel${panelClassName ? ` ${panelClassName}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

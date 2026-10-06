@@ -128,6 +128,7 @@ type CreateInviteInput = {
   siblingRelationship?: SiblingRelationship
   dateOfBirth?: string
   dateOfDeath?: string
+  gender?: string
 }
 
 async function createInvitationRecord(
@@ -148,9 +149,8 @@ async function createInvitationRecord(
   const middleName = String(data.middleName ?? '').trim()
   const inviteeName = [firstName, middleName, lastName].filter(Boolean).join(' ')
   const memberStatus = data.memberStatus === 'deceased' ? 'deceased' : 'living'
-  const inviteeEmail = String(data.inviteeEmail ?? '')
-    .trim()
-    .toLowerCase()
+  const rawEmail = String(data.inviteeEmail ?? '').trim().toLowerCase()
+  const inviteeEmail = rawEmail && rawEmail.includes('@') ? rawEmail : null
   const privacy = parseMemberPrivacy(data.privacy)
   const bio = String(data.bio ?? '').trim()
   const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null
@@ -202,6 +202,7 @@ async function createInvitationRecord(
     siblingRelationship,
     dateOfBirth,
     dateOfDeath,
+    gender: String(data.gender ?? '').trim() || null,
     createdAt: FieldValue.serverTimestamp(),
     joinedAt: null,
     joinedUid: null,
@@ -234,6 +235,7 @@ async function createInvitationRecord(
         siblingRelationship,
         dateOfBirth,
         dateOfDeath,
+        gender: String(data.gender ?? '').trim() || null,
         claimedByUid: null,
         claimedAt: null,
         createdAt: FieldValue.serverTimestamp(),
@@ -581,12 +583,17 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       memberStatus,
       updatedAt: FieldValue.serverTimestamp(),
     }
-    let newEmail: string | null = null
+    const previousEmail = String(doc.inviteeEmail ?? '').trim().toLowerCase() || null
+    let newEmail: string | null = previousEmail
+    let emailJustAddedOrChanged = false
+
     if (data.inviteeEmail !== undefined) {
-      newEmail = String(data.inviteeEmail ?? '').trim().toLowerCase() || null
+      const trimmed = String(data.inviteeEmail ?? '').trim().toLowerCase()
+      newEmail = trimmed && trimmed.includes('@') ? trimmed : null
       invitationUpdate.inviteeEmail = newEmail
-    } else if (doc.inviteeEmail) {
-      newEmail = String(doc.inviteeEmail).trim().toLowerCase() || null
+      if (newEmail && newEmail !== previousEmail) {
+        emailJustAddedOrChanged = true
+      }
     }
 
     if (photoURL !== undefined) {
@@ -652,7 +659,7 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       tx.update(familyMemberRef, familyUpdate)
     }
 
-    if (newEmail && memberStatus === 'living') {
+    if (emailJustAddedOrChanged && newEmail && memberStatus === 'living') {
       const joinUrl = `${APP_ORIGIN}/join/${token}`
       emailToSend = {
         to: newEmail,

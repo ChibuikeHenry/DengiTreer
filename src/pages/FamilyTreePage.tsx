@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
 import {
   computeTreeStats,
+  inferTreeMemberGender,
   memberRelationshipLabel,
   positionLabel,
   roleLabel,
@@ -52,6 +53,16 @@ function StarterDiagram({
 }) {
   return (
     <div className="ft-canvas ft-canvas-starter">
+      <div className="ft-gender-legend" aria-label="Gender legend">
+        <span className="ft-gender-legend-item">
+          <span className="ft-gender-dot ft-gender-dot-male" aria-hidden="true" />
+          Male
+        </span>
+        <span className="ft-gender-legend-item">
+          <span className="ft-gender-dot ft-gender-dot-female" aria-hidden="true" />
+          Female
+        </span>
+      </div>
       <PedigreeTreeDiagram
         members={members}
         openModal={openModal}
@@ -258,6 +269,7 @@ export default function FamilyTreePage() {
                           photoURL={member.photoURL}
                           name={member.displayName}
                           size="sm"
+                          genderTone={inferTreeMemberGender(member) ?? 'neutral'}
                         />
                         <span>
                           <strong>{member.displayName}</strong>
@@ -277,6 +289,7 @@ export default function FamilyTreePage() {
                           photoURL={member.photoURL}
                           name={member.displayName}
                           size="sm"
+                          genderTone={inferTreeMemberGender(member) ?? 'neutral'}
                         />
                         <span>
                           <strong>{member.displayName}</strong>

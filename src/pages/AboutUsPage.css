@@ -85,16 +85,25 @@
   border-radius: 20px;
   overflow: hidden;
   background: #eef3ea;
-  max-width: 675px;
+  max-width: 420px;
   width: 100%;
   margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 260px;
+  padding: 1.5rem 1rem 1.75rem;
 }
 
-.about-hero-visual img {
+.about-org-chart {
+  width: 100%;
+  max-width: 360px;
+}
+
+.about-org-svg {
   display: block;
   width: 100%;
   height: auto;
-  object-fit: contain;
 }
 
 .about-team-section {
@@ -219,14 +228,21 @@
 }
 
 .about-team-card h3 {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.35rem;
   font-size: 1.05rem;
   font-weight: 800;
   color: #1a1f16;
   letter-spacing: -0.02em;
 }
 
-.about-team-card > p {
+.about-team-job {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #3d4636;
+}
+
+.about-team-bio {
   margin: 0 0 1.25rem;
   flex: 1;
   font-size: 0.82rem;
@@ -280,12 +296,13 @@
 
 @media (min-width: 900px) {
   .about-hero-inner {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 675px);
-    gap: clamp(1.5rem, 3vw, 2.5rem);
+    grid-template-columns: minmax(0, 1.05fr) minmax(280px, 420px);
+    gap: clamp(2rem, 4vw, 3.5rem);
   }
 
   .about-hero-visual {
     margin: 0 0 0 auto;
+    align-self: center;
   }
 
   .about-pillars {

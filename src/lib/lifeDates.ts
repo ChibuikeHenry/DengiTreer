@@ -24,7 +24,18 @@ export function formatLifeYearsLine(
   return null
 }
 
+export function getTodayString(): string {
+  const today = new Date()
+  const year = today.getFullYear()
+  const month = String(today.getMonth() + 1).padStart(2, '0')
+  const day = String(today.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function normalizeDateField(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
-  return trimmed || undefined
+  if (!trimmed) return undefined
+  const today = getTodayString()
+  if (trimmed > today) return today
+  return trimmed
 }

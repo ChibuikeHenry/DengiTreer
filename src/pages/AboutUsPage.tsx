@@ -1,25 +1,26 @@
+import AboutOrgChart from '../components/AboutOrgChart'
 import MarketingHeader from '../components/MarketingHeader'
 import './FeaturesPage.css'
 import './AboutUsPage.css'
 
 const pillars = [
   {
-    title: 'Connect',
+    title: 'Connect.',
     description: 'Bring your family together across generations.',
     icon: 'connect' as const,
   },
   {
-    title: 'Discover',
+    title: 'Discover.',
     description: 'Find new relatives and reconnect with your roots.',
     icon: 'discover' as const,
   },
   {
-    title: 'Preserve',
+    title: 'Preserve.',
     description: "Keep your family's stories, photos and history safe.",
     icon: 'preserve' as const,
   },
   {
-    title: 'Build',
+    title: 'Build.',
     description: 'Create a lasting legacy for future generations.',
     icon: 'build' as const,
   },
@@ -29,25 +30,29 @@ const team = [
   {
     name: 'Abubakar Isimbabi',
     role: 'CEO',
-    bio: 'Abubakar is a visionary leader with a passion for building products that bring families closer together. With a background in technology and business strategy, he leads DengiTree with a clear mission: to help every family preserve their story for generations to come.',
+    jobTitle: 'Chief Executive Officer',
+    bio: 'Abubakar is the visionary behind DengiTree, with a passion for technology and family legacy. He leads the team with a clear mission to help every family preserve their story for generations to come.',
     theme: 'green' as const,
   },
   {
     name: 'Chinyere Achoromadu',
     role: 'Product Designer',
-    bio: 'Chinyere is a creative product designer who believes great design should feel human. She crafts intuitive experiences that make family history accessible and meaningful for everyone, from grandparents to grandchildren.',
+    jobTitle: 'Product Designer',
+    bio: 'Chinyere focuses on thoughtful, user-centered design to make DengiTree intuitive and meaningful — from grandparents sharing memories to grandchildren discovering their roots.',
     theme: 'purple' as const,
   },
   {
     name: 'Henry Nwachinemere',
     role: 'Lead Developer',
-    bio: 'Henry is a full-stack engineer who turns ambitious ideas into reliable software. He architects DengiTree\'s platform with security and scalability in mind, so families can trust their memories are safe.',
+    jobTitle: 'Lead Developer',
+    bio: 'Henry leads development and ensures DengiTree stays reliable, secure, and scalable — so families can trust their memories are safe as the platform grows.',
     theme: 'blue' as const,
   },
   {
     name: 'Halima Mamman Biu',
     role: 'Developer',
-    bio: 'Halima is a developer who loves solving complex problems with elegant code. She builds the features that help families connect, share stories, and grow their trees together every day.',
+    jobTitle: 'Developer',
+    bio: 'Halima supports the Lead Developer with testing, troubleshooting, and day-to-day development — helping ship features that keep families connected.',
     theme: 'tan' as const,
   },
 ] as const
@@ -76,12 +81,17 @@ function PillarIcon({ type }: { type: (typeof pillars)[number]['icon'] }) {
       return (
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path
-            d="M12 22v-7M12 15c-3.5 0-6-2.5-6-6V4h12v5c0 3.5-2.5 6-6 6Z"
+            d="M12 22V12M12 12c-2.8 0-5-2-5-4.5V5h10v2.5c0 2.5-2.2 4.5-5 4.5Z"
             stroke="currentColor"
             strokeWidth="1.75"
             strokeLinejoin="round"
           />
-          <path d="M8 4h8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+          <path
+            d="M8 8c1.2-1.5 2.6-2.5 4-2.5s2.8 1 4 2.5M7 5h10"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+          />
         </svg>
       )
     case 'preserve':
@@ -146,8 +156,10 @@ export default function AboutUsPage() {
               <p className="feat-pill">About DengiTree</p>
               <h1>Preserving Families. Building Legacies.</h1>
               <p className="about-lede">
-                DengiTree is a modern family network designed to help you connect, share,
-                and preserve your family&apos;s story across generations.
+                DengiTree is a modern family network platform designed to help you connect,
+                share and preserve your family&apos;s story. Whether you are reuniting with
+                loved ones, discovering new connections, or capturing cherished memories,
+                DengiTree makes it simple, safe and meaningful.
               </p>
 
               <ul className="about-pillars">
@@ -166,12 +178,7 @@ export default function AboutUsPage() {
             </div>
 
             <div className="about-hero-visual">
-              <img
-                src="/images/about-hero-team-tree.png"
-                alt="The team behind DengiTree illustrated as a family tree with team member profiles"
-                width={675}
-                height={412}
-              />
+              <AboutOrgChart />
             </div>
           </div>
         </section>
@@ -201,7 +208,8 @@ export default function AboutUsPage() {
                       {member.role}
                     </span>
                     <h3>{member.name}</h3>
-                    <p>{member.bio}</p>
+                    <p className="about-team-job">{member.jobTitle}</p>
+                    <p className="about-team-bio">{member.bio}</p>
                     <SocialIcons theme={member.theme} />
                   </article>
                 </li>

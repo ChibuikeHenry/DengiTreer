@@ -1,4 +1,4 @@
-import ProfileAvatar from './ProfileAvatar'
+import ProfileAvatar, { type AvatarGenderTone } from './ProfileAvatar'
 import { formatBioForDisplay, hasBio } from '../lib/bio'
 import { memberPrivacyShortLabel } from '../lib/memberPrivacy'
 import type { MemberPrivacy } from '../lib/memberPrivacy'
@@ -15,6 +15,7 @@ type TreePersonDetailsProps = {
   variant?: 'default' | 'pedigree'
   youBadge?: boolean
   yearsLabel?: string | null
+  avatarGenderTone?: AvatarGenderTone
 }
 
 export default function TreePersonDetails({
@@ -29,6 +30,7 @@ export default function TreePersonDetails({
   variant = 'default',
   youBadge = false,
   yearsLabel = null,
+  avatarGenderTone = 'neutral',
 }: TreePersonDetailsProps) {
   const bioText = formatBioForDisplay(bio)
   const pedigree = variant === 'pedigree'
@@ -46,6 +48,7 @@ export default function TreePersonDetails({
           photoURL={photoURL}
           name={displayName}
           size="tree"
+          genderTone={avatarGenderTone}
           className={`tree-person-avatar ${pedigree ? 'tree-person-avatar-pedigree' : ''} ${avatarClassName ?? ''}`.trim()}
         />
       )}

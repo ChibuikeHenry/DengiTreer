@@ -5,7 +5,7 @@ import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { DashIcons } from './DashboardLayout'
-import { normalizeDateField } from '../lib/lifeDates'
+import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import type { ParentKind, ParentSlot } from '../lib/siblingRelationship'
 
 const parentTypes = [
@@ -90,7 +90,6 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
 
   function handleClose() {
     setParentTypeOpen(false)
-    setRelationshipOpen(false)
     onClose()
   }
 
@@ -112,6 +111,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
       lastName: resolvedLast,
       inviteeEmail: email.trim() || undefined,
       memberStatus: status,
+      gender: gender || undefined,
       photoFile: photo.file,
       privacy,
       bio: bio.trim() || undefined,
@@ -125,7 +125,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
   return (
     <div className="modal-backdrop" onClick={handleClose} role="presentation">
       <div
-        className="modal-panel"
+        className="modal-panel modal-panel-lg"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -137,8 +137,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
           <div>
             <h2 id={titleId}>Add a PARENT</h2>
             <p>
-              Add a new relative to your family tree. You can edit their details until they
-              accept your invite and claim their profile.
+              Add a new relative to your family tree. You can always edit details later.
             </p>
           </div>
           <button
@@ -160,7 +159,6 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
                 className={`select-trigger${parentType ? '' : ' is-placeholder'}`}
                 onClick={() => {
                   setParentTypeOpen((v) => !v)
-                  setRelationshipOpen(false)
                 }}
                 aria-expanded={parentTypeOpen}
               >
@@ -229,7 +227,12 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
                 <input
                   type="date"
                   value={dob}
-                  onChange={(e) => setDob(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    const today = getTodayString()
+                    setDob(val && val > today ? today : val)
+                  }}
+                  max={getTodayString()}
                 />
               </label>
               {status === 'deceased' ? (
@@ -238,7 +241,13 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
                   <input
                     type="date"
                     value={dateOfDeath}
-                    onChange={(e) => setDateOfDeath(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const today = getTodayString()
+                      setDateOfDeath(val && val > today ? today : val)
+                    }}
+                    min={dob || undefined}
+                    max={getTodayString()}
                   />
                 </label>
               ) : null}
@@ -249,11 +258,10 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
                   onChange={(e) => setGender(e.target.value)}
                   required={!isUnknownParent}
                 >
-                  <option value="">Select</option>
+                  <option value="">Select gender</option>
                   <option value="female">Female</option>
                   <option value="male">Male</option>
                   <option value="other">Other</option>
-                  <option value="prefer-not">Prefer not to say</option>
                 </select>
               </label>
               <fieldset className="status-radios">
@@ -306,10 +314,8 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
                         onClick={() => {
                           setRelationship(option)
                           setRelationshipOpen(false)
-                          if (option === UNKNOWN_RELATIONSHIP) {
-                            if (!firstName.trim()) setFirstName('Unknown')
-                            if (!lastName.trim()) setLastName('Parent')
-                          }
+                          if (option === 'Father' && !gender) setGender('male')
+                          if (option === 'Mother' && !gender) setGender('female')
                         }}
                       >
                         <span>

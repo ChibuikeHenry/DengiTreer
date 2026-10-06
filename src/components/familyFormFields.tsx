@@ -4,7 +4,32 @@ import {
   type ParentPickMode,
   type ParentPickOption,
 } from '../hooks/useTreeParentPickOptions'
+import type { SiblingRelationship } from '../lib/siblingRelationship'
+import { getTodayString } from '../lib/lifeDates'
 import { DashIcons } from './DashboardLayout'
+
+export const BIRTH_ORDER_OPTIONS = [
+  { value: '1', label: 'First born' },
+  { value: '2', label: 'Second born' },
+  { value: '3', label: 'Third born' },
+  { value: '4', label: 'Fourth born' },
+  { value: '5', label: 'Fifth born' },
+  { value: '6', label: 'Sixth born' },
+  { value: '7', label: 'Seventh born' },
+  { value: '8', label: 'Eighth born' },
+  { value: '9', label: 'Ninth born' },
+  { value: '10', label: 'Tenth born' },
+] as const
+
+const SIBLING_RELATIONSHIP_OPTIONS: { value: SiblingRelationship; label: string }[] = [
+  { value: 'brother', label: 'Brother' },
+  { value: 'sister', label: 'Sister' },
+  { value: 'half-brother', label: 'Half-brother' },
+  { value: 'half-sister', label: 'Half-sister' },
+  { value: 'step-brother', label: 'Step-brother' },
+  { value: 'step-sister', label: 'Step-sister' },
+  { value: 'sibling', label: 'Other' },
+]
 
 type PersonalInfoProps = {
   firstName: string
@@ -41,6 +66,8 @@ export function PersonalInfoFields({
   onGender,
   onStatus,
 }: PersonalInfoProps) {
+  const today = getTodayString()
+
   return (
     <>
       <div className="form-row form-row-3">
@@ -74,7 +101,15 @@ export function PersonalInfoFields({
       <div className="form-row form-row-status">
         <label className="field">
           <span>Date of Birth</span>
-          <input type="date" value={dob} onChange={(e) => onDob(e.target.value)} />
+          <input
+            type="date"
+            value={dob}
+            onChange={(e) => {
+              const val = e.target.value
+              onDob(val && val > today ? today : val)
+            }}
+            max={today}
+          />
         </label>
         {status === 'deceased' && onDateOfDeath ? (
           <label className="field">
@@ -82,7 +117,12 @@ export function PersonalInfoFields({
             <input
               type="date"
               value={dateOfDeath}
-              onChange={(e) => onDateOfDeath(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value
+                onDateOfDeath(val && val > today ? today : val)
+              }}
+              min={dob || undefined}
+              max={today}
             />
           </label>
         ) : null}
@@ -218,7 +258,7 @@ export function PhotoUploadField({
 
   return (
     <div className={compact ? 'photo-upload photo-upload-compact' : 'photo-upload'}>
-      <span className="photo-label">Profile picture</span>
+      <span className="photo-label">Add a Photo</span>
       <label className={`photo-box${previewUrl ? ' photo-box-has-preview' : ''}`}>
         <input
           type="file"
@@ -234,12 +274,90 @@ export function PhotoUploadField({
           <>
             {DashIcons.upload()}
             <strong>Upload Photo</strong>
-            <small>Profile picture · JPG, PNG up to 5MB</small>
+            <small>JPG, PNG up to 5MB</small>
           </>
         )}
       </label>
       {error ? <span className="field-hint photo-upload-error">{error}</span> : null}
     </div>
+  )
+}
+
+type SiblingDetailsFieldsProps = {
+  relationship: SiblingRelationship
+  onRelationship: (value: SiblingRelationship) => void
+  birthOrder: string
+  onBirthOrder: (value: string) => void
+  photoPreviewUrl?: string | null
+  onPhotoSelect?: (file: File | null) => void
+  photoError?: string
+  suggestedLabel?: string
+}
+
+export function SiblingDetailsFields({
+  relationship,
+  onRelationship,
+  birthOrder,
+  onBirthOrder,
+  photoPreviewUrl,
+  onPhotoSelect,
+  photoError,
+  suggestedLabel,
+}: SiblingDetailsFieldsProps) {
+  return (
+    <>
+      <div className="form-row form-row-sibling-details">
+        <label className="field">
+          <span>Relationship Type</span>
+          <select
+            value={relationship}
+            onChange={(e) => onRelationship(e.target.value as SiblingRelationship)}
+            required
+          >
+            {SIBLING_RELATIONSHIP_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          {suggestedLabel ? (
+            <span className="field-hint">Suggested from shared parents: {suggestedLabel}</span>
+          ) : null}
+        </label>
+        <label className="field">
+          <span>Order in Birth</span>
+          <select value={birthOrder} onChange={(e) => onBirthOrder(e.target.value)}>
+            <option value="">Select order</option>
+            {BIRTH_ORDER_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <PhotoUploadField
+          compact
+          previewUrl={photoPreviewUrl}
+          onFileSelect={onPhotoSelect}
+          error={photoError}
+        />
+      </div>
+      <div className="sibling-relationship-help" role="note">
+        <strong className="sibling-help-title">What does this mean?</strong>
+        <div className="sibling-help-item">
+          <strong>Brother / Sister</strong>
+          <p>Share the same biological parents (both your parents).</p>
+        </div>
+        <div className="sibling-help-item">
+          <strong>Half-brother / Half-sister</strong>
+          <p>Share one biological parent (either your mother or father).</p>
+        </div>
+        <div className="sibling-help-item">
+          <strong>Step-brother / step-sister</strong>
+          <p>Share a parent through marriage (your parent and their spouse).</p>
+        </div>
+      </div>
+    </>
   )
 }
 

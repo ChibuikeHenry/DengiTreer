@@ -2,7 +2,12 @@ import { Fragment, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import TreePersonDetails from './TreePersonDetails'
 import { profileFirstName } from '../lib/userProfile'
-import { treeMemberRoleLabel, type TreeMember } from '../lib/familyTreeMembers'
+import {
+  inferTreeMemberGender,
+  treeMemberRoleLabel,
+  type TreeMember,
+} from '../lib/familyTreeMembers'
+import type { AvatarGenderTone } from './ProfileAvatar'
 import { formatLifeYearsLine } from '../lib/lifeDates'
 import type { MemberPrivacy } from '../lib/memberPrivacy'
 import type { DashboardContext } from '../pages/HomePage'
@@ -10,6 +15,13 @@ import './pedigree-tree.css'
 
 function roleLine(roleText: string, memberStatus: 'living' | 'deceased'): string {
   return memberStatus === 'deceased' ? `${roleText} (Deceased)` : roleText
+}
+
+function memberAvatarTone(member: TreeMember): AvatarGenderTone {
+  const inferred = inferTreeMemberGender(member)
+  if (inferred === 'male') return 'male'
+  if (inferred === 'female') return 'female'
+  return 'neutral'
 }
 
 /** Step partners sit outside the biological couple so the stem hits father–mother. */
@@ -83,6 +95,7 @@ function PedigreeMemberNode({
         variant="pedigree"
         roleLabel={roleLine(treeMemberRoleLabel(member), member.memberStatus)}
         yearsLabel={yearsLabel}
+        avatarGenderTone={memberAvatarTone(member)}
       />
     </div>
   )
@@ -92,13 +105,15 @@ function PedigreeMemberNode({
 function Join({
   childrenDrop,
   hasStem = false,
+  isStep = false,
 }: {
   childrenDrop?: ReactNode
   hasStem?: boolean
+  isStep?: boolean
 }) {
   return (
     <div
-      className={`ped-join${childrenDrop ? ' ped-join-drop' : ''}`}
+      className={`ped-join${childrenDrop ? ' ped-join-drop' : ''}${isStep ? ' is-step-join' : ''}`}
       aria-hidden={childrenDrop ? undefined : true}
     >
       {hasStem ? <div className="ped-join-stem" aria-hidden="true" /> : null}
@@ -146,12 +161,18 @@ function PartnerRow({
 }) {
   return (
     <div className="ped-row">
-      {members.map((member, index) => (
-        <Fragment key={member.id}>
-          {index > 0 ? <Join hasStem={hasStems} /> : null}
-          <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
-        </Fragment>
-      ))}
+      {members.map((member, index) => {
+        const prev = index > 0 ? members[index - 1] : null
+        const isStep = Boolean(
+          prev && (prev.parentKind === 'step' || member.parentKind === 'step'),
+        )
+        return (
+          <Fragment key={member.id}>
+            {index > 0 ? <Join hasStem={hasStems} isStep={isStep} /> : null}
+            <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
+          </Fragment>
+        )
+      })}
     </div>
   )
 }
@@ -215,6 +236,7 @@ export default function PedigreeTreeDiagram({
     ? profileFirstName(selfDisplayName, 'You')
     : 'YOU'
   const selfYears = formatLifeYearsLine(selfDateOfBirth, null, 'living')
+  const selfAvatarTone: AvatarGenderTone = 'you'
 
   const kids = (inline: boolean) => (
     <div className={`ped-kids${inline ? ' is-inline' : ''}`}>
@@ -317,6 +339,7 @@ export default function PedigreeTreeDiagram({
                   }
                   yearsLabel={selfHasProfileName ? selfYears : null}
                   youBadge={!selfHasProfileName}
+                  avatarGenderTone={selfAvatarTone}
                 />
               </Link>
               {spouses.length === 0 ? kids(true) : null}

@@ -8,7 +8,7 @@ import {
   PersonalInfoFields,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
-import { normalizeDateField } from '../lib/lifeDates'
+import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
@@ -35,8 +35,9 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
       firstName,
       middleName,
       lastName,
-      inviteeEmail: email,
+      inviteeEmail: email.trim() || undefined,
       memberStatus: status,
+      gender: gender || undefined,
       photoFile: photo.file,
       privacy,
       bio: bio.trim() || undefined,
@@ -95,7 +96,7 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
           </label>
           <label className="field">
             <span>Wedding Anniversary Date (Optional)</span>
-            <input type="date" />
+            <input type="date" max={getTodayString()} />
           </label>
         </div>
       </section>

@@ -45,6 +45,7 @@ export type FamilyMemberInviteInput = {
   siblingRelationship?: SiblingRelationship
   dateOfBirth?: string
   dateOfDeath?: string
+  gender?: string
 }
 
 export type InvitationRecord = {
@@ -69,6 +70,7 @@ export type InvitationRecord = {
   siblingRelationship: SiblingRelationship | null
   dateOfBirth: string | null
   dateOfDeath: string | null
+  gender: string | null
   createdAt: Date | null
 }
 
@@ -240,6 +242,7 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
     siblingRelationship: (data.siblingRelationship as SiblingRelationship | null) ?? null,
     dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth) : null,
     dateOfDeath: data.dateOfDeath ? String(data.dateOfDeath) : null,
+    gender: (data.gender as string | null) ?? null,
     createdAt: timestampToDate(data.createdAt as Timestamp | undefined),
   }
 }
