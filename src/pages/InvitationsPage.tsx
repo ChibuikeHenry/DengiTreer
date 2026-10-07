@@ -333,6 +333,7 @@ export default function InvitationsPage() {
                         siblingRelationship: item.siblingRelationship,
                         dateOfBirth: item.dateOfBirth,
                         dateOfDeath: item.dateOfDeath,
+                        gender: item.gender,
                         inviteeEmail: item.inviteeEmail,
                       })
                     }

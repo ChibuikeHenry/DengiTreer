@@ -273,6 +273,7 @@ export function subscribeTreeMembers(
           memberStatus: 'living',
           inviteStatus: 'joined',
           joinedUid: invitedByUid,
+          gender: inviterProfile.gender ?? null,
           profileClaimed: true,
           inviterCanEdit: false,
           privacy: inviterProfile.profilePrivacy

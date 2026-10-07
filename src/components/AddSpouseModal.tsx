@@ -48,6 +48,16 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
 
   useEffect(() => {
     if (open) return
+    setFirstName('')
+    setMiddleName('')
+    setLastName('')
+    setDob('')
+    setDateOfDeath('')
+    setGender('')
+    setStatus('living')
+    setPhone('')
+    setEmail('')
+    setBio('')
     photo.reset()
   }, [open, photo.reset])
 
@@ -56,8 +66,9 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
       open={open}
       onClose={onClose}
       title="Add a Spouse"
-      description="Add a new relative to your family tree. Living spouses receive an email invite to join with their role."
+      description="Add a new relative to your family tree. Living spouses with an email address receive an email invite to join."
       submitLabel="Add Spouse"
+      submittingText={email.trim() ? 'Sending invite…' : 'Adding spouse…'}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}

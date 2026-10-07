@@ -86,6 +86,11 @@ async function queueInviteEmail(options: {
   joinUrl: string
   personalMessage?: string | null
 }) {
+  const recipient = String(options.to ?? '').trim().toLowerCase()
+  if (!recipient || !recipient.includes('@')) {
+    return
+  }
+
   const roleText = roleLabel(options.role)
   const greeting = options.inviteeFirstName
     ? escapeHtml(options.inviteeFirstName)
@@ -95,7 +100,7 @@ async function queueInviteEmail(options: {
     : ''
 
   await db.collection('mail').add({
-    to: options.to,
+    to: recipient,
     message: {
       subject: `${options.inviterName} invited you to DengiTree as their ${roleText}`,
       html: `

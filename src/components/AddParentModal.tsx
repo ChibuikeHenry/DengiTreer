@@ -66,6 +66,20 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
 
   useEffect(() => {
     if (open) return
+    setParentTypeOpen(false)
+    setRelationshipOpen(false)
+    setParentType(null)
+    setRelationship('')
+    setFirstName('')
+    setMiddleName('')
+    setLastName('')
+    setDob('')
+    setDateOfDeath('')
+    setGender('')
+    setStatus('living')
+    setPhone('')
+    setEmail('')
+    setBio('')
     photo.reset()
   }, [open, photo.reset])
 
@@ -365,7 +379,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
               Cancel
             </button>
             <button type="submit" className="btn-modal-primary" disabled={submitting}>
-              {submitting ? 'Sending invite…' : 'Add Family Member'}
+              {submitting ? (email.trim() ? 'Sending invite…' : 'Adding family member…') : 'Add Family Member'}
             </button>
           </footer>
         </form>

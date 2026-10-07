@@ -59,6 +59,17 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
 
   useEffect(() => {
     if (open) return
+    setRelationship('')
+    setFirstName('')
+    setMiddleName('')
+    setLastName('')
+    setDob('')
+    setDateOfDeath('')
+    setGender('')
+    setStatus('living')
+    setPhone('')
+    setEmail('')
+    setBio('')
     photo.reset()
   }, [open, photo.reset])
 
@@ -96,6 +107,7 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
       title="Add a Grandparent"
       description="Add your grandparent to the top of your family tree. Include birth and death dates when you know them."
       submitLabel="Add Grandparent"
+      submittingText={email.trim() ? 'Sending invite…' : 'Adding grandparent…'}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}

@@ -121,6 +121,7 @@ export default function EditFamilyMemberModal({
       title={`Edit ${member.displayName}`}
       description="Update their details before they log in and claim their profile."
       submitLabel="Save Changes"
+      submittingText={email.trim() ? 'Sending invite…' : 'Saving changes…'}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}

@@ -39,7 +39,20 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
   const [formError, setFormError] = useState('')
 
   useEffect(() => {
-    if (!open || !user) return
+    if (!open) {
+      setFirstName('')
+      setMiddleName('')
+      setLastName('')
+      setDob('')
+      setGender('')
+      setStatus('living')
+      setEmail('')
+      setPhone('')
+      setBio('')
+      photo.reset()
+      return
+    }
+    if (!user) return
 
     let cancelled = false
     setPrefillLoading(true)
@@ -111,6 +124,7 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
       title="Add Yourself"
       description="We've filled in details from your account. Update anything that isn't right before you continue."
       submitLabel="Add Yourself"
+      submittingText="Adding yourself…"
       onSubmit={handleSubmit}
       submitting={prefillLoading || submitting}
       formError={formError}

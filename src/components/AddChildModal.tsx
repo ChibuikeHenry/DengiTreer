@@ -70,10 +70,20 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
 
   useEffect(() => {
     if (open) return
-    photo.reset()
+    setFirstName('')
+    setMiddleName('')
+    setLastName('')
+    setDob('')
+    setDateOfDeath('')
+    setGender('')
+    setStatus('living')
+    setPhone('')
+    setEmail('')
+    setBio('')
     setFatherId('')
     setMotherId('')
     setBirthOrder('')
+    photo.reset()
   }, [open, photo.reset])
 
   return (
@@ -81,8 +91,9 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
       open={open}
       onClose={onClose}
       title="Add a Child"
-      description="Add your child to your family tree. Living children can be invited by email to join."
+      description="Add your child to your family tree. Living children with an email address will be invited to join."
       submitLabel="Add Child"
+      submittingText={email.trim() ? 'Sending invite…' : 'Adding child…'}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}

@@ -84,11 +84,20 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
 
   useEffect(() => {
     if (open) return
-    photo.reset()
+    setFirstName('')
+    setMiddleName('')
+    setLastName('')
+    setDob('')
+    setDateOfDeath('')
+    setGender('')
+    setStatus('living')
+    setEmail('')
     setFatherId('')
     setMotherId('')
     setBirthOrder('')
-    setEmail('')
+    setRelationship('sibling')
+    relationshipEdited.current = false
+    photo.reset()
   }, [open, photo.reset])
 
   return (
@@ -98,6 +107,7 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
       title="Add a Sibling"
       description="Add your sibling to your family tree. You can always edit details later."
       submitLabel="Add Sibling"
+      submittingText={email.trim() ? 'Sending invite…' : 'Adding sibling…'}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}

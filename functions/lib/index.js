@@ -55,6 +55,10 @@ function newToken() {
     return (0, crypto_1.randomBytes)(6).toString('hex');
 }
 async function queueInviteEmail(options) {
+    const recipient = String(options.to ?? '').trim().toLowerCase();
+    if (!recipient || !recipient.includes('@')) {
+        return;
+    }
     const roleText = roleLabel(options.role);
     const greeting = options.inviteeFirstName
         ? escapeHtml(options.inviteeFirstName)
@@ -63,7 +67,7 @@ async function queueInviteEmail(options) {
         ? `<p><em>${escapeHtml(options.personalMessage)}</em></p>`
         : '';
     await db.collection('mail').add({
-        to: options.to,
+        to: recipient,
         message: {
             subject: `${options.inviterName} invited you to DengiTree as their ${roleText}`,
             html: `
@@ -88,9 +92,8 @@ async function createInvitationRecord(uid, authToken, data) {
     const middleName = String(data.middleName ?? '').trim();
     const inviteeName = [firstName, middleName, lastName].filter(Boolean).join(' ');
     const memberStatus = data.memberStatus === 'deceased' ? 'deceased' : 'living';
-    const inviteeEmail = String(data.inviteeEmail ?? '')
-        .trim()
-        .toLowerCase();
+    const rawEmail = String(data.inviteeEmail ?? '').trim().toLowerCase();
+    const inviteeEmail = rawEmail && rawEmail.includes('@') ? rawEmail : null;
     const privacy = parseMemberPrivacy(data.privacy);
     const bio = String(data.bio ?? '').trim();
     const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null;
@@ -133,6 +136,7 @@ async function createInvitationRecord(uid, authToken, data) {
         siblingRelationship,
         dateOfBirth,
         dateOfDeath,
+        gender: String(data.gender ?? '').trim() || null,
         createdAt: firestore_1.FieldValue.serverTimestamp(),
         joinedAt: null,
         joinedUid: null,
@@ -163,6 +167,7 @@ async function createInvitationRecord(uid, authToken, data) {
             siblingRelationship,
             dateOfBirth,
             dateOfDeath,
+            gender: String(data.gender ?? '').trim() || null,
             claimedByUid: null,
             claimedAt: null,
             createdAt: firestore_1.FieldValue.serverTimestamp(),
@@ -420,13 +425,16 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             memberStatus,
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         };
-        let newEmail = null;
+        const previousEmail = String(doc.inviteeEmail ?? '').trim().toLowerCase() || null;
+        let newEmail = previousEmail;
+        let emailJustAddedOrChanged = false;
         if (data.inviteeEmail !== undefined) {
-            newEmail = String(data.inviteeEmail ?? '').trim().toLowerCase() || null;
+            const trimmed = String(data.inviteeEmail ?? '').trim().toLowerCase();
+            newEmail = trimmed && trimmed.includes('@') ? trimmed : null;
             invitationUpdate.inviteeEmail = newEmail;
-        }
-        else if (doc.inviteeEmail) {
-            newEmail = String(doc.inviteeEmail).trim().toLowerCase() || null;
+            if (newEmail && newEmail !== previousEmail) {
+                emailJustAddedOrChanged = true;
+            }
         }
         if (photoURL !== undefined) {
             invitationUpdate.photoURL = photoURL;
@@ -488,7 +496,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             }
             tx.update(familyMemberRef, familyUpdate);
         }
-        if (newEmail && memberStatus === 'living') {
+        if (emailJustAddedOrChanged && newEmail && memberStatus === 'living') {
             const joinUrl = `${APP_ORIGIN}/join/${token}`;
             emailToSend = {
                 to: newEmail,
