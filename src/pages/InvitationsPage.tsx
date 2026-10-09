@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
   createShareInviteLink,
+  defaultShareInviteMessage,
   formatInviteDate,
   getCallableErrorMessage,
   inviteRoleLabel,
+  sendShareInviteEmail,
   subscribeReceivedInvitations,
   subscribeSentInvitations,
   updateFamilyMemberPrivacy,
@@ -34,12 +36,30 @@ function displayName(record: InvitationRecord): string {
   return record.inviteeName || record.inviteeEmail || 'Invite link'
 }
 
+function inviterDisplayName(user: { displayName?: string | null; email?: string | null }) {
+  const fromProfile = user.displayName?.trim()
+  if (fromProfile) return fromProfile
+  const email = user.email?.trim()
+  if (email) return email.split('@')[0] ?? email
+  return 'Someone'
+}
+
+function firstNameFromFullName(fullName: string) {
+  return fullName.trim().split(/\s+/)[0] ?? ''
+}
+
 export default function InvitationsPage() {
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('sent')
   const [composing, setComposing] = useState(false)
+  const [inviteeName, setInviteeName] = useState('')
+  const [inviteeEmail, setInviteeEmail] = useState('')
   const [message, setMessage] = useState('')
+  const [messageTouched, setMessageTouched] = useState(false)
+  const [inviteToken, setInviteToken] = useState('')
   const [inviteLink, setInviteLink] = useState('')
+  const [copyLabel, setCopyLabel] = useState('Copy')
+  const [sendingEmail, setSendingEmail] = useState(false)
   const [sent, setSent] = useState<InvitationRecord[]>([])
   const [received, setReceived] = useState<InvitationRecord[]>([])
   const [listError, setListError] = useState('')
@@ -76,8 +96,11 @@ export default function InvitationsPage() {
     setComposeError('')
     ;(async () => {
       try {
-        const { joinUrl } = await createShareInviteLink()
-        if (!cancelled) setInviteLink(joinUrl)
+        const { joinUrl, token } = await createShareInviteLink()
+        if (!cancelled) {
+          setInviteLink(joinUrl)
+          setInviteToken(token)
+        }
       } catch (err) {
         if (!cancelled) setComposeError(getCallableErrorMessage(err))
       } finally {
@@ -89,6 +112,17 @@ export default function InvitationsPage() {
     }
   }, [composing, inviteLink, user])
 
+  useEffect(() => {
+    if (!composing || !inviteLink || !user || messageTouched) return
+    setMessage(
+      defaultShareInviteMessage({
+        inviteeFirstName: firstNameFromFullName(inviteeName),
+        inviterName: inviterDisplayName(user),
+        joinUrl: inviteLink,
+      }),
+    )
+  }, [composing, inviteLink, inviteeName, messageTouched, user])
+
   const sentCount = sent.length
   const receivedCount = received.length
 
@@ -97,12 +131,45 @@ export default function InvitationsPage() {
     [received, sent, tab],
   )
 
+  function resetCompose() {
+    setComposing(false)
+    setInviteeName('')
+    setInviteeEmail('')
+    setMessage('')
+    setMessageTouched(false)
+    setInviteToken('')
+    setInviteLink('')
+    setCopyLabel('Copy')
+    setComposeError('')
+  }
+
   async function copyLink() {
     if (!inviteLink) return
     try {
       await navigator.clipboard.writeText(inviteLink)
+      setCopyLabel('Copied')
+      window.setTimeout(() => setCopyLabel('Copy'), 2000)
     } catch {
       /* ignore */
+    }
+  }
+
+  async function handleSendEmail() {
+    if (!inviteToken || !inviteLink) return
+    setSendingEmail(true)
+    setComposeError('')
+    try {
+      await sendShareInviteEmail({
+        token: inviteToken,
+        inviteeName: inviteeName.trim(),
+        inviteeEmail: inviteeEmail.trim(),
+        personalMessage: message.trim(),
+      })
+      resetCompose()
+    } catch (err) {
+      setComposeError(getCallableErrorMessage(err))
+    } finally {
+      setSendingEmail(false)
     }
   }
 
@@ -118,35 +185,18 @@ export default function InvitationsPage() {
     }
   }
 
-  async function refreshShareLink() {
-    setCreatingLink(true)
-    setComposeError('')
-    try {
-      const { joinUrl } = await createShareInviteLink(message.trim() || undefined)
-      setInviteLink(joinUrl)
-    } catch (err) {
-      setComposeError(getCallableErrorMessage(err))
-    } finally {
-      setCreatingLink(false)
-    }
-  }
-
   if (composing) {
+    const canSend =
+      Boolean(inviteToken && inviteLink) &&
+      inviteeName.trim().length > 0 &&
+      inviteeEmail.trim().includes('@') &&
+      message.trim().length > 0
+
     return (
       <div className="home inv-page">
-        <header className="inv-head">
-          <button
-            type="button"
-            className="inv-back"
-            onClick={() => {
-              setComposing(false)
-              setInviteLink('')
-              setMessage('')
-            }}
-          >
-            ← Back
-          </button>
-        </header>
+        <button type="button" className="inv-back" onClick={resetCompose}>
+          ← Back to invitations
+        </button>
         <section className="home-card inv-compose">
           <h1>Invite Someone to DengiTree</h1>
           <p className="inv-lede">
@@ -158,31 +208,90 @@ export default function InvitationsPage() {
             <h2>Share Your Invite Link</h2>
             <p>Copy and share this link with the person you want to invite.</p>
             <div className="inv-link-row">
-              <span className="inv-link-field">
-                {creatingLink && !inviteLink ? 'Generating link…' : inviteLink || '—'}
-              </span>
+              <label className="inv-link-input-wrap">
+                <span className="inv-link-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <input
+                  className="inv-link-input"
+                  readOnly
+                  value={
+                    creatingLink && !inviteLink ? 'Generating link…' : inviteLink || ''
+                  }
+                  aria-label="Invite link"
+                />
+              </label>
               <button
                 type="button"
                 className="inv-copy-btn"
-                onClick={copyLink}
+                onClick={() => void copyLink()}
                 disabled={!inviteLink}
               >
-                Copy
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect
+                    x="9"
+                    y="9"
+                    width="13"
+                    height="13"
+                    rx="2"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                </svg>
+                {copyLabel}
               </button>
             </div>
           </div>
 
-          <div className="inv-block">
-            <h2>Personal Message (Optional)</h2>
-            <p>Add a short message to include with your invitation.</p>
-            <label className="inv-message-wrap">
+          <div className="inv-form-fields">
+            <label className="inv-field">
+              <span className="inv-field-label">Name</span>
+              <input
+                type="text"
+                value={inviteeName}
+                onChange={(e) => setInviteeName(e.target.value)}
+                autoComplete="name"
+                placeholder="Full name"
+              />
+            </label>
+            <label className="inv-field">
+              <span className="inv-field-label">Email Address</span>
+              <input
+                type="email"
+                value={inviteeEmail}
+                onChange={(e) => setInviteeEmail(e.target.value)}
+                autoComplete="email"
+                placeholder="name@example.com"
+              />
+            </label>
+            <label className="inv-field inv-field-message">
+              <span className="inv-field-label">Personalized Message.</span>
               <textarea
                 value={message}
-                onChange={(e) => setMessage(e.target.value.slice(0, 300))}
+                onChange={(e) => {
+                  setMessageTouched(true)
+                  setMessage(e.target.value.slice(0, 600))
+                }}
                 rows={5}
-                placeholder=""
               />
-              <span className="inv-char-count">{message.length}/300</span>
             </label>
           </div>
 
@@ -194,16 +303,20 @@ export default function InvitationsPage() {
 
           <button
             type="button"
-            className="inv-share-btn"
-            onClick={async () => {
-              if (message.trim()) {
-                await refreshShareLink()
-              }
-              await copyLink()
-            }}
-            disabled={!inviteLink || creatingLink}
+            className="inv-send-email-btn"
+            onClick={() => void handleSendEmail()}
+            disabled={!canSend || sendingEmail || creatingLink}
           >
-            Copy Link &amp; Share
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {sendingEmail ? 'Sending…' : 'Send Email'}
           </button>
         </section>
       </div>

@@ -8,6 +8,8 @@ import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
 import { memberPrivacyLabel } from '../lib/memberPrivacy'
 import {
+  avatarGenderToneForMember,
+  buildTreeAvatarViewer,
   memberRelationshipLabel,
   positionLabel,
   roleLabel,
@@ -25,6 +27,8 @@ export default function PeoplePage() {
   const [selfName, setSelfName] = useState('')
   const [selfBio, setSelfBio] = useState('')
   const [selfPosition, setSelfPosition] = useState<string | null>(null)
+  const [selfGender, setSelfGender] = useState<string | null>(null)
+  const [selfPhotoURL, setSelfPhotoURL] = useState<string | null>(null)
   const [joinedFamily, setJoinedFamily] = useState(false)
   const [query, setQuery] = useState('')
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
@@ -50,6 +54,8 @@ export default function PeoplePage() {
       setSelfName(name || user.displayName?.trim() || 'You')
       setSelfBio(profile.bio?.trim() ?? '')
       setSelfPosition(positionLabel(profile.familyRole))
+      setSelfGender(profile.gender?.trim() || null)
+      setSelfPhotoURL(user.photoURL ?? profile.photoURL ?? null)
       setJoinedFamily(Boolean(profile.invitedByUid))
     })()
     return () => {
@@ -68,6 +74,18 @@ export default function PeoplePage() {
   }, [members, query])
 
   const totalCount = (selfOnTree ? 1 : 0) + members.length
+
+  const avatarViewer = useMemo(
+    () =>
+      buildTreeAvatarViewer({
+        uid: user?.uid ?? null,
+        gender: selfGender,
+        photoURL: selfPhotoURL,
+        displayName: selfName,
+        positionLabel: selfPosition,
+      }),
+    [user?.uid, selfGender, selfPhotoURL, selfName, selfPosition],
+  )
 
   return (
     <div className="home upcoming-page people-page">
@@ -106,7 +124,12 @@ export default function PeoplePage() {
         {selfOnTree ? (
           <ul className="people-list">
             <li className="people-row people-row-you">
-              <ProfileAvatar photoURL={user?.photoURL} name={selfName} size="md" />
+              <ProfileAvatar
+                photoURL={user?.photoURL}
+                name={selfName}
+                gender={selfGender}
+                size="md"
+              />
               <div className="people-row-body">
                 <strong>{selfName}</strong>
                 <span>{selfPosition ? `You · ${selfPosition}` : 'You'}</span>
@@ -121,6 +144,8 @@ export default function PeoplePage() {
                 <ProfileAvatar
                   photoURL={member.photoURL}
                   name={member.displayName}
+                  gender={member.gender}
+                  genderTone={avatarGenderToneForMember(member, avatarViewer)}
                   size="md"
                 />
                 <div className="people-row-body">
@@ -143,13 +168,12 @@ export default function PeoplePage() {
                   >
                     Edit profile
                   </button>
+                ) : member.profileClaimed ? (
+                  <Link to={`/home/member/${member.id}`} className="people-row-action">
+                    View profile
+                  </Link>
                 ) : (
-                  <span
-                    className="people-row-action people-row-muted"
-                    title="This person has signed up and claimed their profile. Only they can edit their profile."
-                  >
-                    View only · Profile claimed
-                  </span>
+                  <span className="people-row-action people-row-muted">View only</span>
                 )}
               </li>
             ))}

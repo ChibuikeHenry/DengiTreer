@@ -84,6 +84,16 @@ const createShareInviteFn = httpsCallable<
   { token: string; joinUrl: string }
 >(functions, 'createShareInvite')
 
+const sendShareInviteEmailFn = httpsCallable<
+  {
+    token: string
+    inviteeName: string
+    inviteeEmail: string
+    personalMessage: string
+  },
+  { ok: boolean }
+>(functions, 'sendShareInviteEmail')
+
 const getInvitationByTokenFn = httpsCallable<
   { token: string },
   {
@@ -122,6 +132,7 @@ const updatePendingFamilyMemberProfileFn = httpsCallable<
     parentKind?: ParentKind
     parentSlot?: ParentSlot
     inviteeEmail?: string | null
+    gender?: string | null
   },
   { ok: boolean }
 >(functions, 'updatePendingFamilyMemberProfile')
@@ -173,6 +184,26 @@ export async function createShareInviteLink(personalMessage?: string) {
   return result.data
 }
 
+export async function sendShareInviteEmail(input: {
+  token: string
+  inviteeName: string
+  inviteeEmail: string
+  personalMessage: string
+}) {
+  const result = await sendShareInviteEmailFn(input)
+  return result.data
+}
+
+export function defaultShareInviteMessage(options: {
+  inviteeFirstName: string
+  inviterName: string
+  joinUrl: string
+}) {
+  const name = options.inviteeFirstName.trim() || 'there'
+  const inviter = options.inviterName.trim() || 'Someone'
+  return `Hi ${name}, ${inviter} is inviting you to join DengiTree. click on this link : ${options.joinUrl} to join DengiTree.`
+}
+
 export async function fetchInvitationPreview(token: string) {
   const result = await getInvitationByTokenFn({ token })
   return result.data
@@ -202,6 +233,7 @@ export async function updatePendingFamilyMemberProfile(input: {
   parentKind?: ParentKind
   parentSlot?: ParentSlot
   inviteeEmail?: string | null
+  gender?: string | null
 }) {
   const result = await updatePendingFamilyMemberProfileFn(input)
   return result.data

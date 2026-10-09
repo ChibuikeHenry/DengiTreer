@@ -1,43 +1,44 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import ModalFrame from './ModalFrame'
+import { useEffect, useId, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
+import { ContactFields, MemberBioField } from './familyFormFields'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
-import {
-  ContactFields,
-  MemberBioField,
-  PersonalInfoFields,
-} from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
-import { normalizeDateField } from '../lib/lifeDates'
+import { DashIcons } from './DashboardLayout'
+import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import type { ParentSlot } from '../lib/siblingRelationship'
 
-import type { InviteRole } from '../lib/invitations'
-
-const relationships = [
-  'Grandfather',
-  'Grandmother',
-  'Great-grandfather',
-  'Great-grandmother',
-  'Unknown / Not Known',
+const grandparentPlacements = [
+  { value: 'fathers-father', label: "Father's father" },
+  { value: 'fathers-mother', label: "Father's mother" },
+  { value: 'mothers-father', label: "Mother's father" },
+  { value: 'mothers-mother', label: "Mother's mother" },
 ] as const
-const UNKNOWN_RELATIONSHIP = 'Unknown / Not Known'
 
-function relationshipToRole(relationship: string): InviteRole {
-  if (relationship === 'Great-grandfather' || relationship === 'Great-grandmother') {
-    return 'great-grandparent'
-  }
-  return 'grandparent'
+type GrandparentPlacement = (typeof grandparentPlacements)[number]['value']
+
+const relationships = ['Grandfather', 'Grandmother'] as const
+
+function placementToRelationship(placement: GrandparentPlacement | '') {
+  if (placement === 'fathers-father' || placement === 'mothers-father') return 'Grandfather'
+  if (placement === 'fathers-mother' || placement === 'mothers-mother') return 'Grandmother'
+  return ''
 }
 
 function relationshipToParentSlot(relationship: string): ParentSlot {
-  if (relationship === 'Grandfather' || relationship === 'Great-grandfather') return 'father'
-  if (relationship === 'Grandmother' || relationship === 'Great-grandmother') return 'mother'
+  if (relationship === 'Grandfather') return 'father'
+  if (relationship === 'Grandmother') return 'mother'
   return 'unknown'
 }
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
 export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
+  const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const [placementOpen, setPlacementOpen] = useState(false)
+  const [relationshipOpen, setRelationshipOpen] = useState(false)
+  const [placement, setPlacement] = useState<GrandparentPlacement | ''>('')
   const [relationship, setRelationship] = useState('')
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
@@ -49,8 +50,8 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [bio, setBio] = useState('')
-  const photo = usePhotoPicker()
   const [privacy] = useDefaultMemberPrivacy(open)
+  const photo = usePhotoPicker()
   const { submitting, error, submit } = useFamilyMemberInviteSubmit(
     'grandparent',
     onClose,
@@ -59,6 +60,9 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
 
   useEffect(() => {
     if (open) return
+    setPlacementOpen(false)
+    setRelationshipOpen(false)
+    setPlacement('')
     setRelationship('')
     setFirstName('')
     setMiddleName('')
@@ -73,24 +77,58 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
     photo.reset()
   }, [open, photo.reset])
 
+  useEffect(() => {
+    if (!open) return
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.focus()
+
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [open, onClose])
+
+  if (!open) return null
+
+  const placementLabel =
+    grandparentPlacements.find((item) => item.value === placement)?.label ?? ''
+
+  function handleClose() {
+    setPlacementOpen(false)
+    setRelationshipOpen(false)
+    onClose()
+  }
+
+  function applyPlacement(value: GrandparentPlacement) {
+    setPlacement(value)
+    setPlacementOpen(false)
+    const rel = placementToRelationship(value)
+    setRelationship(rel)
+    if (rel === 'Grandfather') setGender('male')
+    if (rel === 'Grandmother') setGender('female')
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    if (!relationship) return
+    if (!placement || !relationship) return
 
-    const isUnknown = relationship === UNKNOWN_RELATIONSHIP
-    const isGreat = relationship === 'Great-grandfather' || relationship === 'Great-grandmother'
-    const resolvedFirst = firstName.trim() || (isUnknown ? 'Unknown' : '')
-    const resolvedLast =
-      lastName.trim() || (isUnknown ? 'Grandparent' : isGreat ? 'Great-grandparent' : 'Grandparent')
+    const resolvedFirst = firstName.trim()
+    const resolvedLast = lastName.trim()
     if (!resolvedFirst || !resolvedLast) return
 
     await submit({
-      role: relationshipToRole(relationship),
       firstName: resolvedFirst,
       middleName: middleName.trim(),
       lastName: resolvedLast,
       inviteeEmail: email.trim() || undefined,
       memberStatus: status,
+      gender: gender || undefined,
       photoFile: photo.file,
       privacy,
       bio: bio.trim() || undefined,
@@ -101,75 +139,269 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
   }
 
   return (
-    <ModalFrame
-      open={open}
-      onClose={onClose}
-      title="Add a Grandparent"
-      description="Add your grandparent to the top of your family tree. Include birth and death dates when you know them."
-      submitLabel="Add Grandparent"
-      submittingText={email.trim() ? 'Sending invite…' : 'Adding grandparent…'}
-      onSubmit={handleSubmit}
-      formError={error}
-      submitting={submitting}
-    >
-      <section className="modal-section">
-        <h3>1. Relationship</h3>
-        <label className="field">
-          <span>Relationship to you</span>
-          <select
-            value={relationship}
-            onChange={(e) => setRelationship(e.target.value)}
-            required
+    <div className="modal-backdrop" onClick={handleClose} role="presentation">
+      <div
+        className="modal-panel modal-panel-lg"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        ref={dialogRef}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modal-head">
+          <div>
+            <h2 id={titleId}>Add GRANDPARENT</h2>
+            <p>
+              Add a new relative to your family tree. You can always edit details later.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="modal-close"
+            onClick={handleClose}
+            aria-label="Close"
           >
-            <option value="">Select relationship</option>
-            {relationships.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
+            {DashIcons.close()}
+          </button>
+        </header>
 
-      <section className="modal-section">
-        <h3>2. Personal Information</h3>
-        <PersonalInfoFields
-          namePrefix="grandparent"
-          firstName={firstName}
-          middleName={middleName}
-          lastName={lastName}
-          dob={dob}
-          dateOfDeath={dateOfDeath}
-          gender={gender}
-          status={status}
-          onFirstName={setFirstName}
-          onMiddleName={setMiddleName}
-          onLastName={setLastName}
-          onDob={setDob}
-          onDateOfDeath={setDateOfDeath}
-          onGender={setGender}
-          onStatus={setStatus}
-        />
-      </section>
+        <form className="modal-form" onSubmit={handleSubmit}>
+          <section className="modal-section">
+            <h3>1. Which grandparent are you adding?</h3>
+            <p className="field-hint">
+              (this helps us place your grandparent correctly in your family tree).
+            </p>
+            <div className="custom-select">
+              <button
+                type="button"
+                className={`select-trigger${placement ? '' : ' is-placeholder'}`}
+                onClick={() => {
+                  setPlacementOpen((v) => !v)
+                  setRelationshipOpen(false)
+                }}
+                aria-expanded={placementOpen}
+              >
+                <span>{placementLabel || 'Select parent'}</span>
+                {DashIcons.chevron()}
+              </button>
+              {placementOpen ? (
+                <ul className="select-menu select-menu-simple" role="listbox">
+                  {grandparentPlacements.map((option) => (
+                    <li key={option.value}>
+                      <button
+                        type="button"
+                        className="select-option"
+                        onClick={() => applyPlacement(option.value)}
+                      >
+                        <span>
+                          <strong>{option.label}</strong>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </section>
 
-      <section className="modal-section">
-        <h3>3. Contact Information {status === 'living' ? '' : '(Optional)'}</h3>
-        <ContactFields
-          phone={phone}
-          email={email}
-          onPhone={setPhone}
-          onEmail={setEmail}
-          emailOptionalHint={status === 'living'}
-          photoPreviewUrl={photo.previewUrl}
-          onPhotoSelect={photo.selectFile}
-          photoError={photo.error}
-        />
-      </section>
+          <section className="modal-section">
+            <h3>2. Personal Information</h3>
+            <div className="form-row form-row-3">
+              <label className="field">
+                <span>First Name</span>
+                <input
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="First Name"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Middle Name</span>
+                <input
+                  value={middleName}
+                  onChange={(e) => setMiddleName(e.target.value)}
+                  placeholder="Middle Name"
+                />
+              </label>
+              <label className="field">
+                <span>LastName</span>
+                <input
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Last Name"
+                  required
+                />
+              </label>
+            </div>
 
-      <section className="modal-section">
-        <h3>4. About this person (Optional)</h3>
-        <MemberBioField bio={bio} onBioChange={setBio} idPrefix="grandparent" />
-      </section>
-    </ModalFrame>
+            <div className="form-row form-row-status">
+              <label className="field field-date">
+                <span>Date of Birth</span>
+                <span className="field-date-wrap">
+                  <span className="field-date-icon" aria-hidden="true">
+                    {DashIcons.calendar()}
+                  </span>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const today = getTodayString()
+                      setDob(val && val > today ? today : val)
+                    }}
+                    max={getTodayString()}
+                    aria-label="Date of birth"
+                  />
+                </span>
+              </label>
+              {status === 'deceased' ? (
+                <label className="field field-date">
+                  <span>Date of Death</span>
+                  <span className="field-date-wrap">
+                    <span className="field-date-icon" aria-hidden="true">
+                      {DashIcons.calendar()}
+                    </span>
+                    <input
+                      type="date"
+                      value={dateOfDeath}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        const today = getTodayString()
+                        setDateOfDeath(val && val > today ? today : val)
+                      }}
+                      min={dob || undefined}
+                      max={getTodayString()}
+                      aria-label="Date of death"
+                    />
+                  </span>
+                </label>
+              ) : null}
+              <label className="field">
+                <span>Gender</span>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  required
+                >
+                  <option value="">Select gender</option>
+                  <option value="female">Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <fieldset className="status-radios">
+                <legend className="sr-only">Living status</legend>
+                <span className="status-radios-label">Status</span>
+                <label>
+                  <input
+                    type="radio"
+                    name="grandparent-living-status"
+                    checked={status === 'living'}
+                    onChange={() => setStatus('living')}
+                  />
+                  Living
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="grandparent-living-status"
+                    checked={status === 'deceased'}
+                    onChange={() => setStatus('deceased')}
+                  />
+                  Deceased
+                </label>
+              </fieldset>
+            </div>
+          </section>
+
+          <section className="modal-section">
+            <h3>3. Their relationship to you</h3>
+            <p className="field-hint">How are they related to you?</p>
+            <div className="custom-select">
+              <button
+                type="button"
+                className={`select-trigger${relationship ? '' : ' is-placeholder'}`}
+                onClick={() => {
+                  setRelationshipOpen((v) => !v)
+                  setPlacementOpen(false)
+                }}
+                aria-expanded={relationshipOpen}
+              >
+                <span>{relationship || 'Select relationship type'}</span>
+                {DashIcons.chevron()}
+              </button>
+              {relationshipOpen ? (
+                <ul className="select-menu select-menu-simple" role="listbox">
+                  {relationships.map((option) => (
+                    <li key={option}>
+                      <button
+                        type="button"
+                        className="select-option"
+                        onClick={() => {
+                          setRelationship(option)
+                          setRelationshipOpen(false)
+                          if (option === 'Grandfather' && !gender) setGender('male')
+                          if (option === 'Grandmother' && !gender) setGender('female')
+                        }}
+                      >
+                        <span>
+                          <strong>{option}</strong>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="modal-section">
+            <h3>4. Additional Information (Optional)</h3>
+            <ContactFields
+              phone={phone}
+              email={email}
+              onPhone={setPhone}
+              onEmail={setEmail}
+              emailOptionalHint={status === 'living'}
+              photoPreviewUrl={photo.previewUrl}
+              onPhotoSelect={photo.selectFile}
+              photoError={photo.error}
+            />
+          </section>
+
+          <section className="modal-section">
+            <h3>5. Short Bio</h3>
+            <MemberBioField
+              bio={bio}
+              onBioChange={setBio}
+              idPrefix="grandparent"
+              hideLabel
+              placeholder="Write a few words about this person"
+            />
+          </section>
+
+          {error ? (
+            <p className="modal-form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <footer className="modal-actions">
+            <button type="button" className="btn-modal-outline" onClick={handleClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-modal-primary" disabled={submitting}>
+              {submitting
+                ? email.trim()
+                  ? 'Sending invite…'
+                  : 'Adding grandparent…'
+                : 'Add Grandparent'}
+            </button>
+          </footer>
+        </form>
+      </div>
+    </div>
   )
 }

@@ -16,6 +16,7 @@ type TreePersonDetailsProps = {
   youBadge?: boolean
   yearsLabel?: string | null
   avatarGenderTone?: AvatarGenderTone
+  avatarGender?: string | null
 }
 
 export default function TreePersonDetails({
@@ -31,6 +32,7 @@ export default function TreePersonDetails({
   youBadge = false,
   yearsLabel = null,
   avatarGenderTone = 'neutral',
+  avatarGender = null,
 }: TreePersonDetailsProps) {
   const bioText = formatBioForDisplay(bio)
   const pedigree = variant === 'pedigree'
@@ -49,6 +51,7 @@ export default function TreePersonDetails({
           name={displayName}
           size="tree"
           genderTone={avatarGenderTone}
+          gender={avatarGender}
           className={`tree-person-avatar ${pedigree ? 'tree-person-avatar-pedigree' : ''} ${avatarClassName ?? ''}`.trim()}
         />
       )}

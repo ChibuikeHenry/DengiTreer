@@ -141,8 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await sendPasswordResetEmail(auth, email.trim())
       },
       async logout() {
-        await signOut(auth)
-        setUser(null)
+        setLoading(true)
+        try {
+          await signOut(auth)
+          setUser(null)
+        } finally {
+          setLoading(false)
+        }
       },
     }),
     [user, loading],

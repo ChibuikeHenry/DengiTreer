@@ -91,12 +91,20 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     dateOfBirth: record.dateOfBirth,
     dateOfDeath: record.dateOfDeath,
     inviteeEmail: record.inviteeEmail,
-    gender: record.gender,
+    gender: record.gender ?? genderFromSiblingRelationship(record.siblingRelationship),
   }
 }
 
+function genderFromSiblingRelationship(
+  rel: SiblingRelationship | null | undefined,
+): 'male' | 'female' | null {
+  if (rel === 'brother' || rel === 'half-brother' || rel === 'step-brother') return 'male'
+  if (rel === 'sister' || rel === 'half-sister' || rel === 'step-sister') return 'female'
+  return null
+}
+
 async function enrichClaimedMember(member: TreeMember): Promise<TreeMember> {
-  if (!member.profileClaimed || !member.joinedUid) return member
+  if (!member.joinedUid) return member
 
   try {
     const profile = await fetchUserProfile(member.joinedUid)
@@ -485,24 +493,154 @@ export function memberRelationshipLabel(member: TreeMember): string | null {
   return null
 }
 
+export function normalizeTreeMemberGender(
+  gender: string | null | undefined,
+): 'male' | 'female' | null {
+  if (!gender?.trim()) return null
+  const g = gender.trim().toLowerCase()
+  if (g === 'male' || g === 'm') return 'male'
+  if (g === 'female' || g === 'f') return 'female'
+  return null
+}
+
+export type TreeAvatarViewerContext = {
+  uid: string | null
+  gender?: string | null
+  photoURL?: string | null
+  displayName?: string | null
+}
+
+export function buildTreeAvatarViewer(input: {
+  uid: string | null
+  gender?: string | null
+  photoURL?: string | null
+  displayName?: string | null
+  positionLabel?: string | null
+}): TreeAvatarViewerContext {
+  let gender = normalizeTreeMemberGender(input.gender ?? null)
+  if (!gender && input.positionLabel) {
+    const role = input.positionLabel.toLowerCase()
+    if (/\b(mother|wife|grandmother|sister|daughter)\b/i.test(role)) gender = 'female'
+    else if (/\b(father|husband|grandfather|brother|son)\b/i.test(role)) gender = 'male'
+  }
+  return {
+    uid: input.uid,
+    gender: gender ?? input.gender ?? null,
+    photoURL: input.photoURL ?? null,
+    displayName: input.displayName ?? null,
+  }
+}
+
+function profilePhotoUrlsMatch(a: string, b: string): boolean {
+  if (a === b) return true
+  try {
+    return new URL(a).pathname === new URL(b).pathname
+  } catch {
+    return false
+  }
+}
+
+function personNamesMatch(a: string, b: string): boolean {
+  const na = normalizePersonName(a)
+  const nb = normalizePersonName(b)
+  if (!na || !nb) return false
+  if (na === nb) return true
+  if (na.startsWith(`${nb} `) || nb.startsWith(`${na} `)) return true
+  const firstA = na.split(' ')[0] ?? ''
+  const firstB = nb.split(' ')[0] ?? ''
+  return firstA.length > 1 && firstA === firstB
+}
+
+/** Fill missing gender when a node is the viewer or uses the viewer's profile photo. */
+export function treeMemberForAvatarDisplay(
+  member: TreeMember,
+  viewer?: TreeAvatarViewerContext | null,
+): TreeMember {
+  if (normalizeTreeMemberGender(member.gender)) return member
+  if (!viewer) return member
+
+  const viewerGender = normalizeTreeMemberGender(viewer.gender ?? null)
+  if (!viewerGender) return member
+
+  if (viewer.uid && member.joinedUid === viewer.uid) {
+    return { ...member, gender: viewerGender }
+  }
+
+  if (
+    viewer.photoURL &&
+    member.photoURL &&
+    profilePhotoUrlsMatch(viewer.photoURL, member.photoURL)
+  ) {
+    return { ...member, gender: viewerGender }
+  }
+
+  if (
+    viewer.displayName &&
+    member.displayName &&
+    personNamesMatch(viewer.displayName, member.displayName)
+  ) {
+    return { ...member, gender: viewerGender }
+  }
+
+  return member
+}
+
+function normalizePersonName(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function inferGenderFromRoleLabel(label: string): 'male' | 'female' | null {
+  const l = label.toLowerCase()
+  if (
+    l.includes('grandfather') ||
+    l.includes('great-grandfather') ||
+    l.includes('brother') ||
+    l.includes('husband') ||
+    /\bfather\b/.test(l) ||
+    /\bson\b/.test(l)
+  ) {
+    return 'male'
+  }
+  if (
+    l.includes('grandmother') ||
+    l.includes('great-grandmother') ||
+    l.includes('sister') ||
+    l.includes('wife') ||
+    /\bmother\b/.test(l) ||
+    /\bdaughter\b/.test(l)
+  ) {
+    return 'female'
+  }
+  return null
+}
+
 export function inferTreeMemberGender(
   member: Pick<TreeMember, 'role' | 'parentSlot' | 'siblingRelationship' | 'gender'>,
 ): 'male' | 'female' | null {
-  if (member.gender) {
-    const g = member.gender.trim().toLowerCase()
-    if (g === 'male' || g === 'female') return g as 'male' | 'female'
-  }
+  const fromField =
+    normalizeTreeMemberGender(member.gender) ??
+    genderFromSiblingRelationship(member.siblingRelationship)
+  if (fromField) return fromField
+
   if (member.parentSlot === 'father') return 'male'
   if (member.parentSlot === 'mother') return 'female'
   const rel = member.siblingRelationship
   if (rel === 'brother' || rel === 'half-brother' || rel === 'step-brother') return 'male'
   if (rel === 'sister' || rel === 'half-sister' || rel === 'step-sister') return 'female'
 
-  const label = treeMemberRoleLabel(member as TreeMember).toLowerCase()
-  if (/\b(father|grandfather|brother|husband|son)\b/i.test(label)) return 'male'
-  if (/\b(mother|grandmother|sister|wife|daughter)\b/i.test(label)) return 'female'
+  const relationshipLabel = rel ? siblingRelationshipLabel(rel) : ''
+  const label = `${treeMemberRoleLabel(member as TreeMember)} ${relationshipLabel}`
+  return inferGenderFromRoleLabel(label)
+}
 
-  return null
+export function avatarGenderToneForMember(
+  member: TreeMember,
+  viewer?: TreeAvatarViewerContext | null,
+): 'male' | 'female' | 'neutral' {
+  const inferred = inferTreeMemberGender(treeMemberForAvatarDisplay(member, viewer))
+  if (inferred === 'male') return 'male'
+  if (inferred === 'female') return 'female'
+  return 'neutral'
 }
 
 export function roleLabel(role: InviteRole): string {

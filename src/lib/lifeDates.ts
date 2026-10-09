@@ -24,6 +24,17 @@ export function formatLifeYearsLine(
   return null
 }
 
+export function formatDisplayDate(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null
+  const parsed = Date.parse(value.trim())
+  if (Number.isNaN(parsed)) return value.trim()
+  return new Date(parsed).toLocaleDateString(undefined, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function getTodayString(): string {
   const today = new Date()
   const year = today.getFullYear()

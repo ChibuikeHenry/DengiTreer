@@ -5,7 +5,7 @@ const navLinks = [
   { label: 'Features', href: '#features', external: false },
   { label: 'How It Works', href: '#how-it-works', external: false },
   { label: 'Explore', href: '#explore', external: false },
-  { label: 'Pricing', href: '#pricing', external: false },
+  { label: 'Pricing', href: '/pricing', external: true },
   { label: 'About US', href: '/about', external: true },
   { label: 'Blog', href: '#blog', external: false },
 ]
@@ -375,7 +375,7 @@ export default function LandingPage() {
                 <a href="#how-it-works">How it Works</a>
               </li>
               <li>
-                <a href="#pricing">Pricing</a>
+                <Link to="/pricing">Pricing</Link>
               </li>
               <li>
                 <a href="#security">Security</a>
@@ -422,7 +422,7 @@ export default function LandingPage() {
             </ul>
           </div>
 
-          <div className="footer-newsletter" id="pricing">
+          <div className="footer-newsletter" id="newsletter">
             <h3>Newsletter</h3>
             <p>Get tips on preserving family history and growing your network.</p>
             <form

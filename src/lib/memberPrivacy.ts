@@ -46,3 +46,20 @@ export function memberPrivacyShortLabel(value: unknown): string {
   const privacy = parseMemberPrivacy(value)
   return MEMBER_PRIVACY_SHORT[privacy]
 }
+
+/** Pill label on claimed member profiles. */
+export function memberPrivacyScopeLabel(value: unknown): string {
+  const privacy = parseMemberPrivacy(value)
+  switch (privacy) {
+    case 'immediate_family':
+      return 'Immediate Family'
+    case 'family_members':
+      return 'Family Members'
+    case 'network':
+      return 'Network'
+    case 'only_me':
+      return 'Private'
+    default:
+      return 'Family Members'
+  }
+}

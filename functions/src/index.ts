@@ -115,6 +115,33 @@ async function queueInviteEmail(options: {
   })
 }
 
+async function queueShareInviteEmail(options: {
+  to: string
+  inviterName: string
+  personalMessage: string
+  joinUrl: string
+}) {
+  const recipient = String(options.to ?? '').trim().toLowerCase()
+  if (!recipient || !recipient.includes('@')) {
+    throw new HttpsError('invalid-argument', 'Enter a valid email address.')
+  }
+
+  const bodyHtml = escapeHtml(options.personalMessage).replace(/\n/g, '<br>')
+
+  await db.collection('mail').add({
+    to: recipient,
+    message: {
+      subject: `${options.inviterName} invited you to join DengiTree`,
+      html: `
+        <p>${bodyHtml}</p>
+        <p><a href="${options.joinUrl}">Join DengiTree</a></p>
+        <p>If the button does not work, copy this link:<br>${options.joinUrl}</p>
+        <p>— DengiTree</p>
+      `.trim(),
+    },
+  })
+}
+
 type CreateInviteInput = {
   role: InviteRole
   firstName?: string
@@ -292,6 +319,83 @@ export const createShareInvite = onCall(async (request) => {
     memberStatus: 'living',
     personalMessage: data.personalMessage,
   })
+})
+
+export const sendShareInviteEmail = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to send invitations.')
+  }
+
+  const data = (request.data ?? {}) as {
+    token?: string
+    inviteeName?: string
+    inviteeEmail?: string
+    personalMessage?: string
+  }
+
+  const token = String(data.token ?? '').trim()
+  const inviteeName = String(data.inviteeName ?? '').trim()
+  const inviteeEmail = String(data.inviteeEmail ?? '').trim().toLowerCase()
+  const personalMessage = String(data.personalMessage ?? '').trim()
+
+  if (!token) {
+    throw new HttpsError('invalid-argument', 'Missing invitation link.')
+  }
+  if (!inviteeName) {
+    throw new HttpsError('invalid-argument', 'Enter the invitee’s name.')
+  }
+  if (!inviteeEmail.includes('@')) {
+    throw new HttpsError('invalid-argument', 'Enter a valid email address.')
+  }
+  if (!personalMessage) {
+    throw new HttpsError('invalid-argument', 'Add a message for your invitation.')
+  }
+
+  const ref = db.collection('invitations').doc(token)
+  const snap = await ref.get()
+  if (!snap.exists) {
+    throw new HttpsError('not-found', 'Invitation not found.')
+  }
+
+  const invitation = snap.data() as { inviterUid?: string; role?: InviteRole; inviterName?: string }
+  if (invitation.inviterUid !== request.auth.uid) {
+    throw new HttpsError('permission-denied', 'You cannot send this invitation.')
+  }
+  if (invitation.role !== 'member') {
+    throw new HttpsError('invalid-argument', 'This invitation cannot be sent by email.')
+  }
+
+  const nameParts = inviteeName.split(/\s+/).filter(Boolean)
+  const firstName = nameParts[0] ?? ''
+  const lastName = nameParts.length > 1 ? (nameParts[nameParts.length - 1] ?? '') : ''
+  const middleName =
+    nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : ''
+
+  const inviterName =
+    invitation.inviterName ||
+    (typeof request.auth.token.name === 'string' && request.auth.token.name) ||
+    (typeof request.auth.token.email === 'string' && request.auth.token.email) ||
+    'A family member'
+
+  const joinUrl = `${APP_ORIGIN}/join/${token}`
+
+  await ref.update({
+    inviteeEmail,
+    inviteeName,
+    inviteeFirstName: firstName || null,
+    inviteeMiddleName: middleName || null,
+    inviteeLastName: lastName || null,
+    personalMessage,
+  })
+
+  await queueShareInviteEmail({
+    to: inviteeEmail,
+    inviterName,
+    personalMessage,
+    joinUrl,
+  })
+
+  return { ok: true }
 })
 
 export const getInvitationByToken = onCall(async (request) => {
@@ -511,6 +615,7 @@ type UpdatePendingMemberInput = {
   parentKind?: ParentKind
   parentSlot?: ParentSlot
   inviteeEmail?: string | null
+  gender?: string | null
 }
 
 export const updatePendingFamilyMemberProfile = onCall(async (request) => {
@@ -542,6 +647,8 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
   const dateOfDeath = data.dateOfDeath === undefined ? undefined : String(data.dateOfDeath ?? '').trim() || null
   const memberStatus = data.memberStatus === 'deceased' ? 'deceased' : 'living'
   const privacy = data.privacy ? parseMemberPrivacy(data.privacy) : undefined
+  const gender =
+    data.gender === undefined ? undefined : String(data.gender ?? '').trim() || null
 
   const ref = db.collection('invitations').doc(token)
   const uid = request.auth.uid
@@ -616,6 +723,9 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
     if (privacy !== undefined) {
       invitationUpdate.privacy = privacy
     }
+    if (gender !== undefined) {
+      invitationUpdate.gender = gender
+    }
     if (doc.role === 'parent') {
       if (data.parentKind !== undefined) {
         invitationUpdate.parentKind = parseParentKind(data.parentKind)
@@ -652,6 +762,9 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       }
       if (privacy !== undefined) {
         familyUpdate.privacy = privacy
+      }
+      if (gender !== undefined) {
+        familyUpdate.gender = gender
       }
       if (doc.role === 'parent') {
         if (data.parentKind !== undefined) {

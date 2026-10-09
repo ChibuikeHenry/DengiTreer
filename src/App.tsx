@@ -3,11 +3,13 @@ import ProtectedRoute from './components/ProtectedRoute'
 import { AuthProvider } from './context/AuthContext'
 import AboutUsPage from './pages/AboutUsPage'
 import PricingPage from './pages/PricingPage'
+import ConcessionRequestPage from './pages/ConcessionRequestPage'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import DiscoveriesPage from './pages/DiscoveriesPage'
 import JoinInvitePage from './pages/JoinInvitePage'
+import ClaimedMemberProfilePage from './pages/ClaimedMemberProfilePage'
 import FamilyTreePage from './pages/FamilyTreePage'
 import HomePage, { HomeDashboard } from './pages/HomePage'
 import InvitationsPage from './pages/InvitationsPage'
@@ -26,6 +28,7 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/about" element={<AboutUsPage />} />
           <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/concession" element={<ConcessionRequestPage />} />
           <Route path="/features" element={<Navigate to="/#features" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
@@ -40,6 +43,7 @@ export default function App() {
           >
             <Route index element={<HomePage />} />
             <Route path="tree" element={<FamilyTreePage />} />
+            <Route path="member/:memberId" element={<ClaimedMemberProfilePage />} />
             <Route path="people" element={<PeoplePage />} />
             <Route path="invitations" element={<InvitationsPage />} />
             <Route path="discoveries" element={<DiscoveriesPage />} />
@@ -47,6 +51,8 @@ export default function App() {
             <Route path="photos" element={<PhotosPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="premium" element={<PricingPage embedded />} />
+            <Route path="concession" element={<ConcessionRequestPage embedded />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

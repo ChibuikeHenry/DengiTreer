@@ -25,6 +25,7 @@ export type MemberModalKind =
 export type DashboardContext = {
   openModal: (kind: MemberModalKind) => void
   treeVersion: number
+  setTreeImmersive: (active: boolean) => void
 }
 
 export function HomeDashboard() {
@@ -32,6 +33,7 @@ export function HomeDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeModal, setActiveModal] = useState<MemberModalKind | null>(null)
   const [treeVersion, setTreeVersion] = useState(0)
+  const [treeImmersive, setTreeImmersive] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -61,8 +63,11 @@ export function HomeDashboard() {
       sidebarOpen={sidebarOpen}
       onToggleSidebar={() => setSidebarOpen((v) => !v)}
       onCloseSidebar={closeSidebar}
+      treeImmersive={treeImmersive}
     >
-      <Outlet context={{ openModal, treeVersion } satisfies DashboardContext} />
+      <Outlet
+        context={{ openModal, treeVersion, setTreeImmersive } satisfies DashboardContext}
+      />
       <AddYourselfModal
         open={activeModal === 'yourself'}
         onClose={closeModal}
@@ -164,6 +169,7 @@ export default function HomePage() {
         navigate('/home/invitations')
         break
       case 'premium':
+        navigate('/home/premium')
         break
     }
   }

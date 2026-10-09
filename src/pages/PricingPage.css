@@ -7,6 +7,37 @@
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+.pricing-page-embedded {
+  min-height: auto;
+  background: transparent;
+}
+
+.pricing-embedded-bar {
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1.5rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.pricing-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #34611d;
+  text-decoration: none;
+}
+
+.pricing-back-link:hover {
+  text-decoration: underline;
+}
+
+.pricing-page-embedded .pricing-main {
+  padding-top: 0.5rem;
+}
+
 .pricing-main {
   max-width: 1180px;
   width: 100%;
@@ -65,6 +96,7 @@
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
   transition: background 0.15s ease, transform 0.15s ease;
 }
 

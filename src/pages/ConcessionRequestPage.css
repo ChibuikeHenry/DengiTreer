@@ -1,0 +1,183 @@
+.home.concession-page {
+  max-width: 720px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.concession-back {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: var(--dash-brand);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.concession-card {
+  background: var(--dash-card);
+}
+
+.concession-page-marketing {
+  min-height: 100vh;
+  width: 100%;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: #f6faf3;
+  color: #1a2b10;
+}
+
+.concession-marketing-main {
+  flex: 1;
+  width: 100%;
+  max-width: min(920px, 100%);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 2.75rem) clamp(1.25rem, 4vw, 2rem) 3.5rem;
+  box-sizing: border-box;
+}
+
+.concession-card-standalone {
+  width: 100%;
+  background: var(--dash-card, #e4eedc);
+  border-radius: 20px;
+  padding: clamp(1.35rem, 3vw, 2.25rem);
+  border: 1px solid #d4e0cc;
+  box-sizing: border-box;
+}
+
+.concession-head h1 {
+  margin: 0 0 0.65rem;
+  font-size: clamp(1.45rem, 3vw, 1.75rem);
+  font-weight: 800;
+  color: var(--dash-ink);
+}
+
+.concession-head p {
+  margin: 0 0 1.35rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--dash-muted);
+}
+
+.concession-eligibility {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+  border-radius: 12px;
+  background: #dce8d4;
+  border: 1px solid #c5d6b8;
+}
+
+.concession-eligibility-icon {
+  flex-shrink: 0;
+  color: var(--dash-brand);
+  margin-top: 0.1rem;
+}
+
+.concession-eligibility p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #2d4520;
+}
+
+.concession-form {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.concession-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.concession-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--dash-ink);
+}
+
+.concession-field input,
+.concession-field textarea,
+.concession-select .select-trigger {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--dash-ink);
+  border-radius: 12px;
+  border: 1px solid #dce4d6;
+  background: #fff;
+}
+
+.concession-field input,
+.concession-field textarea {
+  padding: 0.85rem 1rem;
+}
+
+.concession-field textarea {
+  min-height: 7.5rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.concession-select .select-trigger {
+  padding: 0.85rem 1rem;
+}
+
+.concession-contact-row {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .concession-contact-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.concession-submit {
+  width: 100%;
+  margin-top: 0.35rem;
+  border: none;
+  border-radius: 999px;
+  padding: 0.9rem 1.25rem;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  background: var(--dash-brand);
+  color: #fff;
+  cursor: pointer;
+}
+
+.concession-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.concession-success {
+  padding: 1.25rem 1rem;
+  border-radius: 14px;
+  background: #eef5e8;
+  border: 1px solid #d4e3c8;
+  text-align: center;
+}
+
+.concession-success p {
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: #2b501e;
+  font-weight: 600;
+}
+
+.concession-success-link {
+  font-weight: 700;
+  color: var(--dash-brand);
+}

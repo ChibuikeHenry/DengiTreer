@@ -100,6 +100,7 @@
   position: relative;
   display: flex;
   justify-content: center;
+  overflow: visible;
 }
 
 /* Horizontal line: avatar edge -> avatar edge, at avatar centre.
@@ -125,35 +126,28 @@
   left: 50%;
   transform: translateX(-50%);
   width: 3px;
-  height: calc(var(--ped-node-h) - var(--ped-av) / 2 + var(--ped-rowgap));
+  height: calc(var(--ped-node-h) + var(--ped-rowgap));
+  margin-bottom: calc(var(--ped-av) / -2 - var(--ped-rowgap));
   background: var(--ped-line);
   pointer-events: none;
   z-index: 0;
 }
 
-/* ---------- generation stems (top level only) ---------- */
+/* ---------- vertical links between generations ---------- */
 
-.ped-col > .ped-stem {
+.ped-vlink {
+  flex: none;
   width: 3px;
-  height: var(--ped-rowgap);
-  margin: 0 auto;
-  background: var(--ped-line);
-}
-
-/* starts on the line joining the couple, ends on the next row's avatar line */
-.ped-col > .ped-stem-from-join {
   height: calc(var(--ped-node-h) + var(--ped-rowgap));
   margin-top: calc(var(--ped-av) / 2 - var(--ped-node-h));
   margin-bottom: calc(var(--ped-av) / -2);
+  background: var(--ped-line);
 }
 
-/* dashed, from an "Add Grandparent" circle down to the couple's joining line */
-.ped-col > .ped-stem-to-join {
-  height: calc(var(--ped-rowgap) + var(--ped-av) / 2);
-  margin-bottom: calc(var(--ped-av) / -2);
+.ped-vlink-dashed {
+  width: 0;
   background: none;
   border-left: 3px dashed var(--ped-line);
-  width: 0;
 }
 
 /* ---------- side add circles with dashed connectors ---------- */
@@ -164,7 +158,14 @@
   left: calc(100% + var(--ped-gap));
 }
 
-.ped-anchor { position: relative; }
+.ped-anchor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: max-content;
+  margin-inline: auto;
+}
 
 .ped-add.ped-add-sibling {
   position: absolute;
@@ -190,6 +191,45 @@
 }
 
 /* ---------- you / spouse ---------- */
+
+.ped-blood-group {
+  position: relative;
+  z-index: 1;
+  width: max-content;
+  margin-inline: auto;
+}
+
+/* Parent generation → sibling / you row (centred on the blood row, not the column). */
+.ped-drop-to-blood {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(-1 * (var(--ped-node-h) + var(--ped-rowgap)) + var(--ped-av) / 2);
+  width: 3px;
+  height: calc(var(--ped-node-h) + var(--ped-rowgap));
+  background: var(--ped-line);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Horizontal sibling bar at avatar-centre height. */
+.ped-has-sibling-bus::after {
+  content: '';
+  position: absolute;
+  top: calc(var(--ped-av) / 2 - 1.5px);
+  left: calc(var(--ped-w) / 2);
+  right: calc(var(--ped-w) / 2);
+  height: 3px;
+  background: var(--ped-line);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ped-has-sibling-bus > .ped-row > .ped-person,
+.ped-has-sibling-bus > .ped-row > .ped-you-slot {
+  position: relative;
+  z-index: 1;
+}
 
 .ped-you-slot {
   display: flex;
@@ -243,7 +283,8 @@
 
 /* from the join (avatar centre) past the labels to the bracket */
 .ped-kids .ped-stem-long {
-  height: calc(var(--ped-node-h) - var(--ped-av) / 2 + var(--ped-rowgap));
+  height: calc(var(--ped-node-h) + var(--ped-rowgap));
+  margin-top: calc(var(--ped-av) / -2);
 }
 
 .ped-kidrow { display: flex; }

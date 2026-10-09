@@ -26,7 +26,9 @@ export default function LoginPage() {
   const [info, setInfo] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const from = (location.state as { from?: string } | null)?.from
+  const authState = location.state as { from?: string; signedOut?: boolean } | null
+  const signedOut = authState?.signedOut === true
+  const from = authState?.from
   const redirectTo = from && from !== '/login' ? from : '/home'
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export default function LoginPage() {
     )
   }
 
-  if (user) {
+  if (user && !signedOut) {
     return <Navigate to={redirectTo} replace />
   }
 

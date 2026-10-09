@@ -11,24 +11,28 @@ const billingPrices: Record<BillingCycle, { amount: string; label: string; perio
   yearly: { amount: '₦5,000', label: '/Yearly', period: '/year' },
 }
 
-export default function PricingPage() {
+type PricingPageProps = {
+  /** When true, shown inside the dashboard (no marketing header). */
+  embedded?: boolean
+}
+
+export default function PricingPage({ embedded = false }: PricingPageProps) {
   const navigate = useNavigate()
   const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
-  const [showConcessionModal, setShowConcessionModal] = useState(false)
-  const [concessionEmail, setConcessionEmail] = useState('')
-  const [concessionNote, setConcessionNote] = useState('')
-  const [concessionSent, setConcessionNoteSent] = useState(false)
-
   const activePricing = billingPrices[billingCycle]
-
-  function handleConcessionSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setConcessionNoteSent(true)
-  }
+  const concessionTo = embedded ? '/home/concession' : '/concession'
 
   return (
-    <div className="pricing-page">
-      <MarketingHeader />
+    <div className={`pricing-page${embedded ? ' pricing-page-embedded' : ''}`}>
+      {embedded ? (
+        <header className="pricing-embedded-bar">
+          <Link to="/home" className="pricing-back-link">
+            ← Back to Home
+          </Link>
+        </header>
+      ) : (
+        <MarketingHeader />
+      )}
 
       <main className="pricing-main">
         <div className="pricing-hero">
@@ -45,13 +49,9 @@ export default function PricingPage() {
                 full family history. DengiTree has a plan for you.
               </p>
             </div>
-            <button
-              type="button"
-              className="btn-concession"
-              onClick={() => setShowConcessionModal(true)}
-            >
+            <Link to={concessionTo} className="btn-concession">
               Need a Concession?
-            </button>
+            </Link>
           </div>
 
           <div className="pricing-grid">
@@ -87,8 +87,11 @@ export default function PricingPage() {
                   <span className="price-period">/ 7 days</span>
                 </div>
 
-                <Link to="/signup" className="btn-card-action btn-free">
-                  Get Started
+                <Link
+                  to={embedded ? '/home/tree' : '/signup'}
+                  className="btn-card-action btn-free"
+                >
+                  {embedded ? 'Continue on Free' : 'Get Started'}
                 </Link>
 
                 <ul className="card-features">
@@ -146,7 +149,11 @@ export default function PricingPage() {
                     <button
                       type="button"
                       className="btn-card-action btn-upgrade"
-                      onClick={() => navigate('/signup?plan=premium')}
+                      onClick={() =>
+                        embedded
+                          ? navigate('/home/settings?plan=premium')
+                          : navigate('/signup?plan=premium')
+                      }
                     >
                       Upgrade to Premium
                     </button>
@@ -227,84 +234,6 @@ export default function PricingPage() {
         </div>
       </main>
 
-      {/* Concession Modal */}
-      {showConcessionModal ? (
-        <div
-          className="modal-backdrop"
-          onClick={() => setShowConcessionModal(false)}
-          role="presentation"
-        >
-          <div
-            className="modal-panel concession-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-          >
-            <button
-              type="button"
-              className="modal-close"
-              onClick={() => setShowConcessionModal(false)}
-            >
-              ✕
-            </button>
-            <h2>Request a Concession</h2>
-            <p>
-              We believe every family should be able to preserve their story. Tell us about your
-              situation and we&apos;ll be in touch.
-            </p>
-
-            {concessionSent ? (
-              <div className="concession-success">
-                <p>✓ Thank you for reaching out! We will review your request and contact you soon.</p>
-                <button
-                  type="button"
-                  className="btn-modal-primary"
-                  onClick={() => {
-                    setShowConcessionModal(false)
-                    setConcessionNoteSent(false)
-                  }}
-                >
-                  Done
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleConcessionSubmit}>
-                <label className="field">
-                  <span>Your Email Address</span>
-                  <input
-                    type="email"
-                    required
-                    placeholder="Enter your email"
-                    value={concessionEmail}
-                    onChange={(e) => setConcessionEmail(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Why are you requesting a concession?</span>
-                  <textarea
-                    rows={4}
-                    required
-                    placeholder="Share a brief note about your request"
-                    value={concessionNote}
-                    onChange={(e) => setConcessionNote(e.target.value)}
-                  />
-                </label>
-                <div className="modal-actions">
-                  <button
-                    type="button"
-                    className="btn-modal-outline"
-                    onClick={() => setShowConcessionModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn-modal-primary">
-                    Submit Request
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

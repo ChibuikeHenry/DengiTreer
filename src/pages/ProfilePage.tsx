@@ -156,6 +156,7 @@ export default function ProfilePage() {
             photoURL={photo.previewUrl ?? photoURL}
             name={displayName}
             size="lg"
+            gender={gender}
             className="profile-hero-avatar"
           />
           <div>

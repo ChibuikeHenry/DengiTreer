@@ -3,8 +3,12 @@ import { Link } from 'react-router-dom'
 import TreePersonDetails from './TreePersonDetails'
 import { profileFirstName } from '../lib/userProfile'
 import {
-  inferTreeMemberGender,
+  avatarGenderToneForMember,
+  buildTreeAvatarViewer,
+  normalizeTreeMemberGender,
+  treeMemberForAvatarDisplay,
   treeMemberRoleLabel,
+  type TreeAvatarViewerContext,
   type TreeMember,
 } from '../lib/familyTreeMembers'
 import type { AvatarGenderTone } from './ProfileAvatar'
@@ -17,11 +21,11 @@ function roleLine(roleText: string, memberStatus: 'living' | 'deceased'): string
   return memberStatus === 'deceased' ? `${roleText} (Deceased)` : roleText
 }
 
-function memberAvatarTone(member: TreeMember): AvatarGenderTone {
-  const inferred = inferTreeMemberGender(member)
-  if (inferred === 'male') return 'male'
-  if (inferred === 'female') return 'female'
-  return 'neutral'
+function memberAvatarTone(
+  member: TreeMember,
+  viewer: TreeAvatarViewerContext | null,
+): AvatarGenderTone {
+  return avatarGenderToneForMember(member, viewer)
 }
 
 /** Step partners sit outside the biological couple so the stem hits father–mother. */
@@ -48,10 +52,14 @@ function orderHousehold(members: TreeMember[]): TreeMember[] {
 
 function PedigreeMemberNode({
   member,
+  viewer,
   onSelectMember,
+  exploreHint = false,
 }: {
   member: TreeMember
+  viewer: TreeAvatarViewerContext | null
   onSelectMember?: (member: TreeMember) => void
+  exploreHint?: boolean
 }) {
   const yearsLabel = formatLifeYearsLine(
     member.dateOfBirth,
@@ -60,6 +68,7 @@ function PedigreeMemberNode({
   )
 
   const isClickable = Boolean(onSelectMember)
+  const displayMember = treeMemberForAvatarDisplay(member, viewer)
 
   return (
     <div
@@ -69,9 +78,11 @@ function PedigreeMemberNode({
       title={
         member.inviterCanEdit
           ? 'Click to edit member details'
-          : member.profileClaimed
-            ? 'Profile claimed · View only'
-            : undefined
+          : exploreHint && (member.joinedUid || member.id.startsWith('inviter-'))
+            ? 'Click to explore their family tree'
+            : member.profileClaimed
+              ? 'Click to view claimed profile'
+              : undefined
       }
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
@@ -95,10 +106,25 @@ function PedigreeMemberNode({
         variant="pedigree"
         roleLabel={roleLine(treeMemberRoleLabel(member), member.memberStatus)}
         yearsLabel={yearsLabel}
-        avatarGenderTone={memberAvatarTone(member)}
+        avatarGenderTone={memberAvatarTone(member, viewer)}
+        avatarGender={displayMember.gender}
       />
     </div>
   )
+}
+
+/** Index of the child node that completes the primary father–mother pair (stem drops from that join). */
+function primaryCoupleJoinBeforeIndex(members: TreeMember[]): number | null {
+  if (members.length < 2) return null
+  const fatherIdx = members.findIndex(
+    (m) => m.parentSlot === 'father' && m.parentKind !== 'step',
+  )
+  if (fatherIdx === -1) return members.length === 2 ? 1 : null
+  const motherIdx = members.findIndex(
+    (m, i) => i > fatherIdx && m.parentSlot === 'mother' && m.parentKind !== 'step',
+  )
+  if (motherIdx === fatherIdx + 1) return motherIdx
+  return members.length === 2 ? 1 : null
 }
 
 /** Horizontal line between two neighbours. `childrenDrop` hangs a stem + children off its middle. */
@@ -122,13 +148,14 @@ function Join({
   )
 }
 
-/**
- * Vertical line between generations.
- * - from-join: starts on the line joining a couple (not below their labels)
- * - to-join:   dashed, from an "Add" circle down to a couple's joining line
- */
-function Stem({ mode }: { mode?: 'from-join' | 'to-join' }) {
-  return <div className={`ped-stem${mode ? ` ped-stem-${mode}` : ''}`} aria-hidden="true" />
+/** Vertical link between generations (avatar centre to avatar centre on the next row). */
+function VLink({ dashed = false }: { dashed?: boolean }) {
+  return (
+    <div
+      className={`ped-vlink${dashed ? ' ped-vlink-dashed' : ''}`}
+      aria-hidden="true"
+    />
+  )
 }
 
 function AddCircle({
@@ -152,13 +179,20 @@ function AddCircle({
 
 function PartnerRow({
   members,
+  viewer,
   onSelectMember,
-  hasStems = false,
+  coupleStemDown = false,
+  exploreHint = false,
 }: {
   members: TreeMember[]
+  viewer: TreeAvatarViewerContext | null
   onSelectMember?: (member: TreeMember) => void
-  hasStems?: boolean
+  /** Drop a vertical stem from the primary couple’s join to the next generation. */
+  coupleStemDown?: boolean
+  exploreHint?: boolean
 }) {
+  const stemBeforeIndex = coupleStemDown ? primaryCoupleJoinBeforeIndex(members) : null
+
   return (
     <div className="ped-row">
       {members.map((member, index) => {
@@ -168,8 +202,15 @@ function PartnerRow({
         )
         return (
           <Fragment key={member.id}>
-            {index > 0 ? <Join hasStem={hasStems} isStep={isStep} /> : null}
-            <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
+            {index > 0 ? (
+              <Join hasStem={stemBeforeIndex === index} isStep={isStep} />
+            ) : null}
+            <PedigreeMemberNode
+              member={member}
+              viewer={viewer}
+              onSelectMember={onSelectMember}
+              exploreHint={exploreHint}
+            />
           </Fragment>
         )
       })}
@@ -180,23 +221,36 @@ function PartnerRow({
 /** Children hang off a horizontal bracket, each with its own short drop. */
 function ChildRow({
   members,
+  viewer,
   openModal,
   onSelectMember,
+  allowAdds = true,
+  exploreHint = false,
 }: {
   members: TreeMember[]
+  viewer: TreeAvatarViewerContext | null
   openModal: DashboardContext['openModal']
   onSelectMember?: (member: TreeMember) => void
+  allowAdds?: boolean
+  exploreHint?: boolean
 }) {
   return (
     <div className="ped-kidrow">
       {members.map((member) => (
         <div key={member.id} className="ped-kid">
-          <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
+          <PedigreeMemberNode
+            member={member}
+            viewer={viewer}
+            onSelectMember={onSelectMember}
+            exploreHint={exploreHint}
+          />
         </div>
       ))}
-      <div className="ped-kid">
-        <AddCircle label="Add Child" onClick={() => openModal('child')} />
-      </div>
+      {allowAdds ? (
+        <div className="ped-kid">
+          <AddCircle label="Add Child" onClick={() => openModal('child')} />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -211,7 +265,13 @@ export default function PedigreeTreeDiagram({
   selfPrivacy,
   selfDateOfBirth,
   selfPositionLabel = null,
+  selfGender = null,
+  viewerUid = null,
   onSelectMember,
+  allowAdds = true,
+  centerProfileHref = '/home/profile',
+  centerRoleLabel,
+  exploreHint = false,
 }: {
   members: TreeMember[]
   openModal: DashboardContext['openModal']
@@ -222,7 +282,13 @@ export default function PedigreeTreeDiagram({
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
   selfPositionLabel?: string | null
+  selfGender?: string | null
+  viewerUid?: string | null
   onSelectMember?: (member: TreeMember) => void
+  allowAdds?: boolean
+  centerProfileHref?: string | null
+  centerRoleLabel?: string
+  exploreHint?: boolean
 }) {
   const greatGrandparents = orderHousehold(members.filter((m) => m.role === 'great-grandparent'))
   const grandparents = orderHousehold(members.filter((m) => m.role === 'grandparent'))
@@ -236,12 +302,37 @@ export default function PedigreeTreeDiagram({
     ? profileFirstName(selfDisplayName, 'You')
     : 'YOU'
   const selfYears = formatLifeYearsLine(selfDateOfBirth, null, 'living')
-  const selfAvatarTone: AvatarGenderTone = 'you'
+  const selfNormalizedGender = normalizeTreeMemberGender(selfGender)
+  const selfAvatarTone: AvatarGenderTone =
+    selfNormalizedGender === 'female'
+      ? 'female'
+      : selfNormalizedGender === 'male'
+        ? 'male'
+        : selfPositionLabel && /\b(mother|wife|grandmother|sister|daughter)\b/i.test(selfPositionLabel)
+          ? 'female'
+          : selfPositionLabel && /\b(father|husband|grandfather|brother|son)\b/i.test(selfPositionLabel)
+            ? 'male'
+            : 'you'
+
+  const viewer = buildTreeAvatarViewer({
+    uid: viewerUid,
+    gender: selfGender,
+    photoURL: selfPhotoURL,
+    displayName: selfDisplayName,
+    positionLabel: selfPositionLabel,
+  })
 
   const kids = (inline: boolean) => (
     <div className={`ped-kids${inline ? ' is-inline' : ''}`}>
       <div className={`ped-stem${inline ? '' : ' ped-stem-long'}`} aria-hidden="true" />
-      <ChildRow members={children} openModal={openModal} onSelectMember={onSelectMember} />
+      <ChildRow
+        members={children}
+        viewer={viewer}
+        openModal={openModal}
+        onSelectMember={onSelectMember}
+        allowAdds={allowAdds}
+        exploreHint={exploreHint}
+      />
     </div>
   )
 
@@ -254,11 +345,13 @@ export default function PedigreeTreeDiagram({
             <div className="ped-slot">
               <PartnerRow
                 members={greatGrandparents}
+                viewer={viewer}
                 onSelectMember={onSelectMember}
-                hasStems={greatGrandparents.length > 1}
+                coupleStemDown={greatGrandparents.length > 1 && grandparents.length > 0}
+                exploreHint={exploreHint}
               />
             </div>
-            {greatGrandparents.length === 1 ? <Stem /> : null}
+            {greatGrandparents.length === 1 && grandparents.length > 0 ? <VLink /> : null}
           </>
         ) : null}
 
@@ -267,13 +360,15 @@ export default function PedigreeTreeDiagram({
           {grandparents.length > 0 ? (
             <PartnerRow
               members={grandparents}
+              viewer={viewer}
               onSelectMember={onSelectMember}
-              hasStems={grandparents.length > 1}
+              coupleStemDown={grandparents.length > 1 && parents.length > 0}
+              exploreHint={exploreHint}
             />
-          ) : (
+          ) : allowAdds ? (
             <AddCircle label="Add Grandparent" onClick={() => openModal('grandparent')} />
-          )}
-          {grandparents.length > 0 ? (
+          ) : null}
+          {allowAdds && grandparents.length > 0 ? (
             <AddCircle
               className="ped-add-side"
               label="Add Grandparent"
@@ -282,10 +377,9 @@ export default function PedigreeTreeDiagram({
           ) : null}
         </div>
 
-        {grandparents.length === 1 ? (
-          <Stem />
-        ) : parents.length === 0 && grandparents.length > 0 ? (
-          <Stem mode="to-join" />
+        {grandparents.length === 1 && parents.length > 0 ? <VLink /> : null}
+        {parents.length === 0 && grandparents.length > 0 ? (
+          <VLink dashed={grandparents.length > 1} />
         ) : null}
 
         {/* parents */}
@@ -293,13 +387,15 @@ export default function PedigreeTreeDiagram({
           {parents.length > 0 ? (
             <PartnerRow
               members={parents}
+              viewer={viewer}
               onSelectMember={onSelectMember}
-              hasStems={parents.length > 1}
+              coupleStemDown={false}
+              exploreHint={exploreHint}
             />
-          ) : (
+          ) : allowAdds ? (
             <AddCircle label="Add Parent" onClick={() => openModal('parent')} />
-          )}
-          {parents.length > 0 ? (
+          ) : null}
+          {allowAdds && parents.length > 0 ? (
             <AddCircle
               className="ped-add-side"
               label="Add Parent"
@@ -308,41 +404,78 @@ export default function PedigreeTreeDiagram({
           ) : null}
         </div>
 
-        {parents.length === 1 ? <Stem /> : null}
-
         {/* siblings + you + spouse + children */}
         <div className="ped-anchor">
-          <div className="ped-row ped-blood">
-            {siblings.map((member, index) => (
-              <Fragment key={member.id}>
-                {index > 0 ? <Join /> : null}
-                <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
-              </Fragment>
-            ))}
-            {siblings.length > 0 ? <Join /> : null}
-            <div className="ped-you-slot">
-              <Link to="/home/profile" className="ped-person ped-person-self">
-                <TreePersonDetails
-                  photoURL={selfPhotoURL}
-                  displayName={selfDisplayName}
-                  nameLabel={selfHasProfileName ? selfDisplayName : selfNameLabel}
-                  bio={selfBio}
-                  privacy={selfPrivacy}
-                  avatarClassName="tree-person-avatar-you"
-                  variant="pedigree"
-                  roleLabel={
-                    selfPositionLabel
-                      ? roleLine(selfPositionLabel, 'living')
-                      : selfHasProfileName
-                        ? roleLine('You', 'living')
-                        : undefined
-                  }
-                  yearsLabel={selfHasProfileName ? selfYears : null}
-                  youBadge={!selfHasProfileName}
-                  avatarGenderTone={selfAvatarTone}
+          <div
+            className={`ped-blood-group${siblings.length > 0 ? ' ped-has-sibling-bus' : ''}`}
+          >
+            {parents.length > 0 ? (
+              <div className="ped-drop-to-blood" aria-hidden="true" />
+            ) : null}
+            <div className="ped-row ped-blood">
+              {siblings.map((member) => (
+                <PedigreeMemberNode
+                  key={member.id}
+                  member={member}
+                  viewer={viewer}
+                  onSelectMember={onSelectMember}
+                  exploreHint={exploreHint}
                 />
-              </Link>
+              ))}
+              <div className="ped-you-slot">
+              {centerProfileHref ? (
+                <Link to={centerProfileHref} className="ped-person ped-person-self">
+                  <TreePersonDetails
+                    photoURL={selfPhotoURL}
+                    displayName={selfDisplayName}
+                    nameLabel={selfHasProfileName ? selfDisplayName : selfNameLabel}
+                    bio={selfBio}
+                    privacy={selfPrivacy}
+                    avatarClassName={
+                      selfAvatarTone === 'you' ? 'tree-person-avatar-you' : undefined
+                    }
+                    variant="pedigree"
+                    roleLabel={
+                      centerRoleLabel
+                        ? roleLine(centerRoleLabel, 'living')
+                        : selfPositionLabel
+                          ? roleLine(selfPositionLabel, 'living')
+                          : selfHasProfileName
+                            ? roleLine('You', 'living')
+                            : undefined
+                    }
+                    yearsLabel={selfHasProfileName ? selfYears : null}
+                    youBadge={!selfHasProfileName && !selfPhotoURL && !centerRoleLabel}
+                    avatarGenderTone={selfAvatarTone}
+                    avatarGender={selfGender}
+                  />
+                </Link>
+              ) : (
+                <div className="ped-person ped-person-self">
+                  <TreePersonDetails
+                    photoURL={selfPhotoURL}
+                    displayName={selfDisplayName}
+                    nameLabel={selfHasProfileName ? selfDisplayName : selfNameLabel}
+                    bio={selfBio}
+                    privacy={selfPrivacy}
+                    avatarClassName={
+                      selfAvatarTone === 'you' ? 'tree-person-avatar-you' : undefined
+                    }
+                    variant="pedigree"
+                    roleLabel={
+                      centerRoleLabel
+                        ? roleLine(centerRoleLabel, 'living')
+                        : undefined
+                    }
+                    yearsLabel={selfHasProfileName ? selfYears : null}
+                    youBadge={false}
+                    avatarGenderTone={selfAvatarTone}
+                    avatarGender={selfGender}
+                  />
+                </div>
+              )}
               {spouses.length === 0 ? kids(true) : null}
+              </div>
             </div>
           </div>
 
@@ -351,18 +484,27 @@ export default function PedigreeTreeDiagram({
             {spouses.map((member, index) => (
               <Fragment key={member.id}>
                 {index > 0 ? <Join /> : null}
-                <PedigreeMemberNode member={member} onSelectMember={onSelectMember} />
+                <PedigreeMemberNode
+                  member={member}
+                  viewer={viewer}
+                  onSelectMember={onSelectMember}
+                  exploreHint={exploreHint}
+                />
               </Fragment>
             ))}
             {spouses.length > 0 ? <Join /> : null}
-            <AddCircle label="Add Spouse" onClick={() => openModal('spouse')} />
+            {allowAdds ? (
+              <AddCircle label="Add Spouse" onClick={() => openModal('spouse')} />
+            ) : null}
           </div>
 
-          <AddCircle
-            className="ped-add-sibling"
-            label="Add Sibling"
-            onClick={() => openModal('sibling')}
-          />
+          {allowAdds ? (
+            <AddCircle
+              className="ped-add-sibling"
+              label="Add Sibling"
+              onClick={() => openModal('sibling')}
+            />
+          ) : null}
         </div>
       </div>
     </div>

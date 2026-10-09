@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useOutletContext } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
+import ExploreTreeMemberModal from '../components/ExploreTreeMemberModal'
 import ProfileAvatar from '../components/ProfileAvatar'
 import PedigreeTreeDiagram from '../components/PedigreeTreeDiagram'
 import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
 import {
   computeTreeStats,
-  inferTreeMemberGender,
+  avatarGenderToneForMember,
+  buildTreeAvatarViewer,
   memberRelationshipLabel,
   positionLabel,
   roleLabel,
@@ -21,12 +23,21 @@ import {
   type MemberPrivacy,
 } from '../lib/memberPrivacy'
 import {
+  fetchUserProfile,
   hasSavedProfileName,
   profileFullName,
   resolveUserProfileForForm,
 } from '../lib/userProfile'
 import { hasSelfOnTree } from '../lib/treeStorage'
-import type { DashboardContext } from './HomePage'
+import type { DashboardContext, MemberModalKind } from './HomePage'
+
+const ADD_MEMBER_MENU: { label: string; kind: MemberModalKind }[] = [
+  { label: 'Grand Parents', kind: 'grandparent' },
+  { label: 'Parents', kind: 'parent' },
+  { label: 'Siblings', kind: 'sibling' },
+  { label: 'Spouse', kind: 'spouse' },
+  { label: 'Child', kind: 'child' },
+]
 
 function StarterDiagram({
   openModal,
@@ -38,7 +49,14 @@ function StarterDiagram({
   selfPrivacy,
   selfDateOfBirth,
   selfPositionLabel,
+  selfGender,
+  viewerUid,
   onSelectMember,
+  allowAdds,
+  centerProfileHref,
+  centerRoleLabel,
+  exploreHint,
+  fullTreeView,
 }: {
   openModal: DashboardContext['openModal']
   members: TreeMember[]
@@ -49,10 +67,19 @@ function StarterDiagram({
   selfPrivacy: MemberPrivacy
   selfDateOfBirth: string | null
   selfPositionLabel: string | null
+  selfGender?: string | null
+  viewerUid?: string | null
   onSelectMember?: (member: TreeMember) => void
+  allowAdds?: boolean
+  centerProfileHref?: string | null
+  centerRoleLabel?: string
+  exploreHint?: boolean
+  fullTreeView?: boolean
 }) {
   return (
-    <div className="ft-canvas ft-canvas-starter">
+    <div
+      className={`ft-canvas ft-canvas-starter${fullTreeView ? ' ft-canvas-immersive' : ''}`}
+    >
       <div className="ft-gender-legend" aria-label="Gender legend">
         <span className="ft-gender-legend-item">
           <span className="ft-gender-dot ft-gender-dot-male" aria-hidden="true" />
@@ -73,7 +100,13 @@ function StarterDiagram({
         selfPrivacy={selfPrivacy}
         selfDateOfBirth={selfDateOfBirth}
         selfPositionLabel={selfPositionLabel}
+        selfGender={selfGender}
+        viewerUid={viewerUid}
         onSelectMember={onSelectMember}
+        allowAdds={allowAdds}
+        centerProfileHref={centerProfileHref}
+        centerRoleLabel={centerRoleLabel}
+        exploreHint={exploreHint}
       />
     </div>
   )
@@ -81,71 +114,166 @@ function StarterDiagram({
 
 export default function FamilyTreePage() {
   const { user } = useAuth()
-  const { openModal, treeVersion } = useOutletContext<DashboardContext>()
+  const { openModal, treeVersion, setTreeImmersive } = useOutletContext<DashboardContext>()
   const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const exploreRootUid = searchParams.get('explore')?.trim() || null
+  const isExploreView = Boolean(exploreRootUid)
   const [view, setView] = useState<'tree' | 'list'>('tree')
   const [members, setMembers] = useState<TreeMember[]>([])
-  const [selfPhotoURL, setSelfPhotoURL] = useState<string | null>(null)
-  const [selfName, setSelfName] = useState('')
-  const [selfHasProfileName, setSelfHasProfileName] = useState(false)
-  const [selfBio, setSelfBio] = useState('')
-  const [selfPrivacy, setSelfPrivacy] = useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
-  const [selfDateOfBirth, setSelfDateOfBirth] = useState<string | null>(null)
-  const [selfPosition, setSelfPosition] = useState<string | null>(null)
+  const [centerPhotoURL, setCenterPhotoURL] = useState<string | null>(null)
+  const [centerName, setCenterName] = useState('')
+  const [centerHasProfileName, setCenterHasProfileName] = useState(false)
+  const [centerBio, setCenterBio] = useState('')
+  const [centerPrivacy, setCenterPrivacy] = useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
+  const [centerDateOfBirth, setCenterDateOfBirth] = useState<string | null>(null)
+  const [centerPosition, setCenterPosition] = useState<string | null>(null)
+  const [centerGender, setCenterGender] = useState<string | null>(null)
+  const [viewerInvitedByUid, setViewerInvitedByUid] = useState<string | null>(null)
+  const [viewerGender, setViewerGender] = useState<string | null>(null)
+  const [viewerPhotoURL, setViewerPhotoURL] = useState<string | null>(null)
+  const [viewerName, setViewerName] = useState('')
+  const [viewerPosition, setViewerPosition] = useState<string | null>(null)
   const [joinedFamily, setJoinedFamily] = useState(false)
   const [profileReady, setProfileReady] = useState(false)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
+  const [actionMember, setActionMember] = useState<TreeMember | null>(null)
+  const [fullTreeView, setFullTreeView] = useState(false)
+  const [addMemberMenuOpen, setAddMemberMenuOpen] = useState(false)
+  const addMemberMenuRef = useRef<HTMLLIElement>(null)
+
+  useEffect(() => {
+    if (!addMemberMenuOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (!addMemberMenuRef.current?.contains(event.target as Node)) {
+        setAddMemberMenuOpen(false)
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setAddMemberMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [addMemberMenuOpen])
+
+  useEffect(() => {
+    setTreeImmersive(fullTreeView)
+    return () => setTreeImmersive(false)
+  }, [fullTreeView, setTreeImmersive])
+
+  useEffect(() => {
+    if (!fullTreeView) return
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setFullTreeView(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullTreeView])
 
   const selfAdded = useMemo(
     () => hasSelfOnTree() || members.length > 0 || joinedFamily,
     [treeVersion, members.length, joinedFamily],
   )
-  const selfListLabel = selfHasProfileName ? selfName : 'You'
+  const selfListLabel = centerHasProfileName ? centerName : 'You'
+  const treeSubscriptionUid = exploreRootUid ?? user?.uid ?? null
 
   useEffect(() => {
-    if (!user?.uid) {
+    if (!treeSubscriptionUid) {
       setMembers([])
       return
     }
-    return subscribeTreeMembers(user.uid, setMembers)
-  }, [user?.uid, treeVersion])
+    return subscribeTreeMembers(treeSubscriptionUid, setMembers)
+  }, [treeSubscriptionUid, treeVersion])
 
   useEffect(() => {
     if (!user) {
-      setSelfPhotoURL(null)
-      setSelfName('')
-      setSelfHasProfileName(false)
-      setSelfBio('')
-      setSelfPrivacy(DEFAULT_MEMBER_PRIVACY)
-      setSelfDateOfBirth(null)
-      setSelfPosition(null)
+      setCenterPhotoURL(null)
+      setCenterName('')
+      setCenterHasProfileName(false)
+      setCenterBio('')
+      setCenterPrivacy(DEFAULT_MEMBER_PRIVACY)
+      setCenterDateOfBirth(null)
+      setCenterPosition(null)
+      setCenterGender(null)
+      setViewerInvitedByUid(null)
+      setViewerGender(null)
+      setViewerPhotoURL(null)
+      setViewerName('')
+      setViewerPosition(null)
       setJoinedFamily(false)
       setProfileReady(false)
       return
     }
     let cancelled = false
     ;(async () => {
-      const profile = await resolveUserProfileForForm(user)
+      const viewerProfile = await resolveUserProfileForForm(user)
       if (cancelled) return
-      const name = profileFullName(profile) || user.displayName?.trim() || ''
-      setSelfName(name)
-      setSelfHasProfileName(hasSavedProfileName(profile))
-      setSelfPhotoURL(user.photoURL ?? profile.photoURL ?? null)
-      setSelfBio(profile.bio?.trim() ?? '')
-      setSelfPrivacy(
-        parseMemberPrivacy(
-          profile.profilePrivacy ?? profile.defaultMemberPrivacy ?? DEFAULT_MEMBER_PRIVACY,
-        ),
-      )
-      setSelfDateOfBirth(profile.dateOfBirth?.trim() || null)
-      setSelfPosition(positionLabel(profile.familyRole))
-      setJoinedFamily(Boolean(profile.invitedByUid))
+      const viewerDisplayName =
+        profileFullName(viewerProfile) || user.displayName?.trim() || ''
+      setViewerName(viewerDisplayName)
+      setViewerGender(viewerProfile.gender?.trim() || null)
+      setViewerPhotoURL(user.photoURL ?? viewerProfile.photoURL ?? null)
+      setViewerPosition(positionLabel(viewerProfile.familyRole))
+      setViewerInvitedByUid(viewerProfile.invitedByUid?.trim() || null)
+      setJoinedFamily(Boolean(viewerProfile.invitedByUid))
+
+      const centerUid = exploreRootUid ?? user.uid
+      if (centerUid === user.uid) {
+        setCenterName(viewerDisplayName)
+        setCenterHasProfileName(hasSavedProfileName(viewerProfile))
+        setCenterPhotoURL(user.photoURL ?? viewerProfile.photoURL ?? null)
+        setCenterBio(viewerProfile.bio?.trim() ?? '')
+        setCenterPrivacy(
+          parseMemberPrivacy(
+            viewerProfile.profilePrivacy ??
+              viewerProfile.defaultMemberPrivacy ??
+              DEFAULT_MEMBER_PRIVACY,
+          ),
+        )
+        setCenterDateOfBirth(viewerProfile.dateOfBirth?.trim() || null)
+        setCenterPosition(positionLabel(viewerProfile.familyRole))
+        setCenterGender(viewerProfile.gender?.trim() || null)
+      } else {
+        const rootProfile = await fetchUserProfile(centerUid)
+        if (cancelled) return
+        if (rootProfile) {
+          const rootName = profileFullName(rootProfile) || 'Family member'
+          setCenterName(rootName)
+          setCenterHasProfileName(hasSavedProfileName(rootProfile))
+          setCenterPhotoURL(rootProfile.photoURL ?? null)
+          setCenterBio(rootProfile.bio?.trim() ?? '')
+          setCenterPrivacy(
+            parseMemberPrivacy(
+              rootProfile.profilePrivacy ??
+                rootProfile.defaultMemberPrivacy ??
+                DEFAULT_MEMBER_PRIVACY,
+            ),
+          )
+          setCenterDateOfBirth(rootProfile.dateOfBirth?.trim() || null)
+          setCenterPosition(positionLabel(rootProfile.familyRole))
+          setCenterGender(rootProfile.gender?.trim() || null)
+        } else {
+          setCenterName('Family member')
+          setCenterHasProfileName(false)
+          setCenterPhotoURL(null)
+          setCenterBio('')
+          setCenterPrivacy(DEFAULT_MEMBER_PRIVACY)
+          setCenterDateOfBirth(null)
+          setCenterPosition(null)
+          setCenterGender(null)
+        }
+      }
       setProfileReady(true)
     })()
     return () => {
       cancelled = true
     }
-  }, [user, treeVersion])
+  }, [user, treeVersion, exploreRootUid])
 
   useEffect(() => {
     const state = location.state as { openSelf?: boolean } | null
@@ -158,26 +286,96 @@ export default function FamilyTreePage() {
 
   const stats = computeTreeStats(selfAdded, members)
 
+  const avatarViewer = useMemo(
+    () =>
+      buildTreeAvatarViewer({
+        uid: user?.uid ?? null,
+        gender: viewerGender,
+        photoURL: viewerPhotoURL,
+        displayName: viewerName,
+        positionLabel: viewerPosition,
+      }),
+    [user?.uid, viewerGender, viewerPhotoURL, viewerName, viewerPosition],
+  )
+
+  function handleMemberAction(member: TreeMember) {
+    if (member.profileClaimed) {
+      navigate(`/home/member/${encodeURIComponent(member.id)}`)
+      return
+    }
+    if (member.inviterCanEdit) {
+      setEditingMember(member)
+      return
+    }
+    setActionMember(member)
+  }
+
+  function toggleFullTreeView() {
+    setView('tree')
+    setFullTreeView((active) => !active)
+  }
+
+  function handleAddFamilyMemberClick() {
+    if (!selfAdded) {
+      openModal('yourself')
+      return
+    }
+    setAddMemberMenuOpen((open) => !open)
+  }
+
+  function openAddMemberKind(kind: MemberModalKind) {
+    setAddMemberMenuOpen(false)
+    openModal(kind)
+  }
+
   const quickActions = [
     {
-      label: 'Add family member',
-      action: () => (selfAdded ? openModal('parent') : openModal('yourself')),
+      label: fullTreeView ? 'Exit full view' : 'Full view',
+      action: toggleFullTreeView,
     },
-    { label: 'View Full Tree', action: () => setView('tree') },
     { label: 'Download Tree', action: () => {} },
-    { label: 'Share Tree', action: () => {} },
+    {
+      label: 'Share Tree',
+      action: () => navigate('/home/invitations'),
+    },
   ] as const
 
   return (
-    <div className="ft-page">
+    <div className={`ft-page${fullTreeView ? ' ft-page-immersive' : ''}`}>
       <div className="ft-main">
-        <header className="ft-head ft-head-with-back">
-          <Link to="/home" className="ft-back" aria-label="Back to home">
+        {fullTreeView ? (
+          <header className="ft-head ft-immersive-bar">
+            <button type="button" className="ft-immersive-exit" onClick={() => setFullTreeView(false)}>
+              ← Exit full view
+            </button>
+            <strong className="ft-immersive-title">Family Tree</strong>
+            <div className="ft-gender-legend ft-gender-legend-inline" aria-label="Gender legend">
+              <span className="ft-gender-legend-item">
+                <span className="ft-gender-dot ft-gender-dot-male" aria-hidden="true" />
+                Male
+              </span>
+              <span className="ft-gender-legend-item">
+                <span className="ft-gender-dot ft-gender-dot-female" aria-hidden="true" />
+                Female
+              </span>
+            </div>
+          </header>
+        ) : null}
+        <header className={`ft-head ft-head-with-back${fullTreeView ? ' ft-head-compact-hidden' : ''}`}>
+          <Link
+            to={isExploreView ? '/home/tree' : '/home'}
+            className="ft-back"
+            aria-label={isExploreView ? 'Back to your tree' : 'Back to home'}
+          >
             ←
           </Link>
           <div className="ft-head-text">
-            <h1>Family Tree</h1>
-            <p>Your family legacy, beautifully connected.</p>
+            <h1>{isExploreView ? `${centerName}'s tree` : 'Family Tree'}</h1>
+            <p>
+              {isExploreView
+                ? 'Exploring their branch — click anyone connected to keep exploring.'
+                : 'Your family legacy, beautifully connected.'}
+            </p>
           </div>
           <div className="ft-view-toggle" role="tablist" aria-label="Tree view">
             <button
@@ -201,6 +399,13 @@ export default function FamilyTreePage() {
           </div>
         </header>
 
+        {isExploreView ? (
+          <div className="ft-explore-banner" role="status">
+            Viewing <strong>{centerName}</strong>&apos;s family tree.
+            <Link to="/home/tree">Return to your tree</Link>
+          </div>
+        ) : null}
+
         {view === 'tree' ? (
           !selfAdded ? (
             <div className="ft-canvas ft-canvas-empty">
@@ -219,14 +424,21 @@ export default function FamilyTreePage() {
             <StarterDiagram
               openModal={openModal}
               members={members}
-              selfPhotoURL={selfPhotoURL}
-              selfName={selfName}
-              selfHasProfileName={selfHasProfileName}
-              selfBio={selfBio}
-              selfPrivacy={selfPrivacy}
-              selfDateOfBirth={selfDateOfBirth}
-              selfPositionLabel={selfPosition}
-              onSelectMember={setEditingMember}
+              selfPhotoURL={centerPhotoURL}
+              selfName={centerName}
+              selfHasProfileName={centerHasProfileName}
+              selfBio={centerBio}
+              selfPrivacy={centerPrivacy}
+              selfDateOfBirth={centerDateOfBirth}
+              selfPositionLabel={centerPosition}
+              selfGender={centerGender}
+              viewerUid={user?.uid ?? null}
+              onSelectMember={handleMemberAction}
+              allowAdds={!isExploreView}
+              centerProfileHref={isExploreView ? null : '/home/profile'}
+              centerRoleLabel={isExploreView ? 'Tree center' : undefined}
+              exploreHint
+              fullTreeView={fullTreeView}
             />
           )
         ) : (
@@ -235,13 +447,18 @@ export default function FamilyTreePage() {
               <>
                 <li className="ft-list-person">
                   <Link to="/home/profile" className="ft-list-person-link">
-                    <ProfileAvatar photoURL={selfPhotoURL} name={selfName || 'You'} size="sm" />
+                    <ProfileAvatar
+                      photoURL={centerPhotoURL}
+                      name={centerName || 'You'}
+                      gender={centerGender}
+                      size="sm"
+                    />
                     <span>
                       <strong>{selfListLabel}</strong>
                       <span>
-                        {selfPosition ?? 'Profile'} · {memberPrivacyLabel(selfPrivacy)}
+                        {centerPosition ?? 'Profile'} · {memberPrivacyLabel(centerPrivacy)}
                       </span>
-                      <span className="ft-list-bio">{formatBioForDisplay(selfBio)}</span>
+                      <span className="ft-list-bio">{formatBioForDisplay(centerBio)}</span>
                     </span>
                   </Link>
                 </li>
@@ -250,7 +467,7 @@ export default function FamilyTreePage() {
                     {member.inviterCanEdit ? (
                       <button
                         type="button"
-                        onClick={() => setEditingMember(member)}
+                        onClick={() => handleMemberAction(member)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -269,7 +486,8 @@ export default function FamilyTreePage() {
                           photoURL={member.photoURL}
                           name={member.displayName}
                           size="sm"
-                          genderTone={inferTreeMemberGender(member) ?? 'neutral'}
+                          gender={member.gender}
+                          genderTone={avatarGenderToneForMember(member, avatarViewer)}
                         />
                         <span>
                           <strong>{member.displayName}</strong>
@@ -284,24 +502,41 @@ export default function FamilyTreePage() {
                         </span>
                       </button>
                     ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleMemberAction(member)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          textAlign: 'left',
+                          width: '100%',
+                          cursor: 'pointer',
+                          font: 'inherit',
+                          color: 'inherit',
+                        }}
+                      >
                         <ProfileAvatar
                           photoURL={member.photoURL}
                           name={member.displayName}
                           size="sm"
-                          genderTone={inferTreeMemberGender(member) ?? 'neutral'}
+                          gender={member.gender}
+                          genderTone={avatarGenderToneForMember(member, avatarViewer)}
                         />
                         <span>
                           <strong>{member.displayName}</strong>
                           <span>
                             {memberRelationshipLabel(member) ?? roleLabel(member.role)}
-                            {' · Profile claimed · View only'}
+                            {' · Tap to view claimed profile'}
                             {' · '}
                             {memberPrivacyLabel(member.privacy)}
                           </span>
                           <span className="ft-list-bio">{formatBioForDisplay(member.bio)}</span>
                         </span>
-                      </div>
+                      </button>
                     )}
                   </li>
                 ))}
@@ -320,6 +555,16 @@ export default function FamilyTreePage() {
         onUpdated={() => {}}
       />
 
+      <ExploreTreeMemberModal
+        open={actionMember !== null}
+        member={actionMember}
+        viewerUid={user?.uid ?? null}
+        viewerInvitedByUid={viewerInvitedByUid}
+        onClose={() => setActionMember(null)}
+        onEdit={(member) => setEditingMember(member)}
+      />
+
+      {!fullTreeView ? (
       <aside className="ft-sidebar">
         <section className="ft-widget">
           <h2>Family Tree Overview</h2>
@@ -351,6 +596,32 @@ export default function FamilyTreePage() {
         <section className="ft-widget">
           <h2>Quick Actions</h2>
           <ul className="ft-actions">
+            <li className="ft-actions-add-member" ref={addMemberMenuRef}>
+              <button
+                type="button"
+                onClick={handleAddFamilyMemberClick}
+                aria-expanded={addMemberMenuOpen}
+                aria-haspopup="menu"
+              >
+                <span>Add family member</span>
+                <span aria-hidden="true">›</span>
+              </button>
+              {addMemberMenuOpen ? (
+                <ul className="ft-add-member-menu" role="menu" aria-label="Add family member">
+                  {ADD_MEMBER_MENU.map((item) => (
+                    <li key={item.kind} role="none">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => openAddMemberKind(item.kind)}
+                      >
+                        {item.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
             {quickActions.map((item) => (
               <li key={item.label}>
                 <button type="button" onClick={item.action}>
@@ -362,6 +633,7 @@ export default function FamilyTreePage() {
           </ul>
         </section>
       </aside>
+      ) : null}
     </div>
   )
 }

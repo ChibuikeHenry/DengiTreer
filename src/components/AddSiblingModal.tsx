@@ -72,6 +72,7 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
       lastName,
       inviteeEmail: email.trim() || undefined,
       memberStatus: status,
+      gender: gender || undefined,
       photoFile: photo.file,
       privacy,
       sharedFatherMemberId: fatherId || undefined,

@@ -1,10 +1,13 @@
 export type AvatarGenderTone = 'male' | 'female' | 'neutral' | 'you'
 
+import { normalizeTreeMemberGender } from '../lib/familyTreeMembers'
+
 type ProfileAvatarProps = {
   photoURL?: string | null
   name?: string
   size?: 'sm' | 'md' | 'lg' | 'tree'
   genderTone?: AvatarGenderTone
+  gender?: string | null
   className?: string
 }
 
@@ -16,21 +19,36 @@ function initialsFromName(name: string): string {
   return (parts[0]?.slice(0, 2) ?? '?').toUpperCase()
 }
 
+function resolveAvatarTone(
+  genderTone?: AvatarGenderTone,
+  gender?: string | null,
+): AvatarGenderTone {
+  if (genderTone === 'you') return 'you'
+  const fromGender = normalizeTreeMemberGender(gender)
+  if (fromGender) return fromGender
+  if (genderTone === 'male' || genderTone === 'female') {
+    return genderTone
+  }
+  return genderTone ?? 'neutral'
+}
+
 export default function ProfileAvatar({
   photoURL,
   name = '',
   size = 'md',
-  genderTone = 'neutral',
+  genderTone,
+  gender,
   className = '',
 }: ProfileAvatarProps) {
   const initials = initialsFromName(name || '?')
+  const tone = resolveAvatarTone(genderTone, gender)
   const toneClass =
-    genderTone === 'you'
-      ? ' profile-avatar-you-tone'
-      : genderTone === 'male'
-        ? ' profile-avatar-male'
-        : genderTone === 'female'
-          ? ' profile-avatar-female'
+    tone === 'male'
+      ? ' profile-avatar-male'
+      : tone === 'female'
+        ? ' profile-avatar-female'
+        : tone === 'you'
+          ? ' profile-avatar-you-tone'
           : ''
 
   return (

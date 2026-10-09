@@ -26,6 +26,9 @@ service cloud.firestore {
       allow read: if isAuthed()
         && myInvitedByUid() != null
         && resource.data.inviterUid == myInvitedByUid();
+      allow read: if isAuthed()
+        && exists(/databases/$(database)/documents/users/$(resource.data.inviterUid))
+        && get(/databases/$(database)/documents/users/$(resource.data.inviterUid)).data.get('invitedByUid', null) == request.auth.uid;
       allow write: if false;
     }
 
@@ -49,6 +52,17 @@ service cloud.firestore {
 
     match /mail/{docId} {
       allow read, write: if false;
+    }
+
+    match /concessionRequests/{docId} {
+      allow create: if request.resource.data.email is string
+        && request.resource.data.reason is string
+        && request.resource.data.status == 'pending'
+        && (
+          !isAuthed()
+          || request.resource.data.get('uid', null) == request.auth.uid
+        );
+      allow read, update, delete: if false;
     }
   }
 }

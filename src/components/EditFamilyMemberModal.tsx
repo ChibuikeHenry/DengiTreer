@@ -57,7 +57,7 @@ export default function EditFamilyMemberModal({
     setMiddleName('')
     setLastName(member.lastName)
     setEmail(member.inviteeEmail ?? '')
-    setGender('')
+    setGender(member.gender ?? '')
     setDob(member.dateOfBirth ?? '')
     setDod(member.dateOfDeath ?? '')
     setStatus(member.memberStatus)
@@ -102,6 +102,7 @@ export default function EditFamilyMemberModal({
         dateOfDeath: status === 'deceased' ? dod.trim() || null : null,
         memberStatus: status,
         privacy,
+        gender: gender.trim() || null,
         ...(isParent ? { parentKind, parentSlot } : {}),
       })
 

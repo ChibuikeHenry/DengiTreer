@@ -365,22 +365,30 @@ type MemberBioFieldProps = {
   bio: string
   onBioChange: (value: string) => void
   idPrefix?: string
+  hideLabel?: boolean
+  placeholder?: string
 }
 
-export function MemberBioField({ bio, onBioChange, idPrefix = 'member' }: MemberBioFieldProps) {
+export function MemberBioField({
+  bio,
+  onBioChange,
+  idPrefix = 'member',
+  hideLabel = false,
+  placeholder = 'A few words about this person — where they live, what they love, or their role in the family.',
+}: MemberBioFieldProps) {
   const id = `${idPrefix}-bio`
   return (
     <label className="field">
-      <span>Short bio</span>
+      {hideLabel ? null : <span>Short bio</span>}
       <textarea
         id={id}
         rows={3}
         maxLength={280}
-        placeholder="A few words about this person — where they live, what they love, or their role in the family."
+        placeholder={placeholder}
         value={bio}
         onChange={(e) => onBioChange(e.target.value)}
       />
-      <span className="field-hint">{bio.trim().length}/280 characters</span>
+      <span className="field-hint">{bio.length} / 280 characters</span>
     </label>
   )
 }
@@ -442,7 +450,7 @@ export function ContactFields({
           <span>Phone Number</span>
           <input
             type="tel"
-            placeholder="Phone Number"
+            placeholder="Enter phone number"
             value={phone}
             onChange={(e) => onPhone?.(e.target.value)}
           />
@@ -453,7 +461,7 @@ export function ContactFields({
           </span>
           <input
             type="email"
-            placeholder="Email Address"
+            placeholder="Enter email address"
             value={email}
             onChange={(e) => onEmail?.(e.target.value)}
             required={emailRequired}

@@ -21,7 +21,7 @@ const pillars = [
   },
   {
     title: 'Build.',
-    description: 'Create a lasting legacy for future generations.',
+    description: 'Create a lasting legacy for future generation.',
     icon: 'build' as const,
   },
 ] as const
@@ -31,28 +31,28 @@ const team = [
     name: 'Abubakar Isimbabi',
     role: 'CEO',
     jobTitle: 'Chief Executive Officer',
-    bio: 'Abubakar is the visionary behind DengiTree, with a passion for technology and family legacy. He leads the team with a clear mission to help every family preserve their story for generations to come.',
+    bio: 'Abubakar is the visionary behind DengiTree. With a passion for technology and family legacy, he leads the team in building a platform that connects people, preserves heritage and creates lasting impact for generations to come.',
     theme: 'green' as const,
   },
   {
     name: 'Chinyere Achoromadu',
     role: 'Product Designer',
     jobTitle: 'Product Designer',
-    bio: 'Chinyere focuses on thoughtful, user-centered design to make DengiTree intuitive and meaningful — from grandparents sharing memories to grandchildren discovering their roots.',
+    bio: 'Chinyere brings ideas to life through thoughtful and user-centered design. She focuses on creating simple, beautiful and intuitive experiences that make DengiTree easy and enjoyable for everyone.',
     theme: 'purple' as const,
   },
   {
     name: 'Henry Nwachinemere',
     role: 'Lead Developer',
     jobTitle: 'Lead Developer',
-    bio: 'Henry leads development and ensures DengiTree stays reliable, secure, and scalable — so families can trust their memories are safe as the platform grows.',
+    bio: 'Henry leads the development of DengiTree, turning ideas into reliable, secure and scalable technology. He ensures the platform runs smoothly and continues to grow with the needs of our users.',
     theme: 'blue' as const,
   },
   {
     name: 'Halima Mamman Biu',
     role: 'Developer',
     jobTitle: 'Developer',
-    bio: 'Halima supports the Lead Developer with testing, troubleshooting, and day-to-day development — helping ship features that keep families connected.',
+    bio: 'Halima supports the Lead Developer by helping improve DengiTree features. She assists with testing, troubleshooting, and day-to-day development tasks. Her teamwork and attention to detail help the development team deliver smoothly.',
     theme: 'tan' as const,
   },
 ] as const
@@ -189,9 +189,9 @@ export default function AboutUsPage() {
               <div>
                 <h2 id="about-team-heading">Meet the Team</h2>
                 <p>
-                  We are a passionate team of builders, creators and dreamers, united by
-                  one mission: to help families stay connected, share their stories and
-                  build a lasting legacy.
+                  We are a passionate team of builders, creators and dreamers, united by one
+                  mission to help families stay connected, share their stories and build a
+                  lasting legacy.
                 </p>
               </div>
               <p className="about-team-accent" aria-hidden="true">

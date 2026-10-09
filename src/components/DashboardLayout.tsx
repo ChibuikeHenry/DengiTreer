@@ -165,6 +165,7 @@ type DashboardLayoutProps = {
   sidebarOpen: boolean
   onToggleSidebar: () => void
   onCloseSidebar: () => void
+  treeImmersive?: boolean
 }
 
 export default function DashboardLayout({
@@ -172,17 +173,20 @@ export default function DashboardLayout({
   sidebarOpen,
   onToggleSidebar,
   onCloseSidebar,
+  treeImmersive = false,
 }: DashboardLayoutProps) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
   const [displayName, setDisplayName] = useState('Member')
   const [headerPhotoURL, setHeaderPhotoURL] = useState<string | null>(null)
+  const [headerGender, setHeaderGender] = useState<string | null>(null)
   const firstName = displayName.split(' ')[0] || 'Member'
 
   useEffect(() => {
     if (!user) {
       setDisplayName('Member')
       setHeaderPhotoURL(null)
+      setHeaderGender(null)
       return
     }
     let cancelled = false
@@ -192,6 +196,7 @@ export default function DashboardLayout({
       const name = profileFullName(profile) || user.displayName?.trim() || 'Member'
       setDisplayName(name)
       setHeaderPhotoURL(user.photoURL ?? profile.photoURL ?? null)
+      setHeaderGender(profile.gender ?? null)
     })()
     return () => {
       cancelled = true
@@ -200,11 +205,13 @@ export default function DashboardLayout({
 
   async function handleLogout() {
     await logout()
-    navigate('/login', { replace: true })
+    navigate('/', { replace: true })
   }
 
   return (
-    <div className={`dash ${sidebarOpen ? 'dash-sidebar-open' : ''}`}>
+    <div
+      className={`dash${sidebarOpen ? ' dash-sidebar-open' : ''}${treeImmersive ? ' dash-tree-immersive' : ''}`}
+    >
       <div
         className="dash-overlay"
         onClick={onCloseSidebar}
@@ -240,9 +247,13 @@ export default function DashboardLayout({
           <p className="dash-premium-text">
             Unlock advanced features and Preserve for family legacy.
           </p>
-          <button type="button" className="dash-premium-btn">
+          <Link
+            to="/home/premium"
+            className="dash-premium-btn"
+            onClick={onCloseSidebar}
+          >
             Explore Premium
-          </button>
+          </Link>
         </div>
       </aside>
 
@@ -283,6 +294,7 @@ export default function DashboardLayout({
                 <ProfileAvatar
                   photoURL={headerPhotoURL}
                   name={displayName}
+                  gender={headerGender}
                   size="md"
                   className="dash-avatar"
                 />
