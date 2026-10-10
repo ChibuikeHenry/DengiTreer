@@ -1,47 +1,52 @@
 /* ==========================================================================
-   Pedigree tree — replaces ALL existing .pedigree-tree / .ped-* rules.
-   Set the variables below to match your real sizes (check devtools):
-     --ped-av      avatar diameter
-     --ped-node-h  height of the tallest node (avatar top -> bottom of the
-                   last text line, including the years line if shown)
+   Pedigree tree.
+   Every person and every line is positioned from numbers computed in
+   src/lib/pedigreeLayout.ts, so connectors always meet the avatars exactly.
+   The canvas is a fixed-size coordinate space that is scaled to fit.
    ========================================================================== */
 
 .pedigree-tree {
-  --ped-av: 64px;
-  --ped-w: 160px;        /* fixed width of every node */
-  --ped-gap: 56px;       /* visible length of a horizontal line between avatars' nodes */
-  --ped-rowgap: 52px;    /* vertical space between generations */
-  --ped-node-h: 130px;
   --ped-line: #3f5f2a;
-  --ped-link: calc(var(--ped-gap) + var(--ped-w) - var(--ped-av));
-
   width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
-/* Symmetric padding keeps the parents/you column centred while the
-   absolutely placed "Add" circles and spouse hang off either side. */
-.ped-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: max-content;
-  margin-inline: auto;
-  padding: 32px calc(var(--ped-w) * 2 + var(--ped-gap) * 2);
+.ped-stage {
+  position: relative;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.ped-canvas {
+  position: relative;
+  transform-origin: top left;
+}
+
+.ped-lines {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+  stroke: var(--ped-line);
+  stroke-width: 3;
+  fill: none;
 }
 
 /* ---------- nodes ---------- */
 
-.ped-person,
-.ped-add {
-  position: relative;
+.ped-node {
+  position: absolute;
   z-index: 1;
-  flex: none;
-  width: var(--ped-w);
-  min-height: var(--ped-node-h);
+  height: var(--ped-node-h);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .ped-person {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -49,13 +54,43 @@
   color: inherit;
 }
 
+.pedigree-tree .tree-person-card {
+  gap: 5px;
+}
+
+/* fixed avatar so the connector maths always lines up */
+.pedigree-tree .tree-person-avatar {
+  width: var(--ped-av);
+  height: var(--ped-av);
+  flex: none;
+  box-sizing: border-box;
+}
+
+.pedigree-tree .tree-person-name {
+  font-size: 13px;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.pedigree-tree .tree-person-role {
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.pedigree-tree .tree-person-years {
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--dash-muted);
+}
+
 /* ---------- add circles ---------- */
 
 .ped-add {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
   gap: 6px;
   padding: 0;
   border: 0;
@@ -67,13 +102,14 @@
 .ped-add-ring {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   width: var(--ped-av);
   height: var(--ped-av);
   border: 2px dashed var(--ped-line);
   border-radius: 50%;
-  background: rgb(255 255 255 / 0.7);
+  background: #fff;
   color: var(--ped-line);
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
 }
 
@@ -86,239 +122,12 @@
   color: var(--ped-line);
 }
 
-.ped-add:hover .ped-add-ring { background: #fff; }
-.ped-add:focus-visible { outline: 2px solid var(--ped-line); outline-offset: 4px; border-radius: 12px; }
-
-/* ---------- rows ---------- */
-
-.ped-row {
-  display: flex;
-  align-items: flex-start;
+.ped-add:hover .ped-add-ring {
+  background: #f1f7ec;
 }
 
-.ped-slot {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  overflow: visible;
+.ped-add:focus-visible {
+  outline: 2px solid var(--ped-line);
+  outline-offset: 4px;
+  border-radius: 12px;
 }
-
-/* Horizontal line: avatar edge -> avatar edge, at avatar centre.
-   Negative side margins pull it under the neighbouring nodes. */
-.ped-join {
-  position: relative;
-  flex: none;
-  width: var(--ped-link);
-  height: 3px;
-  margin: calc(var(--ped-av) / 2 - 1.5px) calc((var(--ped-av) - var(--ped-w)) / 2) 0;
-  background: var(--ped-line);
-}
-
-.ped-join.is-step-join {
-  background: none;
-  border-top: 3px dashed var(--ped-line);
-  height: 0;
-}
-
-.ped-join-stem {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 3px;
-  height: calc(var(--ped-node-h) + var(--ped-rowgap));
-  margin-bottom: calc(var(--ped-av) / -2 - var(--ped-rowgap));
-  background: var(--ped-line);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ---------- vertical links between generations ---------- */
-
-.ped-vlink {
-  flex: none;
-  width: 3px;
-  height: calc(var(--ped-node-h) + var(--ped-rowgap));
-  margin-top: calc(var(--ped-av) / 2 - var(--ped-node-h));
-  margin-bottom: calc(var(--ped-av) / -2);
-  background: var(--ped-line);
-}
-
-.ped-vlink-dashed {
-  width: 0;
-  background: none;
-  border-left: 3px dashed var(--ped-line);
-}
-
-/* ---------- side add circles with dashed connectors ---------- */
-
-.ped-add.ped-add-side {
-  position: absolute;
-  top: 0;
-  left: calc(100% + var(--ped-gap));
-}
-
-.ped-anchor {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: max-content;
-  margin-inline: auto;
-}
-
-.ped-add.ped-add-sibling {
-  position: absolute;
-  top: 0;
-  right: calc(100% + var(--ped-gap));
-}
-
-.ped-add.ped-add-side::before,
-.ped-add.ped-add-sibling::before {
-  content: '';
-  position: absolute;
-  top: calc(var(--ped-av) / 2 - 1.5px);
-  width: var(--ped-link);
-  border-top: 3px dashed var(--ped-line);
-}
-
-.ped-add.ped-add-side::before {
-  left: calc(-1 * (var(--ped-gap) + (var(--ped-w) - var(--ped-av)) / 2));
-}
-
-.ped-add.ped-add-sibling::before {
-  left: calc(100% - (var(--ped-w) - var(--ped-av)) / 2);
-}
-
-/* ---------- you / spouse ---------- */
-
-.ped-blood-group {
-  position: relative;
-  z-index: 1;
-  width: max-content;
-  margin-inline: auto;
-}
-
-/* Parent generation → sibling / you row (centred on the blood row, not the column). */
-.ped-drop-to-blood {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: calc(-1 * (var(--ped-node-h) + var(--ped-rowgap)) + var(--ped-av) / 2);
-  width: 3px;
-  height: calc(var(--ped-node-h) + var(--ped-rowgap));
-  background: var(--ped-line);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Horizontal sibling bar at avatar-centre height. */
-.ped-has-sibling-bus::after {
-  content: '';
-  position: absolute;
-  top: calc(var(--ped-av) / 2 - 1.5px);
-  left: calc(var(--ped-w) / 2);
-  right: calc(var(--ped-w) / 2);
-  height: 3px;
-  background: var(--ped-line);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.ped-has-sibling-bus > .ped-row > .ped-person,
-.ped-has-sibling-bus > .ped-row > .ped-you-slot {
-  position: relative;
-  z-index: 1;
-}
-
-.ped-you-slot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: var(--ped-w);
-  flex: none;
-}
-
-/* spouse side hangs off the right of the blood row */
-.ped-side {
-  position: absolute;
-  top: 0;
-  left: 100%;
-  display: flex;
-  align-items: flex-start;
-}
-
-/* ---------- children ---------- */
-
-/* spouse case: stem drops from the You–Spouse line, bracket below */
-.ped-join-drop { position: relative; }
-
-.ped-join-drop > .ped-kids {
-  position: absolute;
-  top: 3px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/* keep the anchor tall enough for the absolutely placed kids */
-.ped-anchor:has(.ped-join-drop > .ped-kids) {
-  padding-bottom: calc(var(--ped-rowgap) + 24px + var(--ped-node-h));
-}
-
-/* no-spouse case: kids sit in flow under You */
-.ped-kids.is-inline {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.ped-kids .ped-stem {
-  width: 3px;
-  height: var(--ped-rowgap);
-  background: var(--ped-line);
-}
-
-/* from the join (avatar centre) past the labels to the bracket */
-.ped-kids .ped-stem-long {
-  height: calc(var(--ped-node-h) + var(--ped-rowgap));
-  margin-top: calc(var(--ped-av) / -2);
-}
-
-.ped-kidrow { display: flex; }
-
-.ped-kid {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  width: var(--ped-w);
-  padding-top: 24px;
-}
-
-/* horizontal bar */
-.ped-kid::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: var(--ped-line);
-}
-
-/* drop to the child */
-.ped-kid::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: calc(50% - 1.5px);
-  width: 3px;
-  height: 24px;
-  background: var(--ped-line);
-}
-
-.ped-kid:first-child::before { left: 50%; }
-.ped-kid:last-child::before { right: 50%; }
-.ped-kid:only-child::before { display: none; }

@@ -16,6 +16,12 @@ function parseParentKind(value) {
         return v;
     return 'biological';
 }
+function parseLineageSide(value) {
+    const v = String(value ?? '').trim();
+    if (v === 'paternal' || v === 'maternal')
+        return v;
+    return null;
+}
 function parseParentSlot(value) {
     const v = String(value ?? '').trim();
     if (v === 'father' || v === 'mother' || v === 'unknown')
@@ -121,6 +127,9 @@ async function createInvitationRecord(uid, authToken, data) {
         ? parseParentSlot(data.parentSlot)
         : null;
     const parentKind = role === 'parent' ? parseParentKind(data.parentKind) : null;
+    const lineageSide = role === 'grandparent' || role === 'great-grandparent'
+        ? parseLineageSide(data.lineageSide)
+        : null;
     const sharedFatherMemberId = role === 'sibling' ? String(data.sharedFatherMemberId ?? '').trim() || null : null;
     const sharedMotherMemberId = role === 'sibling' ? String(data.sharedMotherMemberId ?? '').trim() || null : null;
     const siblingRelationship = role === 'sibling' && data.siblingRelationship
@@ -150,6 +159,7 @@ async function createInvitationRecord(uid, authToken, data) {
         bio: bio || null,
         parentSlot,
         parentKind,
+        lineageSide,
         sharedFatherMemberId,
         sharedMotherMemberId,
         siblingRelationship,
@@ -181,6 +191,7 @@ async function createInvitationRecord(uid, authToken, data) {
             bio: bio || null,
             parentSlot,
             parentKind,
+            lineageSide,
             sharedFatherMemberId,
             sharedMotherMemberId,
             siblingRelationship,

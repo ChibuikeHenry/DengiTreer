@@ -40,6 +40,8 @@ export type FamilyMemberInviteInput = {
   bio?: string
   parentSlot?: ParentSlot
   parentKind?: ParentKind
+  /** Grandparents: which of your parents they belong to (paternal = father's side). */
+  lineageSide?: LineageSide
   sharedFatherMemberId?: string
   sharedMotherMemberId?: string
   siblingRelationship?: SiblingRelationship
@@ -47,6 +49,8 @@ export type FamilyMemberInviteInput = {
   dateOfDeath?: string
   gender?: string
 }
+
+export type LineageSide = 'paternal' | 'maternal'
 
 export type InvitationRecord = {
   id: string
@@ -65,6 +69,7 @@ export type InvitationRecord = {
   bio: string
   parentSlot: ParentSlot | null
   parentKind: ParentKind | null
+  lineageSide: LineageSide | null
   sharedFatherMemberId: string | null
   sharedMotherMemberId: string | null
   siblingRelationship: SiblingRelationship | null
@@ -269,6 +274,10 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
     bio: String(data.bio ?? '').trim(),
     parentSlot: data.parentSlot ? parseParentSlot(data.parentSlot) : null,
     parentKind: data.parentKind ? parseParentKind(data.parentKind) : null,
+    lineageSide:
+      data.lineageSide === 'paternal' || data.lineageSide === 'maternal'
+        ? data.lineageSide
+        : null,
     sharedFatherMemberId: (data.sharedFatherMemberId as string | null) ?? null,
     sharedMotherMemberId: (data.sharedMotherMemberId as string | null) ?? null,
     siblingRelationship: (data.siblingRelationship as SiblingRelationship | null) ?? null,

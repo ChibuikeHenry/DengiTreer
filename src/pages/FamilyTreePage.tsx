@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
+import { DashIcons } from '../components/DashboardLayout'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import ExploreTreeMemberModal from '../components/ExploreTreeMemberModal'
 import ProfileAvatar from '../components/ProfileAvatar'
@@ -80,17 +81,8 @@ function StarterDiagram({
     <div
       className={`ft-canvas ft-canvas-starter${fullTreeView ? ' ft-canvas-immersive' : ''}`}
     >
-      <div className="ft-gender-legend" aria-label="Gender legend">
-        <span className="ft-gender-legend-item">
-          <span className="ft-gender-dot ft-gender-dot-male" aria-hidden="true" />
-          Male
-        </span>
-        <span className="ft-gender-legend-item">
-          <span className="ft-gender-dot ft-gender-dot-female" aria-hidden="true" />
-          Female
-        </span>
-      </div>
       <PedigreeTreeDiagram
+        maxScale={fullTreeView ? 1.4 : 1}
         members={members}
         openModal={openModal}
         selfPhotoURL={selfPhotoURL}
@@ -331,11 +323,13 @@ export default function FamilyTreePage() {
   const quickActions = [
     {
       label: fullTreeView ? 'Exit full view' : 'Full view',
+      icon: DashIcons.tree,
       action: toggleFullTreeView,
     },
-    { label: 'Download Tree', action: () => {} },
+    { label: 'Download Tree', icon: DashIcons.image, action: () => {} },
     {
       label: 'Share Tree',
+      icon: DashIcons.mail,
       action: () => navigate('/home/invitations'),
     },
   ] as const
@@ -377,27 +371,50 @@ export default function FamilyTreePage() {
                 : 'Your family legacy, beautifully connected.'}
             </p>
           </div>
-          <div className="ft-view-toggle" role="tablist" aria-label="Tree view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'tree'}
-              className={view === 'tree' ? 'is-active' : ''}
-              onClick={() => setView('tree')}
-            >
-              Tree View
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'list'}
-              className={view === 'list' ? 'is-active' : ''}
-              onClick={() => setView('list')}
-            >
-              List View
-            </button>
+          <div className="ft-gender-legend" aria-label="Gender legend">
+            <span className="ft-gender-legend-item">
+              <span className="ft-gender-dot ft-gender-dot-male" aria-hidden="true" />
+              Male
+            </span>
+            <span className="ft-gender-legend-item">
+              <span className="ft-gender-dot ft-gender-dot-female" aria-hidden="true" />
+              Female
+            </span>
           </div>
         </header>
+
+        <div
+          className={`ft-view-toggle${fullTreeView ? ' ft-head-compact-hidden' : ''}`}
+          role="tablist"
+          aria-label="Tree view"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'tree'}
+            className={view === 'tree' ? 'is-active' : ''}
+            onClick={() => setView('tree')}
+          >
+            Tree View
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={view === 'list'}
+            className={view === 'list' ? 'is-active' : ''}
+            onClick={() => setView('list')}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            List View
+          </button>
+        </div>
 
         {isExploreView ? (
           <div className="ft-explore-banner" role="status">
@@ -603,8 +620,9 @@ export default function FamilyTreePage() {
                 aria-expanded={addMemberMenuOpen}
                 aria-haspopup="menu"
               >
-                <span>Add family member</span>
-                <span aria-hidden="true">›</span>
+                <span className="ft-action-icon">{DashIcons.people({ width: 16, height: 16 })}</span>
+                <span className="ft-action-label">Add family member</span>
+                <span className="ft-action-chevron" aria-hidden="true">›</span>
               </button>
               {addMemberMenuOpen ? (
                 <ul className="ft-add-member-menu" role="menu" aria-label="Add family member">
@@ -625,8 +643,9 @@ export default function FamilyTreePage() {
             {quickActions.map((item) => (
               <li key={item.label}>
                 <button type="button" onClick={item.action}>
-                  <span>{item.label}</span>
-                  <span aria-hidden="true">›</span>
+                  <span className="ft-action-icon">{item.icon({ width: 16, height: 16 })}</span>
+                  <span className="ft-action-label">{item.label}</span>
+                  <span className="ft-action-chevron" aria-hidden="true">›</span>
                 </button>
               </li>
             ))}

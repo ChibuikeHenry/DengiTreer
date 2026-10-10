@@ -133,6 +133,7 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
       privacy,
       bio: bio.trim() || undefined,
       parentSlot: relationshipToParentSlot(relationship),
+      lineageSide: placement.startsWith('fathers') ? 'paternal' : 'maternal',
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
     })

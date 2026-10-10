@@ -33,6 +33,8 @@ export type TreeMember = {
   bio: string
   parentSlot: ParentSlot | null
   parentKind: ParentKind | null
+  /** Grandparents only: paternal = your father's parent, maternal = your mother's parent. */
+  lineageSide?: 'paternal' | 'maternal' | null
   sharedFatherMemberId: string | null
   sharedMotherMemberId: string | null
   siblingRelationship: SiblingRelationship | null
@@ -85,6 +87,7 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     bio: record.bio,
     parentSlot: record.parentSlot,
     parentKind: record.parentKind,
+    lineageSide: record.lineageSide,
     sharedFatherMemberId: record.sharedFatherMemberId,
     sharedMotherMemberId: record.sharedMotherMemberId,
     siblingRelationship: record.siblingRelationship,
@@ -217,7 +220,8 @@ export function subscribeTreeMembers(
         ) {
           parentSlot = inviterMember.parentSlot === 'father' ? 'mother' : 'father'
         }
-        return [{ ...m, role, parentSlot, inviterCanEdit: false }]
+        // roles were re-mapped for this viewer, so the stored lineage side no longer applies
+        return [{ ...m, role, parentSlot, lineageSide: null, inviterCanEdit: false }]
       })
 
     const seen = new Set<string>()
