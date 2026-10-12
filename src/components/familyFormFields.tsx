@@ -47,6 +47,8 @@ type PersonalInfoProps = {
   onDateOfDeath?: (v: string) => void
   onGender: (v: string) => void
   onStatus: (v: 'living' | 'deceased') => void
+  /** Brother/sister choice already implies gender — hide the duplicate field. */
+  hideGender?: boolean
 }
 
 export function PersonalInfoFields({
@@ -65,6 +67,7 @@ export function PersonalInfoFields({
   onDateOfDeath,
   onGender,
   onStatus,
+  hideGender = false,
 }: PersonalInfoProps) {
   const today = getTodayString()
 
@@ -126,15 +129,17 @@ export function PersonalInfoFields({
             />
           </label>
         ) : null}
-        <label className="field">
-          <span>Gender</span>
-          <select value={gender} onChange={(e) => onGender(e.target.value)} required>
-            <option value="">Select gender</option>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
+        {hideGender ? null : (
+          <label className="field">
+            <span>Gender</span>
+            <select value={gender} onChange={(e) => onGender(e.target.value)} required>
+              <option value="">Select gender</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+        )}
         <fieldset className="status-radios">
           <legend className="sr-only">Living status</legend>
           <label>
@@ -293,6 +298,7 @@ type SiblingDetailsFieldsProps = {
   photoError?: string
   suggestedLabel?: string
   relationshipOptions?: { value: SiblingRelationship; label: string }[]
+  relationshipSelectDisabled?: boolean
 }
 
 export function SiblingDetailsFields({
@@ -305,6 +311,7 @@ export function SiblingDetailsFields({
   photoError,
   suggestedLabel,
   relationshipOptions = SIBLING_RELATIONSHIP_OPTIONS,
+  relationshipSelectDisabled = false,
 }: SiblingDetailsFieldsProps) {
   return (
     <>
@@ -312,10 +319,14 @@ export function SiblingDetailsFields({
         <label className="field">
           <span>Relationship Type</span>
           <select
-            value={relationship}
+            value={relationshipSelectDisabled ? '' : relationship}
             onChange={(e) => onRelationship(e.target.value as SiblingRelationship)}
             required
+            disabled={relationshipSelectDisabled || relationshipOptions.length === 0}
           >
+            {relationshipSelectDisabled ? (
+              <option value="">Choose parents first</option>
+            ) : null}
             {relationshipOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}

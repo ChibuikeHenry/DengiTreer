@@ -34,6 +34,26 @@ export function parseParentSlot(value: unknown): ParentSlot {
   return PARENT_SLOTS.has(v) ? v : 'unknown'
 }
 
+export function genderForSiblingRelationship(
+  type: SiblingRelationship,
+): 'male' | 'female' | null {
+  if (
+    type === 'brother' ||
+    type === 'half-brother' ||
+    type === 'step-brother'
+  ) {
+    return 'male'
+  }
+  if (
+    type === 'sister' ||
+    type === 'half-sister' ||
+    type === 'step-sister'
+  ) {
+    return 'female'
+  }
+  return null
+}
+
 export function siblingRelationshipLabel(type: SiblingRelationship): string {
   switch (type) {
     case 'brother':
@@ -68,12 +88,12 @@ function genderedSibling(
   if (kind === 'full') {
     if (gender === 'female') return 'sister'
     if (gender === 'male') return 'brother'
-    return 'sibling'
+    return 'brother'
   }
   if (kind === 'half') {
     if (gender === 'female') return 'half-sister'
     if (gender === 'male') return 'half-brother'
-    return 'sibling'
+    return 'half-brother'
   }
   if (gender === 'female') return 'step-sister'
   if (gender === 'male') return 'step-brother'
@@ -83,6 +103,37 @@ function genderedSibling(
 
 function isStepParent(meta: ParentMemberMeta | undefined): boolean {
   return meta?.parentKind === 'step'
+}
+
+export type SiblingRelationshipKind = 'unset' | 'full' | 'half' | 'step'
+
+/** Which sibling types apply from the father/mother picks alone. */
+export function siblingRelationshipKindFromParents(
+  shared: ParentLinkIds,
+  parentMetaById: Map<string, ParentMemberMeta>,
+): SiblingRelationshipKind {
+  const sharedFather = shared.fatherMemberId?.trim() || null
+  const sharedMother = shared.motherMemberId?.trim() || null
+  if (sharedParentsIncludeStepParent(shared, parentMetaById)) return 'step'
+  if (sharedFather && sharedMother) return 'full'
+  if (sharedFather || sharedMother) return 'half'
+  return 'unset'
+}
+
+const OPTIONS_BY_KIND: Record<
+  Exclude<SiblingRelationshipKind, 'unset'>,
+  SiblingRelationship[]
+> = {
+  full: ['brother', 'sister'],
+  half: ['half-brother', 'half-sister'],
+  step: ['step-brother', 'step-sister'],
+}
+
+export function siblingRelationshipsForKind(
+  kind: SiblingRelationshipKind,
+): SiblingRelationship[] {
+  if (kind === 'unset') return []
+  return OPTIONS_BY_KIND[kind]
 }
 
 export function sharedParentsIncludeStepParent(

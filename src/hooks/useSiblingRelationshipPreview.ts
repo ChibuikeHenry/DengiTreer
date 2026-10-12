@@ -5,7 +5,7 @@ import {
   inferSiblingRelationship,
   parentMetaFromMembers,
   resolveUserParentLinks,
-  sharedParentsIncludeStepParent,
+  siblingRelationshipKindFromParents,
   siblingRelationshipLabel,
   type ParentLinkIds,
 } from '../lib/siblingRelationship'
@@ -53,16 +53,16 @@ export function useSiblingRelationshipPreview(
     }
   }, [enabled, members, user?.uid])
 
-  const { relationship, stepParentSelected } = useMemo(() => {
+  const { relationship, relationshipKind } = useMemo(() => {
     const parentMeta = parentMetaFromMembers(members)
     const metaMap = new Map(parentMeta.map((p) => [p.id, p]))
     return {
       relationship: inferSiblingRelationship(siblingGender, shared, userParents, metaMap),
-      stepParentSelected: sharedParentsIncludeStepParent(shared, metaMap),
+      relationshipKind: siblingRelationshipKindFromParents(shared, metaMap),
     }
   }, [members, shared, siblingGender, userParents])
 
   const label = siblingRelationshipLabel(relationship)
 
-  return { relationship, label, userParents, stepParentSelected }
+  return { relationship, label, userParents, relationshipKind }
 }

@@ -42,6 +42,41 @@ function primaryParentSlotError(slot) {
     }
     return 'That parent slot is already filled on your tree.';
 }
+function grandparentSlotsConflict(aSide, aSlot, bSide, bSlot) {
+    if (!aSlot || !bSlot || aSlot === 'unknown' || bSlot === 'unknown')
+        return false;
+    if (aSlot !== bSlot)
+        return false;
+    if (aSide === bSide)
+        return true;
+    if (aSide === null || bSide === null)
+        return true;
+    return false;
+}
+function grandparentSlotTaken(members, lineageSide, parentSlot, exceptToken) {
+    if (!parentSlot || parentSlot === 'unknown')
+        return false;
+    return members.some((doc) => {
+        if (exceptToken && doc.id === exceptToken)
+            return false;
+        const data = doc.data();
+        if (data.role !== 'grandparent')
+            return false;
+        if (parseParentKind(data.parentKind) === 'step')
+            return false;
+        return grandparentSlotsConflict(lineageSide, parentSlot, parseLineageSide(data.lineageSide), parseParentSlot(data.parentSlot));
+    });
+}
+function grandparentSlotError(lineageSide, parentSlot) {
+    const side = lineageSide === 'maternal'
+        ? "Mother's"
+        : lineageSide === 'paternal'
+            ? "Father's"
+            : '';
+    const rel = parentSlot === 'father' ? 'father' : 'mother';
+    const label = side ? `${side} ${rel}` : `Grand${rel === 'father' ? 'father' : 'mother'}`;
+    return `You already have ${label} on your tree. Edit the existing person instead of adding another.`;
+}
 function parseLineageSide(value) {
     const v = String(value ?? '').trim();
     if (v === 'paternal' || v === 'maternal')
@@ -220,6 +255,17 @@ async function createInvitationRecord(uid, authToken, data) {
             .get();
         if (primaryParentSlotTaken(existingParents.docs, parentSlot)) {
             throw new https_1.HttpsError('failed-precondition', primaryParentSlotError(parentSlot));
+        }
+    }
+    if (role === 'grandparent' && parentSlot && parentSlot !== 'unknown') {
+        const existingGrandparents = await db
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .where('role', '==', 'grandparent')
+            .get();
+        if (grandparentSlotTaken(existingGrandparents.docs, lineageSide, parentSlot)) {
+            throw new https_1.HttpsError('failed-precondition', grandparentSlotError(lineageSide, parentSlot));
         }
     }
     await db.collection('invitations').doc(token).set(invitationPayload);

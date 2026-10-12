@@ -11,7 +11,11 @@ import {
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { normalizeDateField } from '../lib/lifeDates'
-import type { SiblingRelationship } from '../lib/siblingRelationship'
+import {
+  genderForSiblingRelationship,
+  siblingRelationshipsForKind,
+  type SiblingRelationship,
+} from '../lib/siblingRelationship'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
@@ -43,23 +47,17 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
     [fatherId, motherId],
   )
 
-  const {
-    relationship: inferredRelationship,
-    label: relationshipLabel,
-    stepParentSelected,
-  } = useSiblingRelationshipPreview(open, sharedParents, gender)
+  const { relationship: inferredRelationship, relationshipKind } =
+    useSiblingRelationshipPreview(open, sharedParents, gender)
 
   const parentSelectionKey = `${fatherId}|${motherId}`
   const lastParentSelectionKey = useRef('')
 
   const relationshipOptions = useMemo(() => {
-    if (stepParentSelected) {
-      return SIBLING_RELATIONSHIP_OPTIONS.filter((o) =>
-        o.value === 'step-brother' || o.value === 'step-sister',
-      )
-    }
-    return SIBLING_RELATIONSHIP_OPTIONS
-  }, [stepParentSelected])
+    const allowed = siblingRelationshipsForKind(relationshipKind)
+    if (!allowed.length) return []
+    return SIBLING_RELATIONSHIP_OPTIONS.filter((o) => allowed.includes(o.value))
+  }, [relationshipKind])
 
   useEffect(() => {
     if (!open) {
@@ -71,19 +69,25 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
       lastParentSelectionKey.current = parentSelectionKey
       relationshipEdited.current = false
     }
-    if (stepParentSelected || !relationshipEdited.current) {
+    if (relationshipKind !== 'unset' && !relationshipEdited.current) {
       setRelationship(inferredRelationship)
+      const g = genderForSiblingRelationship(inferredRelationship)
+      if (g) setGender(g)
     }
-  }, [open, inferredRelationship, parentSelectionKey, stepParentSelected])
+  }, [open, inferredRelationship, parentSelectionKey, relationshipKind])
 
   useEffect(() => {
-    if (relationship === 'brother' || relationship === 'half-brother' || relationship === 'step-brother') {
-      if (!gender) setGender('male')
+    if (!open || relationshipKind === 'unset') return
+    if (!relationshipOptions.some((o) => o.value === relationship)) {
+      relationshipEdited.current = false
+      setRelationship(inferredRelationship)
     }
-    if (relationship === 'sister' || relationship === 'half-sister' || relationship === 'step-sister') {
-      if (!gender) setGender('female')
-    }
-  }, [gender, relationship])
+  }, [open, relationship, relationshipOptions, inferredRelationship, relationshipKind])
+
+  useEffect(() => {
+    const g = genderForSiblingRelationship(relationship)
+    if (g && gender !== g) setGender(g)
+  }, [relationship, gender])
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -93,7 +97,7 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
       lastName,
       inviteeEmail: email.trim() || undefined,
       memberStatus: status,
-      gender: gender || undefined,
+      gender: (genderForSiblingRelationship(relationship) ?? gender) || undefined,
       photoFile: photo.file,
       privacy,
       sharedFatherMemberId: fatherId || undefined,
@@ -168,12 +172,15 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
           onPhotoSelect={photo.selectFile}
           photoError={photo.error}
           relationshipOptions={relationshipOptions}
+          relationshipSelectDisabled={relationshipKind === 'unset'}
           suggestedLabel={
-            stepParentSelected
-              ? `From selected parents — choose step-brother or step-sister`
-              : relationship !== inferredRelationship
-                ? `Suggested from shared parents: ${relationshipLabel}`
-                : undefined
+            relationshipKind === 'unset'
+              ? 'Select father and/or mother above to set relationship type.'
+              : relationshipKind === 'full'
+                ? 'Same parents as you — brother or sister'
+                : relationshipKind === 'half'
+                  ? 'One shared parent — half-brother or half-sister'
+                  : 'Step parent selected — step-brother or step-sister'
           }
         />
       </section>
@@ -196,6 +203,7 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
           onDateOfDeath={setDateOfDeath}
           onGender={setGender}
           onStatus={setStatus}
+          hideGender={relationshipKind !== 'unset'}
         />
       </section>
 

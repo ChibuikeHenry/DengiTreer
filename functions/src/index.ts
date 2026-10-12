@@ -65,6 +65,55 @@ function primaryParentSlotError(slot: ParentSlot): string {
   return 'That parent slot is already filled on your tree.'
 }
 
+function grandparentSlotsConflict(
+  aSide: LineageSide | null,
+  aSlot: ParentSlot | null,
+  bSide: LineageSide | null,
+  bSlot: ParentSlot | null,
+): boolean {
+  if (!aSlot || !bSlot || aSlot === 'unknown' || bSlot === 'unknown') return false
+  if (aSlot !== bSlot) return false
+  if (aSide === bSide) return true
+  if (aSide === null || bSide === null) return true
+  return false
+}
+
+function grandparentSlotTaken(
+  members: FirebaseFirestore.QueryDocumentSnapshot[],
+  lineageSide: LineageSide | null,
+  parentSlot: ParentSlot | null,
+  exceptToken?: string,
+): boolean {
+  if (!parentSlot || parentSlot === 'unknown') return false
+  return members.some((doc) => {
+    if (exceptToken && doc.id === exceptToken) return false
+    const data = doc.data()
+    if (data.role !== 'grandparent') return false
+    if (parseParentKind(data.parentKind) === 'step') return false
+    return grandparentSlotsConflict(
+      lineageSide,
+      parentSlot,
+      parseLineageSide(data.lineageSide),
+      parseParentSlot(data.parentSlot),
+    )
+  })
+}
+
+function grandparentSlotError(
+  lineageSide: LineageSide | null,
+  parentSlot: ParentSlot,
+): string {
+  const side =
+    lineageSide === 'maternal'
+      ? "Mother's"
+      : lineageSide === 'paternal'
+        ? "Father's"
+        : ''
+  const rel = parentSlot === 'father' ? 'father' : 'mother'
+  const label = side ? `${side} ${rel}` : `Grand${rel === 'father' ? 'father' : 'mother'}`
+  return `You already have ${label} on your tree. Edit the existing person instead of adding another.`
+}
+
 type LineageSide = 'paternal' | 'maternal'
 
 function parseLineageSide(value: unknown): LineageSide | null {
@@ -307,6 +356,21 @@ async function createInvitationRecord(
       .get()
     if (primaryParentSlotTaken(existingParents.docs, parentSlot)) {
       throw new HttpsError('failed-precondition', primaryParentSlotError(parentSlot))
+    }
+  }
+
+  if (role === 'grandparent' && parentSlot && parentSlot !== 'unknown') {
+    const existingGrandparents = await db
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .where('role', '==', 'grandparent')
+      .get()
+    if (grandparentSlotTaken(existingGrandparents.docs, lineageSide, parentSlot)) {
+      throw new HttpsError(
+        'failed-precondition',
+        grandparentSlotError(lineageSide, parentSlot),
+      )
     }
   }
 

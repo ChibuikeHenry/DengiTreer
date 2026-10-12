@@ -1,21 +1,20 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { ContactFields, MemberBioField } from './familyFormFields'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { DashIcons } from './DashboardLayout'
+import {
+  GRANDPARENT_PLACEMENTS,
+  grandparentPlacementLabel,
+  grandparentSlotTaken,
+  type GrandparentPlacement,
+} from '../lib/grandparentSlots'
+import { subscribeTreeMembers, type TreeMember } from '../lib/familyTreeMembers'
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import type { ParentSlot } from '../lib/siblingRelationship'
-
-const grandparentPlacements = [
-  { value: 'fathers-father', label: "Father's father" },
-  { value: 'fathers-mother', label: "Father's mother" },
-  { value: 'mothers-father', label: "Mother's father" },
-  { value: 'mothers-mother', label: "Mother's mother" },
-] as const
-
-type GrandparentPlacement = (typeof grandparentPlacements)[number]['value']
 
 const relationships = ['Grandfather', 'Grandmother'] as const
 
@@ -34,8 +33,11 @@ function relationshipToParentSlot(relationship: string): ParentSlot {
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
 export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
+  const { user } = useAuth()
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
+  const [treeMembers, setTreeMembers] = useState<TreeMember[]>([])
+  const [slotError, setSlotError] = useState('')
   const [placementOpen, setPlacementOpen] = useState(false)
   const [relationshipOpen, setRelationshipOpen] = useState(false)
   const [placement, setPlacement] = useState<GrandparentPlacement | ''>('')
@@ -59,6 +61,22 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
   )
 
   useEffect(() => {
+    if (!open || !user?.uid) {
+      setTreeMembers([])
+      return
+    }
+    return subscribeTreeMembers(user.uid, setTreeMembers)
+  }, [open, user?.uid])
+
+  const availablePlacements = useMemo(
+    () =>
+      GRANDPARENT_PLACEMENTS.filter(
+        (p) => !grandparentSlotTaken(treeMembers, p.value),
+      ),
+    [treeMembers],
+  )
+
+  useEffect(() => {
     if (open) return
     setPlacementOpen(false)
     setRelationshipOpen(false)
@@ -74,8 +92,16 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
     setPhone('')
     setEmail('')
     setBio('')
+    setSlotError('')
     photo.reset()
   }, [open, photo.reset])
+
+  useEffect(() => {
+    if (placement && grandparentSlotTaken(treeMembers, placement)) {
+      setPlacement('')
+      setRelationship('')
+    }
+  }, [placement, treeMembers])
 
   useEffect(() => {
     if (!open) return
@@ -96,8 +122,7 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
 
   if (!open) return null
 
-  const placementLabel =
-    grandparentPlacements.find((item) => item.value === placement)?.label ?? ''
+  const placementLabel = placement ? grandparentPlacementLabel(placement) : ''
 
   function handleClose() {
     setPlacementOpen(false)
@@ -121,6 +146,14 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
     const resolvedFirst = firstName.trim()
     const resolvedLast = lastName.trim()
     if (!resolvedFirst || !resolvedLast) return
+
+    if (grandparentSlotTaken(treeMembers, placement)) {
+      setSlotError(
+        `${grandparentPlacementLabel(placement)} is already on your tree. Edit that person instead.`,
+      )
+      return
+    }
+    setSlotError('')
 
     await submit({
       firstName: resolvedFirst,
@@ -188,19 +221,25 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
               </button>
               {placementOpen ? (
                 <ul className="select-menu select-menu-simple" role="listbox">
-                  {grandparentPlacements.map((option) => (
-                    <li key={option.value}>
-                      <button
-                        type="button"
-                        className="select-option"
-                        onClick={() => applyPlacement(option.value)}
-                      >
-                        <span>
-                          <strong>{option.label}</strong>
-                        </span>
-                      </button>
+                  {availablePlacements.length ? (
+                    availablePlacements.map((option) => (
+                      <li key={option.value}>
+                        <button
+                          type="button"
+                          className="select-option"
+                          onClick={() => applyPlacement(option.value)}
+                        >
+                          <span>
+                            <strong>{option.label}</strong>
+                          </span>
+                        </button>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="select-option is-disabled">
+                      <span>All four grandparent slots are filled on your tree.</span>
                     </li>
-                  ))}
+                  )}
                 </ul>
               ) : null}
             </div>
@@ -383,9 +422,9 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
             />
           </section>
 
-          {error ? (
+          {slotError || error ? (
             <p className="modal-form-error" role="alert">
-              {error}
+              {slotError || error}
             </p>
           ) : null}
 
