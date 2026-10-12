@@ -77,11 +77,24 @@ function genderedSibling(
   }
   if (gender === 'female') return 'step-sister'
   if (gender === 'male') return 'step-brother'
-  return 'sibling'
+  // Default until gender is chosen in the form (avoid generic "Other").
+  return 'step-brother'
 }
 
 function isStepParent(meta: ParentMemberMeta | undefined): boolean {
   return meta?.parentKind === 'step'
+}
+
+export function sharedParentsIncludeStepParent(
+  shared: ParentLinkIds,
+  parentMetaById: Map<string, ParentMemberMeta>,
+): boolean {
+  const fatherId = shared.fatherMemberId?.trim() || null
+  const motherId = shared.motherMemberId?.trim() || null
+  return (
+    isStepParent(fatherId ? parentMetaById.get(fatherId) : undefined) ||
+    isStepParent(motherId ? parentMetaById.get(motherId) : undefined)
+  )
 }
 
 /**

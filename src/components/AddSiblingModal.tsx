@@ -6,6 +6,7 @@ import {
   OccupationEducationFields,
   ParentSelectFields,
   PersonalInfoFields,
+  SIBLING_RELATIONSHIP_OPTIONS,
   SiblingDetailsFields,
 } from './familyFormFields'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
@@ -42,18 +43,38 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
     [fatherId, motherId],
   )
 
-  const { relationship: inferredRelationship, label: relationshipLabel } =
-    useSiblingRelationshipPreview(open, sharedParents, gender)
+  const {
+    relationship: inferredRelationship,
+    label: relationshipLabel,
+    stepParentSelected,
+  } = useSiblingRelationshipPreview(open, sharedParents, gender)
+
+  const parentSelectionKey = `${fatherId}|${motherId}`
+  const lastParentSelectionKey = useRef('')
+
+  const relationshipOptions = useMemo(() => {
+    if (stepParentSelected) {
+      return SIBLING_RELATIONSHIP_OPTIONS.filter((o) =>
+        o.value === 'step-brother' || o.value === 'step-sister',
+      )
+    }
+    return SIBLING_RELATIONSHIP_OPTIONS
+  }, [stepParentSelected])
 
   useEffect(() => {
     if (!open) {
       relationshipEdited.current = false
+      lastParentSelectionKey.current = ''
       return
     }
-    if (!relationshipEdited.current) {
+    if (parentSelectionKey !== lastParentSelectionKey.current) {
+      lastParentSelectionKey.current = parentSelectionKey
+      relationshipEdited.current = false
+    }
+    if (stepParentSelected || !relationshipEdited.current) {
       setRelationship(inferredRelationship)
     }
-  }, [open, inferredRelationship])
+  }, [open, inferredRelationship, parentSelectionKey, stepParentSelected])
 
   useEffect(() => {
     if (relationship === 'brother' || relationship === 'half-brother' || relationship === 'step-brother') {
@@ -134,13 +155,26 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
           onRelationship={(value) => {
             relationshipEdited.current = true
             setRelationship(value)
+            if (value === 'step-brother' || value === 'brother' || value === 'half-brother') {
+              setGender('male')
+            }
+            if (value === 'step-sister' || value === 'sister' || value === 'half-sister') {
+              setGender('female')
+            }
           }}
           birthOrder={birthOrder}
           onBirthOrder={setBirthOrder}
           photoPreviewUrl={photo.previewUrl}
           onPhotoSelect={photo.selectFile}
           photoError={photo.error}
-          suggestedLabel={relationshipLabel}
+          relationshipOptions={relationshipOptions}
+          suggestedLabel={
+            stepParentSelected
+              ? `From selected parents — choose step-brother or step-sister`
+              : relationship !== inferredRelationship
+                ? `Suggested from shared parents: ${relationshipLabel}`
+                : undefined
+          }
         />
       </section>
 

@@ -21,7 +21,7 @@ export const BIRTH_ORDER_OPTIONS = [
   { value: '10', label: 'Tenth born' },
 ] as const
 
-const SIBLING_RELATIONSHIP_OPTIONS: { value: SiblingRelationship; label: string }[] = [
+export const SIBLING_RELATIONSHIP_OPTIONS: { value: SiblingRelationship; label: string }[] = [
   { value: 'brother', label: 'Brother' },
   { value: 'sister', label: 'Sister' },
   { value: 'half-brother', label: 'Half-brother' },
@@ -292,6 +292,7 @@ type SiblingDetailsFieldsProps = {
   onPhotoSelect?: (file: File | null) => void
   photoError?: string
   suggestedLabel?: string
+  relationshipOptions?: { value: SiblingRelationship; label: string }[]
 }
 
 export function SiblingDetailsFields({
@@ -303,6 +304,7 @@ export function SiblingDetailsFields({
   onPhotoSelect,
   photoError,
   suggestedLabel,
+  relationshipOptions = SIBLING_RELATIONSHIP_OPTIONS,
 }: SiblingDetailsFieldsProps) {
   return (
     <>
@@ -314,14 +316,14 @@ export function SiblingDetailsFields({
             onChange={(e) => onRelationship(e.target.value as SiblingRelationship)}
             required
           >
-            {SIBLING_RELATIONSHIP_OPTIONS.map((option) => (
+            {relationshipOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
             ))}
           </select>
           {suggestedLabel ? (
-            <span className="field-hint">Suggested from shared parents: {suggestedLabel}</span>
+            <span className="field-hint">{suggestedLabel}</span>
           ) : null}
         </label>
         <label className="field">
