@@ -15,6 +15,7 @@ import {
   positionLabel,
   roleLabel,
   subscribeTreeMembers,
+  treeMembersForPedigree,
   type TreeMember,
 } from '../lib/familyTreeMembers'
 import {
@@ -134,6 +135,7 @@ export default function FamilyTreePage() {
   const [viewerName, setViewerName] = useState('')
   const [viewerPosition, setViewerPosition] = useState<string | null>(null)
   const [joinedFamily, setJoinedFamily] = useState(false)
+  const [claimedInviteToken, setClaimedInviteToken] = useState<string | null>(null)
   const [profileReady, setProfileReady] = useState(false)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
   const [actionMember, setActionMember] = useState<TreeMember | null>(null)
@@ -177,6 +179,10 @@ export default function FamilyTreePage() {
     () => hasSelfOnTree() || members.length > 0 || joinedFamily,
     [treeVersion, members.length, joinedFamily],
   )
+  const pedigreeMembers = useMemo(
+    () => treeMembersForPedigree(members, user?.uid, claimedInviteToken),
+    [members, user?.uid, claimedInviteToken],
+  )
   const selfListLabel = centerHasProfileName ? centerName : 'You'
   const treeSubscriptionUid = exploreRootUid ?? user?.uid ?? null
 
@@ -204,6 +210,7 @@ export default function FamilyTreePage() {
       setViewerName('')
       setViewerPosition(null)
       setJoinedFamily(false)
+      setClaimedInviteToken(null)
       setProfileReady(false)
       return
     }
@@ -219,6 +226,11 @@ export default function FamilyTreePage() {
       setViewerPosition(positionLabel(viewerProfile.familyRole))
       setViewerInvitedByUid(viewerProfile.invitedByUid?.trim() || null)
       setJoinedFamily(Boolean(viewerProfile.invitedByUid))
+      setClaimedInviteToken(
+        viewerProfile.claimedInviteToken?.trim() ||
+          viewerProfile.inviteToken?.trim() ||
+          null,
+      )
 
       const centerUid = exploreRootUid ?? user.uid
       if (centerUid === user.uid) {
@@ -494,7 +506,7 @@ export default function FamilyTreePage() {
           ) : (
             <StarterDiagram
               openModal={openModal}
-              members={members}
+              members={pedigreeMembers}
               selfPhotoURL={centerPhotoURL}
               selfName={centerName}
               selfHasProfileName={centerHasProfileName}

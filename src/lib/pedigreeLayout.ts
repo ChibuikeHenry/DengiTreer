@@ -326,25 +326,54 @@ export function buildPedigreeLayout({
     if (!showParents) return []
     if (!parents.length) return [{ x: aimX, y: parentsTop, dashed: true }]
     if (key === 'unsided') {
-      // we don't know which side they are on: reach both parents, never the couple's join,
-      // so the line to the children below stays clearly "father + mother -> children"
-      return aNodes.map((a) => ({ x: parentX.get(a.id) as number, y: parentsTop }))
+      // One drop to the bio father–mother join — never a bus across the whole parent row.
+      const { father: pf, mother: pm } = primaryCouple(parents)
+      if (pf && pm) {
+        const fx = parentX.get(pf.id) as number
+        const mx = parentX.get(pm.id) as number
+        return [{ x: (fx + mx) / 2, y: parentsTop + av / 2 }]
+      }
+      const one = pf ?? pm ?? aNodes[0]
+      if (one) return [{ x: parentX.get(one.id) as number, y: parentsTop }]
+      return [{ x: aimX, y: parentsTop, dashed: true }]
     }
     const preferred = key === 'paternal' ? primaryFather : primaryMother
+    if (preferred) {
+      return [{ x: parentX.get(preferred.id) as number, y: parentsTop }]
+    }
     const fallback = key === 'paternal' ? primaryMother : primaryFather
-    const node = preferred ?? fallback ?? aNodes[0]
-    return [{ x: parentX.get(node.id) as number, y: parentsTop, dashed: !preferred }]
+    const node = fallback ?? aNodes[0]
+    if (!node) return [{ x: aimX, y: parentsTop, dashed: true }]
+    return [{ x: parentX.get(node.id) as number, y: parentsTop, dashed: true }]
   }
   // a lone person (or an odd household with no clear couple) leaves from under their label
   const underLabelY = (top: number) => top + nodeH - 4
 
+  /** Group grandparents for drawing; legacy rows without lineageSide join a side when unambiguous. */
+  const bucketGrandparents = (all: TreeMember[]) => {
+    const paternal = all.filter((m) => m.lineageSide === 'paternal')
+    const maternal = all.filter((m) => m.lineageSide === 'maternal')
+    const unsided: TreeMember[] = []
+    for (const m of all.filter((g) => !g.lineageSide)) {
+      if (m.parentSlot === 'father' && !paternal.length) paternal.push(m)
+      else if (m.parentSlot === 'mother' && !maternal.length) maternal.push(m)
+      else if (m.parentSlot === 'father' && !paternal.some((p) => p.parentSlot === 'father')) {
+        paternal.push(m)
+      } else if (m.parentSlot === 'mother' && !maternal.some((p) => p.parentSlot === 'mother')) {
+        maternal.push(m)
+      } else unsided.push(m)
+    }
+    return { paternal, maternal, unsided }
+  }
+
   const gpPlaced: { member: TreeMember; x: number }[] = []
   if (showGP) {
+    const buckets = bucketGrandparents(gpAll)
     const gpUnits = (
       [
-        { key: 'paternal', nodes: gpAll.filter((m) => m.lineageSide === 'paternal') },
-        { key: 'unsided', nodes: gpAll.filter((m) => !m.lineageSide) },
-        { key: 'maternal', nodes: gpAll.filter((m) => m.lineageSide === 'maternal') },
+        { key: 'paternal' as const, nodes: buckets.paternal },
+        { key: 'unsided' as const, nodes: buckets.unsided },
+        { key: 'maternal' as const, nodes: buckets.maternal },
       ] as const
     )
       .map((u) => {

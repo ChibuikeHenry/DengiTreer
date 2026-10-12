@@ -145,7 +145,14 @@ async function enrichClaimedMembers(members: TreeMember[]): Promise<TreeMember[]
 const VIEWER_ROLE_TABLE: Partial<
   Record<InviteRole, Partial<Record<InviteRole, InviteRole>>>
 > = {
-  child: { parent: 'grandparent', spouse: 'parent', child: 'sibling', grandparent: 'great-grandparent' },
+  child: {
+    parent: 'grandparent',
+    spouse: 'parent',
+    child: 'sibling',
+    sibling: 'sibling',
+    grandparent: 'great-grandparent',
+    'great-grandparent': 'great-grandparent',
+  },
   parent: { grandparent: 'great-grandparent', parent: 'spouse', sibling: 'child' },
   sibling: { grandparent: 'grandparent', parent: 'parent', sibling: 'sibling', 'great-grandparent': 'great-grandparent' },
   spouse: { child: 'child' },
@@ -174,6 +181,20 @@ export function getReciprocalRole(role: InviteRole): InviteRole {
     default:
       return 'member'
   }
+}
+
+/** Members drawn around the center node — never include the signed-in viewer twice. */
+export function treeMembersForPedigree(
+  members: TreeMember[],
+  viewerUid: string | null | undefined,
+  claimedInviteToken?: string | null,
+): TreeMember[] {
+  if (!viewerUid && !claimedInviteToken) return members
+  return members.filter((m) => {
+    if (viewerUid && m.joinedUid === viewerUid) return false
+    if (claimedInviteToken && m.id === claimedInviteToken) return false
+    return true
+  })
 }
 
 export function subscribeTreeMembers(

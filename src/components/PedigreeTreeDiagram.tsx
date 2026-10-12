@@ -221,11 +221,9 @@ export default function PedigreeTreeDiagram({
       roleLabel={
         centerRoleLabel
           ? roleLine(centerRoleLabel, 'living')
-          : centerProfileHref && selfPositionLabel
-            ? roleLine(selfPositionLabel, 'living')
-            : centerProfileHref && selfHasProfileName
-              ? roleLine('You', 'living')
-              : undefined
+          : centerProfileHref
+            ? roleLine('You', 'living')
+            : undefined
       }
       yearsLabel={selfHasProfileName ? selfYears : null}
       youBadge={Boolean(centerProfileHref) && !selfHasProfileName && !selfPhotoURL && !centerRoleLabel}
