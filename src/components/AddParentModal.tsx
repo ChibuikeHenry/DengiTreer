@@ -1,8 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { ContactFields, MemberBioField } from './familyFormFields'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
+import {
+  mayAddPrimaryParent,
+  primaryParentOnTree,
+  subscribeTreeMembers,
+  type TreeMember,
+} from '../lib/familyTreeMembers'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { DashIcons } from './DashboardLayout'
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
@@ -42,8 +49,10 @@ type AddParentModalProps = {
 }
 
 export default function AddParentModal({ open, onClose, onAdded }: AddParentModalProps) {
+  const { user } = useAuth()
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
+  const [treeMembers, setTreeMembers] = useState<TreeMember[]>([])
   const [parentTypeOpen, setParentTypeOpen] = useState(false)
   const [relationshipOpen, setRelationshipOpen] = useState(false)
   const [parentType, setParentType] = useState<(typeof parentTypes)[number] | null>(
@@ -63,6 +72,15 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
   const [privacy] = useDefaultMemberPrivacy(open)
   const photo = usePhotoPicker()
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose, onAdded)
+  const [slotError, setSlotError] = useState('')
+
+  useEffect(() => {
+    if (!open || !user?.uid) {
+      setTreeMembers([])
+      return
+    }
+    return subscribeTreeMembers(user.uid, setTreeMembers)
+  }, [open, user?.uid])
 
   useEffect(() => {
     if (open) return
@@ -118,6 +136,20 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
     if (!resolvedFirst || !resolvedLast) return
 
     const parentKind: ParentKind = parentType?.value ?? 'biological'
+    const parentSlot = relationshipToParentSlot(relationship)
+    if (!mayAddPrimaryParent(treeMembers, parentSlot, parentKind)) {
+      const taken = primaryParentOnTree(
+        treeMembers,
+        parentSlot === 'father' ? 'father' : 'mother',
+      )
+      setSlotError(
+        taken
+          ? `${taken.displayName} is already your ${parentSlot === 'father' ? 'father' : 'mother'}. Choose Step parent or edit them instead.`
+          : 'That parent slot is already filled on your tree.',
+      )
+      return
+    }
+    setSlotError('')
 
     await submit({
       firstName: resolvedFirst,
@@ -129,7 +161,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
       photoFile: photo.file,
       privacy,
       bio: bio.trim() || undefined,
-      parentSlot: relationshipToParentSlot(relationship),
+      parentSlot,
       parentKind,
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
@@ -368,9 +400,9 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
             <MemberBioField bio={bio} onBioChange={setBio} idPrefix="parent" />
           </section>
 
-          {error ? (
+          {slotError || error ? (
             <p className="modal-form-error" role="alert">
-              {error}
+              {slotError || error}
             </p>
           ) : null}
 

@@ -16,6 +16,32 @@ function parseParentKind(value) {
         return v;
     return 'biological';
 }
+function isPrimaryParentKind(kind) {
+    return kind !== 'step';
+}
+function primaryParentSlotTaken(members, slot, exceptToken) {
+    if (!slot || slot === 'unknown')
+        return false;
+    return members.some((doc) => {
+        if (exceptToken && doc.id === exceptToken)
+            return false;
+        const data = doc.data();
+        if (data.role !== 'parent')
+            return false;
+        const memberSlot = parseParentSlot(data.parentSlot);
+        const memberKind = parseParentKind(data.parentKind);
+        return memberSlot === slot && isPrimaryParentKind(memberKind);
+    });
+}
+function primaryParentSlotError(slot) {
+    if (slot === 'father') {
+        return 'You already have a father on your tree. Add a step-father instead, or edit the existing person.';
+    }
+    if (slot === 'mother') {
+        return 'You already have a mother on your tree. Add a step-mother instead, or edit the existing person.';
+    }
+    return 'That parent slot is already filled on your tree.';
+}
 function parseLineageSide(value) {
     const v = String(value ?? '').trim();
     if (v === 'paternal' || v === 'maternal')
@@ -60,11 +86,23 @@ function escapeHtml(value) {
 function newToken() {
     return (0, crypto_1.randomBytes)(6).toString('hex');
 }
+/** Returns a normalized email or null when blank / not a plausible address. */
+function normalizeInviteeEmail(raw) {
+    const trimmed = String(raw ?? '').trim().toLowerCase();
+    if (!trimmed)
+        return null;
+    const at = trimmed.indexOf('@');
+    if (at <= 0 || at >= trimmed.length - 1)
+        return null;
+    const domain = trimmed.slice(at + 1);
+    if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.'))
+        return null;
+    return trimmed;
+}
 async function queueInviteEmail(options) {
-    const recipient = String(options.to ?? '').trim().toLowerCase();
-    if (!recipient || !recipient.includes('@')) {
+    const recipient = normalizeInviteeEmail(options.to);
+    if (!recipient)
         return;
-    }
     const roleText = roleLabel(options.role);
     const greeting = options.inviteeFirstName
         ? escapeHtml(options.inviteeFirstName)
@@ -88,8 +126,8 @@ async function queueInviteEmail(options) {
     });
 }
 async function queueShareInviteEmail(options) {
-    const recipient = String(options.to ?? '').trim().toLowerCase();
-    if (!recipient || !recipient.includes('@')) {
+    const recipient = normalizeInviteeEmail(options.to);
+    if (!recipient) {
         throw new https_1.HttpsError('invalid-argument', 'Enter a valid email address.');
     }
     const bodyHtml = escapeHtml(options.personalMessage).replace(/\n/g, '<br>');
@@ -117,8 +155,7 @@ async function createInvitationRecord(uid, authToken, data) {
     const middleName = String(data.middleName ?? '').trim();
     const inviteeName = [firstName, middleName, lastName].filter(Boolean).join(' ');
     const memberStatus = data.memberStatus === 'deceased' ? 'deceased' : 'living';
-    const rawEmail = String(data.inviteeEmail ?? '').trim().toLowerCase();
-    const inviteeEmail = rawEmail && rawEmail.includes('@') ? rawEmail : null;
+    const inviteeEmail = normalizeInviteeEmail(data.inviteeEmail);
     const privacy = parseMemberPrivacy(data.privacy);
     const bio = String(data.bio ?? '').trim();
     const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null;
@@ -170,6 +207,21 @@ async function createInvitationRecord(uid, authToken, data) {
         joinedAt: null,
         joinedUid: null,
     };
+    if (role === 'parent' &&
+        parentSlot &&
+        parentSlot !== 'unknown' &&
+        parentKind &&
+        isPrimaryParentKind(parentKind)) {
+        const existingParents = await db
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .where('role', '==', 'parent')
+            .get();
+        if (primaryParentSlotTaken(existingParents.docs, parentSlot)) {
+            throw new https_1.HttpsError('failed-precondition', primaryParentSlotError(parentSlot));
+        }
+    }
     await db.collection('invitations').doc(token).set(invitationPayload);
     if (role !== 'member') {
         await db
@@ -203,7 +255,11 @@ async function createInvitationRecord(uid, authToken, data) {
             createdAt: firestore_1.FieldValue.serverTimestamp(),
         });
     }
-    if (role === 'parent' && parentSlot && parentSlot !== 'unknown') {
+    if (role === 'parent' &&
+        parentSlot &&
+        parentSlot !== 'unknown' &&
+        parentKind &&
+        isPrimaryParentKind(parentKind)) {
         const userParentPatch = {};
         if (parentSlot === 'father')
             userParentPatch.treeFatherMemberId = token;
@@ -248,7 +304,7 @@ exports.sendShareInviteEmail = (0, https_1.onCall)(async (request) => {
     const data = (request.data ?? {});
     const token = String(data.token ?? '').trim();
     const inviteeName = String(data.inviteeName ?? '').trim();
-    const inviteeEmail = String(data.inviteeEmail ?? '').trim().toLowerCase();
+    const inviteeEmail = normalizeInviteeEmail(data.inviteeEmail);
     const personalMessage = String(data.personalMessage ?? '').trim();
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Missing invitation link.');
@@ -256,7 +312,7 @@ exports.sendShareInviteEmail = (0, https_1.onCall)(async (request) => {
     if (!inviteeName) {
         throw new https_1.HttpsError('invalid-argument', 'Enter the invitee’s name.');
     }
-    if (!inviteeEmail.includes('@')) {
+    if (!inviteeEmail) {
         throw new https_1.HttpsError('invalid-argument', 'Enter a valid email address.');
     }
     if (!personalMessage) {
@@ -498,7 +554,9 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             .doc(uid)
             .collection('familyMembers')
             .doc(token);
+        const familyMembersCol = db.collection('users').doc(uid).collection('familyMembers');
         const familySnap = await tx.get(familyMemberRef);
+        const allFamilySnap = await tx.get(familyMembersCol);
         const doc = snap.data();
         if (doc.inviterUid !== uid) {
             throw new https_1.HttpsError('permission-denied', 'You can only edit people you invited.');
@@ -514,12 +572,11 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             memberStatus,
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         };
-        const previousEmail = String(doc.inviteeEmail ?? '').trim().toLowerCase() || null;
+        const previousEmail = normalizeInviteeEmail(doc.inviteeEmail);
         let newEmail = previousEmail;
         let emailJustAddedOrChanged = false;
         if (data.inviteeEmail !== undefined) {
-            const trimmed = String(data.inviteeEmail ?? '').trim().toLowerCase();
-            newEmail = trimmed && trimmed.includes('@') ? trimmed : null;
+            newEmail = normalizeInviteeEmail(data.inviteeEmail);
             invitationUpdate.inviteeEmail = newEmail;
             if (newEmail && newEmail !== previousEmail) {
                 emailJustAddedOrChanged = true;
@@ -549,6 +606,14 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             }
             if (data.parentSlot !== undefined) {
                 invitationUpdate.parentSlot = parseParentSlot(data.parentSlot);
+            }
+            const nextSlot = parseParentSlot(data.parentSlot !== undefined ? data.parentSlot : doc.parentSlot);
+            const nextKind = parseParentKind(data.parentKind !== undefined ? data.parentKind : doc.parentKind);
+            if (nextSlot &&
+                nextSlot !== 'unknown' &&
+                isPrimaryParentKind(nextKind) &&
+                primaryParentSlotTaken(allFamilySnap.docs, nextSlot, token)) {
+                throw new https_1.HttpsError('failed-precondition', primaryParentSlotError(nextSlot));
             }
         }
         tx.update(ref, invitationUpdate);

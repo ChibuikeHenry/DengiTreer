@@ -420,6 +420,26 @@ export function computeTreeStats(selfOnTree: boolean, members: TreeMember[]) {
   }
 }
 
+/** Biological or adoptive parent already occupying a father/mother slot. */
+export function primaryParentOnTree(
+  members: TreeMember[],
+  slot: 'father' | 'mother',
+): TreeMember | undefined {
+  return members.find(
+    (m) => m.role === 'parent' && m.parentSlot === slot && m.parentKind !== 'step',
+  )
+}
+
+export function mayAddPrimaryParent(
+  members: TreeMember[],
+  slot: ParentSlot | null,
+  kind: ParentKind | null,
+): boolean {
+  if (slot !== 'father' && slot !== 'mother') return true
+  if (kind === 'step') return true
+  return !primaryParentOnTree(members, slot)
+}
+
 export function parentSlotLabel(member: TreeMember): string {
   if (member.role !== 'parent') return roleLabel(member.role)
   const isStep = member.parentKind === 'step'

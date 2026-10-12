@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import {
   getCallableErrorMessage,
+  normalizeInviteeEmail,
   sendFamilyMemberInvite,
   type FamilyMemberInviteInput,
   type InviteRole,
@@ -41,12 +42,10 @@ export function useFamilyMemberInviteSubmit(
           photoURL = await uploadFamilyMemberPhoto(user.uid, targetRole, photoFile)
         }
 
-        const rawEmail = inviteFields.inviteeEmail?.trim()
-        const inviteeEmail = rawEmail && rawEmail.includes('@') ? rawEmail : undefined
         await sendFamilyMemberInvite({
           role: targetRole,
           ...inviteFields,
-          inviteeEmail,
+          inviteeEmail: normalizeInviteeEmail(inviteFields.inviteeEmail),
           photoURL,
         })
         if (onAdded) onAdded()

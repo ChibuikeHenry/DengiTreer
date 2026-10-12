@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { DashIcons } from '../components/DashboardLayout'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import ExploreTreeMemberModal from '../components/ExploreTreeMemberModal'
 import ProfileAvatar from '../components/ProfileAvatar'
-import PedigreeTreeDiagram from '../components/PedigreeTreeDiagram'
+import PedigreeTreeDiagram, { type PedigreeTreeHandle } from '../components/PedigreeTreeDiagram'
 import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
 import {
@@ -58,6 +58,7 @@ function StarterDiagram({
   centerRoleLabel,
   exploreHint,
   fullTreeView,
+  treeRef,
 }: {
   openModal: DashboardContext['openModal']
   members: TreeMember[]
@@ -76,6 +77,7 @@ function StarterDiagram({
   centerRoleLabel?: string
   exploreHint?: boolean
   fullTreeView?: boolean
+  treeRef?: Ref<PedigreeTreeHandle>
 }) {
   return (
     <div
@@ -83,6 +85,7 @@ function StarterDiagram({
     >
       <PedigreeTreeDiagram
         maxScale={fullTreeView ? 1.4 : 1}
+        handleRef={treeRef}
         members={members}
         openModal={openModal}
         selfPhotoURL={selfPhotoURL}
@@ -113,6 +116,9 @@ export default function FamilyTreePage() {
   const exploreRootUid = searchParams.get('explore')?.trim() || null
   const isExploreView = Boolean(exploreRootUid)
   const [view, setView] = useState<'tree' | 'list'>('tree')
+  const treeRef = useRef<PedigreeTreeHandle>(null)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadPending, setDownloadPending] = useState(false)
   const [members, setMembers] = useState<TreeMember[]>([])
   const [centerPhotoURL, setCenterPhotoURL] = useState<string | null>(null)
   const [centerName, setCenterName] = useState('')
@@ -302,6 +308,50 @@ export default function FamilyTreePage() {
     setActionMember(member)
   }
 
+  async function runDownload() {
+    if (!treeRef.current || downloading) return
+    setDownloading(true)
+    try {
+      const blob = await treeRef.current.exportPng(`${centerName || 'My'} family tree — DengiTree`)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(centerName || 'family').trim().replace(/\s+/g, '-').toLowerCase()}-family-tree.png`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (err) {
+      console.error(err)
+      window.alert('Sorry, we could not create the tree image. Please try again.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  function handleDownloadTree() {
+    if (!selfAdded) {
+      openModal('yourself')
+      return
+    }
+    if (view !== 'tree') {
+      setView('tree')
+      setDownloadPending(true)
+      return
+    }
+    void runDownload()
+  }
+
+  useEffect(() => {
+    if (!downloadPending || view !== 'tree') return
+    const id = window.setTimeout(() => {
+      setDownloadPending(false)
+      void runDownload()
+    }, 150)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [downloadPending, view])
+
   function toggleFullTreeView() {
     setView('tree')
     setFullTreeView((active) => !active)
@@ -326,7 +376,11 @@ export default function FamilyTreePage() {
       icon: DashIcons.tree,
       action: toggleFullTreeView,
     },
-    { label: 'Download Tree', icon: DashIcons.image, action: () => {} },
+    {
+      label: downloading ? 'Preparing image…' : 'Download Tree',
+      icon: DashIcons.image,
+      action: handleDownloadTree,
+    },
     {
       label: 'Share Tree',
       icon: DashIcons.mail,
@@ -456,6 +510,7 @@ export default function FamilyTreePage() {
               centerRoleLabel={isExploreView ? 'Tree center' : undefined}
               exploreHint
               fullTreeView={fullTreeView}
+              treeRef={treeRef}
             />
           )
         ) : (

@@ -27,6 +27,17 @@ export type InviteRole =
   | 'sibling'
   | 'member'
 
+/** Blank or invalid addresses become undefined so the backend never queues mail. */
+export function normalizeInviteeEmail(raw: unknown): string | undefined {
+  const trimmed = String(raw ?? '').trim().toLowerCase()
+  if (!trimmed) return undefined
+  const at = trimmed.indexOf('@')
+  if (at <= 0 || at >= trimmed.length - 1) return undefined
+  const domain = trimmed.slice(at + 1)
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) return undefined
+  return trimmed
+}
+
 export type FamilyMemberInviteInput = {
   role: InviteRole
   firstName: string
@@ -180,7 +191,11 @@ export function clearPersistedInviteToken() {
 }
 
 export async function sendFamilyMemberInvite(input: FamilyMemberInviteInput) {
-  const result = await createFamilyMemberInviteFn(input)
+  const inviteeEmail = normalizeInviteeEmail(input.inviteeEmail)
+  const payload: FamilyMemberInviteInput = { ...input }
+  if (inviteeEmail) payload.inviteeEmail = inviteeEmail
+  else delete payload.inviteeEmail
+  const result = await createFamilyMemberInviteFn(payload)
   return result.data
 }
 
@@ -195,7 +210,11 @@ export async function sendShareInviteEmail(input: {
   inviteeEmail: string
   personalMessage: string
 }) {
-  const result = await sendShareInviteEmailFn(input)
+  const inviteeEmail = normalizeInviteeEmail(input.inviteeEmail)
+  if (!inviteeEmail) {
+    throw new Error('Enter a valid email address.')
+  }
+  const result = await sendShareInviteEmailFn({ ...input, inviteeEmail })
   return result.data
 }
 
@@ -240,7 +259,11 @@ export async function updatePendingFamilyMemberProfile(input: {
   inviteeEmail?: string | null
   gender?: string | null
 }) {
-  const result = await updatePendingFamilyMemberProfileFn(input)
+  const payload = { ...input }
+  if (input.inviteeEmail !== undefined) {
+    payload.inviteeEmail = normalizeInviteeEmail(input.inviteeEmail) ?? null
+  }
+  const result = await updatePendingFamilyMemberProfileFn(payload)
   return result.data
 }
 

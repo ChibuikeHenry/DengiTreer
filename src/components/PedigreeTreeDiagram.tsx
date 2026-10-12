@@ -1,4 +1,12 @@
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import {
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+} from 'react'
 import { Link } from 'react-router-dom'
 import TreePersonDetails from './TreePersonDetails'
 import { profileFirstName } from '../lib/userProfile'
@@ -15,10 +23,16 @@ import type { AvatarGenderTone } from './ProfileAvatar'
 import { formatLifeYearsLine } from '../lib/lifeDates'
 import type { MemberPrivacy } from '../lib/memberPrivacy'
 import { PED, buildPedigreeLayout } from '../lib/pedigreeLayout'
+import { renderTreePng } from '../lib/exportTreeImage'
 import type { DashboardContext } from '../pages/HomePage'
 import './pedigree-tree.css'
 
 const MIN_SCALE = 0.5
+
+export type PedigreeTreeHandle = {
+  /** render the tree to a PNG image */
+  exportPng: (caption?: string) => Promise<Blob>
+}
 
 function roleLine(roleText: string, memberStatus: 'living' | 'deceased'): string {
   return memberStatus === 'deceased' ? `${roleText} (Deceased)` : roleText
@@ -116,6 +130,7 @@ export default function PedigreeTreeDiagram({
   centerRoleLabel,
   exploreHint = false,
   maxScale = 1,
+  handleRef,
 }: {
   members: TreeMember[]
   openModal: DashboardContext['openModal']
@@ -135,6 +150,7 @@ export default function PedigreeTreeDiagram({
   exploreHint?: boolean
   /** how far the diagram may be enlarged when there is spare room (full view uses > 1) */
   maxScale?: number
+  handleRef?: Ref<PedigreeTreeHandle>
 }) {
   const layout = useMemo(
     () => buildPedigreeLayout({ members, allowAdds }),
@@ -155,6 +171,18 @@ export default function PedigreeTreeDiagram({
   }, [])
   const fit = wrapWidth > 0 ? wrapWidth / layout.width : 1
   const scale = Math.max(MIN_SCALE, Math.min(maxScale, fit))
+
+  const canvasRef = useRef<HTMLDivElement>(null)
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      exportPng: (caption) => {
+        if (!canvasRef.current) return Promise.reject(new Error('Tree is not ready yet.'))
+        return renderTreePng(canvasRef.current, layout, caption)
+      },
+    }),
+    [layout],
+  )
 
   const selfDisplayName = selfName.trim() || 'You'
   const selfNameLabel = selfHasProfileName
@@ -222,6 +250,7 @@ export default function PedigreeTreeDiagram({
     >
       <div className="ped-stage" style={stageStyle}>
         <div
+          ref={canvasRef}
           className="ped-canvas"
           style={{
             width: layout.width,
@@ -242,8 +271,9 @@ export default function PedigreeTreeDiagram({
                 y1={seg.y1}
                 x2={seg.x2}
                 y2={seg.y2}
-                strokeDasharray={seg.dashed ? '6 6' : undefined}
+                strokeDasharray={seg.dashed ? '5 5' : undefined}
                 strokeLinecap={seg.dashed ? 'butt' : 'square'}
+                style={{ strokeWidth: PED.line }}
               />
             ))}
           </svg>

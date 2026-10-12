@@ -35,6 +35,36 @@ function parseParentKind(value: unknown): ParentKind {
   return 'biological'
 }
 
+function isPrimaryParentKind(kind: ParentKind): boolean {
+  return kind !== 'step'
+}
+
+function primaryParentSlotTaken(
+  members: FirebaseFirestore.QueryDocumentSnapshot[],
+  slot: ParentSlot,
+  exceptToken?: string,
+): boolean {
+  if (!slot || slot === 'unknown') return false
+  return members.some((doc) => {
+    if (exceptToken && doc.id === exceptToken) return false
+    const data = doc.data()
+    if (data.role !== 'parent') return false
+    const memberSlot = parseParentSlot(data.parentSlot)
+    const memberKind = parseParentKind(data.parentKind)
+    return memberSlot === slot && isPrimaryParentKind(memberKind)
+  })
+}
+
+function primaryParentSlotError(slot: ParentSlot): string {
+  if (slot === 'father') {
+    return 'You already have a father on your tree. Add a step-father instead, or edit the existing person.'
+  }
+  if (slot === 'mother') {
+    return 'You already have a mother on your tree. Add a step-mother instead, or edit the existing person.'
+  }
+  return 'That parent slot is already filled on your tree.'
+}
+
 type LineageSide = 'paternal' | 'maternal'
 
 function parseLineageSide(value: unknown): LineageSide | null {
@@ -86,6 +116,17 @@ function newToken(): string {
   return randomBytes(6).toString('hex')
 }
 
+/** Returns a normalized email or null when blank / not a plausible address. */
+function normalizeInviteeEmail(raw: unknown): string | null {
+  const trimmed = String(raw ?? '').trim().toLowerCase()
+  if (!trimmed) return null
+  const at = trimmed.indexOf('@')
+  if (at <= 0 || at >= trimmed.length - 1) return null
+  const domain = trimmed.slice(at + 1)
+  if (!domain.includes('.') || domain.startsWith('.') || domain.endsWith('.')) return null
+  return trimmed
+}
+
 async function queueInviteEmail(options: {
   to: string
   inviterName: string
@@ -94,10 +135,8 @@ async function queueInviteEmail(options: {
   joinUrl: string
   personalMessage?: string | null
 }) {
-  const recipient = String(options.to ?? '').trim().toLowerCase()
-  if (!recipient || !recipient.includes('@')) {
-    return
-  }
+  const recipient = normalizeInviteeEmail(options.to)
+  if (!recipient) return
 
   const roleText = roleLabel(options.role)
   const greeting = options.inviteeFirstName
@@ -129,8 +168,8 @@ async function queueShareInviteEmail(options: {
   personalMessage: string
   joinUrl: string
 }) {
-  const recipient = String(options.to ?? '').trim().toLowerCase()
-  if (!recipient || !recipient.includes('@')) {
+  const recipient = normalizeInviteeEmail(options.to)
+  if (!recipient) {
     throw new HttpsError('invalid-argument', 'Enter a valid email address.')
   }
 
@@ -190,8 +229,7 @@ async function createInvitationRecord(
   const middleName = String(data.middleName ?? '').trim()
   const inviteeName = [firstName, middleName, lastName].filter(Boolean).join(' ')
   const memberStatus = data.memberStatus === 'deceased' ? 'deceased' : 'living'
-  const rawEmail = String(data.inviteeEmail ?? '').trim().toLowerCase()
-  const inviteeEmail = rawEmail && rawEmail.includes('@') ? rawEmail : null
+  const inviteeEmail = normalizeInviteeEmail(data.inviteeEmail)
   const privacy = parseMemberPrivacy(data.privacy)
   const bio = String(data.bio ?? '').trim()
   const dateOfBirth = String(data.dateOfBirth ?? '').trim() || null
@@ -254,6 +292,24 @@ async function createInvitationRecord(
     joinedUid: null,
   }
 
+  if (
+    role === 'parent' &&
+    parentSlot &&
+    parentSlot !== 'unknown' &&
+    parentKind &&
+    isPrimaryParentKind(parentKind)
+  ) {
+    const existingParents = await db
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .where('role', '==', 'parent')
+      .get()
+    if (primaryParentSlotTaken(existingParents.docs, parentSlot)) {
+      throw new HttpsError('failed-precondition', primaryParentSlotError(parentSlot))
+    }
+  }
+
   await db.collection('invitations').doc(token).set(invitationPayload)
 
   if (role !== 'member') {
@@ -289,7 +345,13 @@ async function createInvitationRecord(
       })
   }
 
-  if (role === 'parent' && parentSlot && parentSlot !== 'unknown') {
+  if (
+    role === 'parent' &&
+    parentSlot &&
+    parentSlot !== 'unknown' &&
+    parentKind &&
+    isPrimaryParentKind(parentKind)
+  ) {
     const userParentPatch: Record<string, string> = {}
     if (parentSlot === 'father') userParentPatch.treeFatherMemberId = token
     if (parentSlot === 'mother') userParentPatch.treeMotherMemberId = token
@@ -350,7 +412,7 @@ export const sendShareInviteEmail = onCall(async (request) => {
 
   const token = String(data.token ?? '').trim()
   const inviteeName = String(data.inviteeName ?? '').trim()
-  const inviteeEmail = String(data.inviteeEmail ?? '').trim().toLowerCase()
+  const inviteeEmail = normalizeInviteeEmail(data.inviteeEmail)
   const personalMessage = String(data.personalMessage ?? '').trim()
 
   if (!token) {
@@ -359,7 +421,7 @@ export const sendShareInviteEmail = onCall(async (request) => {
   if (!inviteeName) {
     throw new HttpsError('invalid-argument', 'Enter the invitee’s name.')
   }
-  if (!inviteeEmail.includes('@')) {
+  if (!inviteeEmail) {
     throw new HttpsError('invalid-argument', 'Enter a valid email address.')
   }
   if (!personalMessage) {
@@ -688,7 +750,9 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       .doc(uid)
       .collection('familyMembers')
       .doc(token)
+    const familyMembersCol = db.collection('users').doc(uid).collection('familyMembers')
     const familySnap = await tx.get(familyMemberRef)
+    const allFamilySnap = await tx.get(familyMembersCol)
 
     const doc = snap.data()!
     if (doc.inviterUid !== uid) {
@@ -710,13 +774,12 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       memberStatus,
       updatedAt: FieldValue.serverTimestamp(),
     }
-    const previousEmail = String(doc.inviteeEmail ?? '').trim().toLowerCase() || null
+    const previousEmail = normalizeInviteeEmail(doc.inviteeEmail)
     let newEmail: string | null = previousEmail
     let emailJustAddedOrChanged = false
 
     if (data.inviteeEmail !== undefined) {
-      const trimmed = String(data.inviteeEmail ?? '').trim().toLowerCase()
-      newEmail = trimmed && trimmed.includes('@') ? trimmed : null
+      newEmail = normalizeInviteeEmail(data.inviteeEmail)
       invitationUpdate.inviteeEmail = newEmail
       if (newEmail && newEmail !== previousEmail) {
         emailJustAddedOrChanged = true
@@ -747,6 +810,21 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       }
       if (data.parentSlot !== undefined) {
         invitationUpdate.parentSlot = parseParentSlot(data.parentSlot)
+      }
+
+      const nextSlot = parseParentSlot(
+        data.parentSlot !== undefined ? data.parentSlot : doc.parentSlot,
+      )
+      const nextKind = parseParentKind(
+        data.parentKind !== undefined ? data.parentKind : doc.parentKind,
+      )
+      if (
+        nextSlot &&
+        nextSlot !== 'unknown' &&
+        isPrimaryParentKind(nextKind) &&
+        primaryParentSlotTaken(allFamilySnap.docs, nextSlot, token)
+      ) {
+        throw new HttpsError('failed-precondition', primaryParentSlotError(nextSlot))
       }
     }
 

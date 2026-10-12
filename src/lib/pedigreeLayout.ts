@@ -18,6 +18,8 @@ export const PED = {
   pad: 28,
   /** how far above the next row the horizontal "bus" line sits */
   busOffset: 30,
+  /** thickness of the connector lines (the Figma uses thin hairlines) */
+  line: 2,
 } as const
 
 export type PedNode =
@@ -45,14 +47,20 @@ function isStep(member: TreeMember) {
   return member.parentKind === 'step'
 }
 
-/** Step partners sit outside the biological couple so a drop line hits father–mother. */
-export function orderHousehold(members: TreeMember[]): TreeMember[] {
-  const primaryFather =
+/** The biological (or, failing that, any) father and mother of a household. */
+function primaryCouple(members: TreeMember[]) {
+  const father =
     members.find((p) => p.parentSlot === 'father' && !isStep(p)) ??
     members.find((p) => p.parentSlot === 'father')
-  const primaryMother =
+  const mother =
     members.find((p) => p.parentSlot === 'mother' && !isStep(p)) ??
     members.find((p) => p.parentSlot === 'mother')
+  return { father, mother }
+}
+
+/** Step partners sit outside the biological couple so a drop line hits father–mother. */
+export function orderHousehold(members: TreeMember[]): TreeMember[] {
+  const { father: primaryFather, mother: primaryMother } = primaryCouple(members)
   const used = new Set(
     [primaryFather?.id, primaryMother?.id].filter((id): id is string => Boolean(id)),
   )
@@ -65,6 +73,24 @@ export function orderHousehold(members: TreeMember[]): TreeMember[] {
     ...(primaryMother ? [primaryMother] : []),
     ...right,
   ]
+}
+
+/**
+ * Where the line to the next generation leaves a household that is laid out centred on `0`.
+ * Like the design, it leaves from the middle of the father–mother link, level with the
+ * avatars, so it drops through the gap between their labels instead of floating under one.
+ * `offset` is relative to the household's centre.
+ */
+function householdAnchor(ordered: TreeMember[]): { offset: number; atAvatar: boolean } {
+  const n = ordered.length
+  const { father, mother } = primaryCouple(ordered)
+  const fi = father ? ordered.findIndex((p) => p.id === father.id) : -1
+  const mi = mother ? ordered.findIndex((p) => p.id === mother.id) : -1
+  if (fi >= 0 && mi >= 0 && Math.abs(fi - mi) === 1) {
+    return { offset: ((fi + mi) / 2 - (n - 1) / 2) * PED.pitch, atAvatar: true }
+  }
+  // no clear couple: an even household is centred on a link, an odd one on a person
+  return { offset: 0, atAvatar: n % 2 === 0 }
 }
 
 const mean = (values: number[]) =>
@@ -136,12 +162,7 @@ export function buildPedigreeLayout({
   }
 
   /* ---------------------------------------------------------------- parents */
-  const primaryFather =
-    parents.find((p) => p.parentSlot === 'father' && !isStep(p)) ??
-    parents.find((p) => p.parentSlot === 'father')
-  const primaryMother =
-    parents.find((p) => p.parentSlot === 'mother' && !isStep(p)) ??
-    parents.find((p) => p.parentSlot === 'mother')
+  const { father: primaryFather, mother: primaryMother } = primaryCouple(parents)
   let aNodes = [primaryFather, primaryMother].filter((m): m is TreeMember => Boolean(m))
   if (!aNodes.length && parents[0]) aNodes = [parents[0]]
   const parentIdx = (m: TreeMember) => parents.findIndex((p) => p.id === m.id)
@@ -301,21 +322,23 @@ export function buildPedigreeLayout({
 
   /* ----------------------------------------------------------------- grandparents */
   const gpTop = showGP ? rowTop(gpRow) : 0
-  const parentTargetFor = (key: 'paternal' | 'unsided' | 'maternal'): Target | null => {
-    if (!showParents) return null
-    if (!parents.length) return { x: aimX, y: parentsTop, dashed: true }
+  const parentTargetsFor = (key: 'paternal' | 'unsided' | 'maternal'): Target[] => {
+    if (!showParents) return []
+    if (!parents.length) return [{ x: aimX, y: parentsTop, dashed: true }]
     if (key === 'unsided') {
-      return aNodes.length >= 2
-        ? { x: aimX, y: parentsTop + av / 2 }
-        : { x: parentX.get(aNodes[0].id) as number, y: parentsTop }
+      // we don't know which side they are on: reach both parents, never the couple's join,
+      // so the line to the children below stays clearly "father + mother -> children"
+      return aNodes.map((a) => ({ x: parentX.get(a.id) as number, y: parentsTop }))
     }
     const preferred = key === 'paternal' ? primaryFather : primaryMother
     const fallback = key === 'paternal' ? primaryMother : primaryFather
     const node = preferred ?? fallback ?? aNodes[0]
-    return { x: parentX.get(node.id) as number, y: parentsTop, dashed: !preferred }
+    return [{ x: parentX.get(node.id) as number, y: parentsTop, dashed: !preferred }]
   }
+  // a lone person (or an odd household with no clear couple) leaves from under their label
+  const underLabelY = (top: number) => top + nodeH - 4
 
-  const gpNodeXs: number[] = []
+  const gpPlaced: { member: TreeMember; x: number }[] = []
   if (showGP) {
     const gpUnits = (
       [
@@ -324,39 +347,49 @@ export function buildPedigreeLayout({
         { key: 'maternal', nodes: gpAll.filter((m) => m.lineageSide === 'maternal') },
       ] as const
     )
-      .map((u) => ({ key: u.key, nodes: orderHousehold([...u.nodes]) }))
+      .map((u) => {
+        const ordered = orderHousehold([...u.nodes])
+        return { key: u.key, nodes: ordered, anchor: householdAnchor(ordered) }
+      })
       .filter((u) => u.nodes.length > 0)
 
-    const targets = gpUnits.map((u) => parentTargetFor(u.key))
-    const wanted = targets.map((t) => t?.x ?? aimX)
-    const centers = [...wanted]
+    const targets = gpUnits.map((u) => parentTargetsFor(u.key))
+    // each household is placed by its drop line, which should sit right above what it feeds
+    const wanted = targets.map((t) => (t.length ? mean(t.map((x) => x.x)) : aimX))
+    const half = (n: number) => ((n - 1) / 2) * pitch
+    const drops = [...wanted]
     for (let i = 1; i < gpUnits.length; i += 1) {
-      const sep = (gpUnits[i - 1].nodes.length + gpUnits[i].nodes.length) / 2 * pitch + unitGap
-      centers[i] = Math.max(centers[i], centers[i - 1] + sep)
+      const prev = gpUnits[i - 1]
+      const cur = gpUnits[i]
+      const prevRight = half(prev.nodes.length) - prev.anchor.offset
+      const curLeft = -half(cur.nodes.length) - cur.anchor.offset
+      drops[i] = Math.max(drops[i], drops[i - 1] + prevRight - curLeft + pitch + unitGap)
     }
-    const shift = mean(wanted) - mean(centers)
+    const shift = mean(wanted) - mean(drops)
     const busToParents = parentsTop - busOffset
 
     gpUnits.forEach((unit, ui) => {
-      const center = centers[ui] + shift
+      const dropX = drops[ui] + shift
+      const center = dropX - unit.anchor.offset
       const n = unit.nodes.length
       const xs = unit.nodes.map((_, k) => center + (k - (n - 1) / 2) * pitch)
       unit.nodes.forEach((m, k) => {
         nodes.push({ key: `m:${m.id}`, kind: 'member', member: m, x: xs[k], y: gpTop })
-        gpNodeXs.push(xs[k])
+        gpPlaced.push({ member: m, x: xs[k] })
         if (k > 0) hJoin(xs[k - 1], xs[k], gpTop)
       })
       const target = targets[ui]
-      if (target) {
+      if (target.length) {
         bracket(
-          center,
-          n >= 2 ? gpTop + av / 2 : gpTop + nodeH - 4,
-          [target],
+          dropX,
+          unit.anchor.atAvatar ? gpTop + av / 2 : underLabelY(gpTop),
+          target,
           busToParents,
         )
       }
     })
 
+    const gpNodeXs = gpPlaced.map((p) => p.x)
     if (allowAdds && gpAll.length < 4) {
       if (gpNodeXs.length) {
         const x = Math.max(...gpNodeXs) + pitch
@@ -378,9 +411,9 @@ export function buildPedigreeLayout({
           x: aimX,
           y: gpTop,
         })
-        const target = parentTargetFor('unsided')
-        if (target) {
-          bracket(aimX, gpTop + addH, [target], parentsTop - busOffset, true)
+        const target = parentTargetsFor('unsided')
+        if (target.length) {
+          bracket(aimX, gpTop + addH, target, parentsTop - busOffset, true)
         }
       }
     }
@@ -389,7 +422,12 @@ export function buildPedigreeLayout({
   /* ------------------------------------------------------- great-grandparents */
   if (showGG) {
     const ggTop = rowTop(ggRow)
-    const center = gpNodeXs.length ? mean(gpNodeXs) : aimX
+    // a step grandparent is not the child of a great-grandparent: leave them off the bus
+    const blood = gpPlaced.filter((p) => !isStep(p.member))
+    const fed = (blood.length ? blood : gpPlaced).map((p) => p.x)
+    const anchor = householdAnchor(gg)
+    const dropX = fed.length ? mean(fed) : aimX
+    const center = dropX - anchor.offset
     const n = gg.length
     const xs = gg.map((_, k) => center + (k - (n - 1) / 2) * pitch)
     gg.forEach((m, k) => {
@@ -397,9 +435,9 @@ export function buildPedigreeLayout({
       if (k > 0) hJoin(xs[k - 1], xs[k], ggTop)
     })
     bracket(
-      center,
-      n >= 2 ? ggTop + av / 2 : ggTop + nodeH - 4,
-      gpNodeXs.map((x) => ({ x, y: gpTop })),
+      dropX,
+      anchor.atAvatar ? ggTop + av / 2 : underLabelY(ggTop),
+      fed.map((x) => ({ x, y: gpTop })),
       gpTop - busOffset,
     )
   }
