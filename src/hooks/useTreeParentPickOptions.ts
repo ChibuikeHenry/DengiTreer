@@ -67,8 +67,7 @@ function assignSelfToParentSlots(self: ParentPickOption): {
 } {
   if (self.gender === 'male') return { fathers: [self], mothers: [] }
   if (self.gender === 'female') return { fathers: [], mothers: [self] }
-  // Gender not set on your profile — still let you pick yourself in either slot.
-  return { fathers: [self], mothers: [self] }
+  return { fathers: [], mothers: [] }
 }
 
 export function partitionChildParentOptions(

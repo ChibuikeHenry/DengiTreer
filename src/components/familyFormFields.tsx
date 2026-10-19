@@ -198,10 +198,10 @@ export function ParentSelectFields({
   const isSibling = mode === 'sibling'
   const defaultEmptyFathersHint = isSibling
     ? 'Add your parents to the tree first, then you can link siblings to them.'
-    : 'Add yourself and invite your spouse (or co-parent) to see choices here.'
+    : 'Set your gender to Male on Profile to appear here as father, or add a male co-parent on your tree.'
   const defaultEmptyMothersHint = isSibling
     ? 'Add your parents to the tree first, then you can link siblings to them.'
-    : 'Only people on your tree that you added or invited appear in this list.'
+    : 'Set your gender to Female on Profile to appear here as mother, or add spouses with gender set on your tree.'
 
   return (
     <div className="form-row form-row-2">
