@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import {
+  normalizeTreeMemberGender,
   subscribeTreeMembers,
   type TreeMember,
 } from '../lib/familyTreeMembers'
@@ -24,11 +25,20 @@ function displayNameFromProfile(profile: {
     .join(' ')
 }
 
+function pickOptionGender(
+  memberGender: string | null | undefined,
+): ParentPickOption['gender'] {
+  const normalized = normalizeTreeMemberGender(memberGender)
+  if (normalized === 'male' || normalized === 'female') return normalized
+  return null
+}
+
 function matchesParentSlot(
   gender: ParentPickOption['gender'],
   slot: 'father' | 'mother',
 ): boolean {
-  if (!gender || gender === 'other') return true
+  if (!gender) return false
+  if (gender === 'other') return true
   if (slot === 'father') return gender === 'male'
   return gender === 'female'
 }
@@ -39,11 +49,26 @@ function spouseMembers(
 ): ParentPickOption[] {
   return members
     .filter((member) => member.role === 'spouse')
-    .map((member) => ({
-      id: member.id,
-      displayName: member.displayName,
-      gender: selfGender === 'male' ? 'female' : selfGender === 'female' ? 'male' : null,
-    }))
+    .map((member) => {
+      let gender = pickOptionGender(member.gender)
+      if (!gender && selfGender === 'male') gender = 'female'
+      else if (!gender && selfGender === 'female') gender = 'male'
+      return {
+        id: member.id,
+        displayName: member.displayName,
+        gender,
+      }
+    })
+}
+
+function assignSelfToParentSlots(self: ParentPickOption): {
+  fathers: ParentPickOption[]
+  mothers: ParentPickOption[]
+} {
+  if (self.gender === 'male') return { fathers: [self], mothers: [] }
+  if (self.gender === 'female') return { fathers: [], mothers: [self] }
+  // Gender not set on your profile — still let you pick yourself in either slot.
+  return { fathers: [self], mothers: [self] }
 }
 
 export function partitionChildParentOptions(
@@ -51,12 +76,16 @@ export function partitionChildParentOptions(
   members: TreeMember[],
 ): { fathers: ParentPickOption[]; mothers: ParentPickOption[] } {
   const spouses = spouseMembers(members, self?.gender ?? null)
-  const candidates: ParentPickOption[] = []
-  if (self) candidates.push(self)
-  candidates.push(...spouses)
+  const selfSlots = self ? assignSelfToParentSlots(self) : { fathers: [], mothers: [] }
 
-  const fathers = candidates.filter((option) => matchesParentSlot(option.gender, 'father'))
-  const mothers = candidates.filter((option) => matchesParentSlot(option.gender, 'mother'))
+  const fathers = [
+    ...selfSlots.fathers,
+    ...spouses.filter((option) => matchesParentSlot(option.gender, 'father')),
+  ]
+  const mothers = [
+    ...selfSlots.mothers,
+    ...spouses.filter((option) => matchesParentSlot(option.gender, 'mother')),
+  ]
 
   return { fathers, mothers }
 }
@@ -73,20 +102,29 @@ export function partitionSiblingParentOptions(
         !currentUserUid || !member.joinedUid || member.joinedUid !== currentUserUid,
     )
 
+  function parentMatchesSlot(member: TreeMember, slot: 'father' | 'mother'): boolean {
+    if (member.parentSlot === 'father') return slot === 'father'
+    if (member.parentSlot === 'mother') return slot === 'mother'
+    const gender = pickOptionGender(member.gender)
+    if (gender === 'male') return slot === 'father'
+    if (gender === 'female') return slot === 'mother'
+    return false
+  }
+
   const fathers: ParentPickOption[] = parents
-    .filter((m) => m.parentSlot === 'father' || (!m.parentSlot || m.parentSlot === 'unknown'))
+    .filter((m) => parentMatchesSlot(m, 'father'))
     .map((m) => ({
       id: m.id,
       displayName: m.displayName,
-      gender: 'male',
+      gender: pickOptionGender(m.gender) ?? 'male',
     }))
 
   const mothers: ParentPickOption[] = parents
-    .filter((m) => m.parentSlot === 'mother' || (!m.parentSlot || m.parentSlot === 'unknown'))
+    .filter((m) => parentMatchesSlot(m, 'mother'))
     .map((m) => ({
       id: m.id,
       displayName: m.displayName,
-      gender: 'female',
+      gender: pickOptionGender(m.gender) ?? 'female',
     }))
 
   return { fathers, mothers }
@@ -130,12 +168,7 @@ export function useChildCoParentPickOptions(enabled: boolean) {
         displayNameFromProfile(profile) ||
         user.displayName?.trim() ||
         'You'
-      const gender: ParentPickOption['gender'] =
-        profile.gender === 'male'
-          ? 'male'
-          : profile.gender === 'female'
-          ? 'female'
-          : null
+      const gender = pickOptionGender(profile.gender)
       setSelfOption({
         id: 'self',
         displayName: name,

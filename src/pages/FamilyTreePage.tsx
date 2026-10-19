@@ -143,6 +143,7 @@ export default function FamilyTreePage() {
   const [viewerPosition, setViewerPosition] = useState<string | null>(null)
   const [joinedFamily, setJoinedFamily] = useState(false)
   const [claimedInviteToken, setClaimedInviteToken] = useState<string | null>(null)
+  const [centerSelfMemberIds, setCenterSelfMemberIds] = useState<string[]>([])
   const [profileReady, setProfileReady] = useState(false)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
   const [actionMember, setActionMember] = useState<TreeMember | null>(null)
@@ -241,11 +242,12 @@ export default function FamilyTreePage() {
       setViewerPosition(positionLabel(viewerProfile.familyRole))
       setViewerInvitedByUid(viewerProfile.invitedByUid?.trim() || null)
       setJoinedFamily(Boolean(viewerProfile.invitedByUid))
-      setClaimedInviteToken(
-        viewerProfile.claimedInviteToken?.trim() ||
-          viewerProfile.inviteToken?.trim() ||
-          null,
-      )
+      const selfMemberIds = [
+        viewerProfile.claimedInviteToken?.trim(),
+        viewerProfile.inviteToken?.trim(),
+      ].filter((id): id is string => Boolean(id))
+      setCenterSelfMemberIds([...new Set(selfMemberIds)])
+      setClaimedInviteToken(selfMemberIds[0] ?? null)
 
       const centerUid = exploreRootUid ?? user.uid
       if (centerUid === user.uid) {
@@ -537,9 +539,7 @@ export default function FamilyTreePage() {
               centerRoleLabel={isExploreView ? 'Tree center' : undefined}
               exploreHint
               allowMemberEdit={!isExploreView}
-              centerSelfMemberIds={
-                claimedInviteToken ? [claimedInviteToken] : []
-              }
+              centerSelfMemberIds={centerSelfMemberIds}
               fullTreeView={fullTreeView}
               treeRef={treeRef}
             />

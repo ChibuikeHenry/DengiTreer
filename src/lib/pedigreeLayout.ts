@@ -98,6 +98,32 @@ const mean = (values: number[]) =>
 
 type Target = { x: number; y: number; dashed?: boolean }
 
+/** Spouses who co-parent a child sit next to You so drop lines hit the right couple. */
+function orderSpousesAdjacentToSelf(
+  spouses: TreeMember[],
+  children: TreeMember[],
+  selfMemberIds: Set<string>,
+): TreeMember[] {
+  const linkedIds: string[] = []
+  const seen = new Set<string>()
+  for (const child of children) {
+    for (const raw of [child.sharedMotherMemberId, child.sharedFatherMemberId]) {
+      const id = raw?.trim()
+      if (!id || selfMemberIds.has(id) || seen.has(id)) continue
+      if (spouses.some((s) => s.id === id)) {
+        seen.add(id)
+        linkedIds.push(id)
+      }
+    }
+  }
+  const linkedSet = new Set(linkedIds)
+  const linkedSpouses = linkedIds
+    .map((id) => spouses.find((s) => s.id === id))
+    .filter((s): s is TreeMember => Boolean(s))
+  const rest = spouses.filter((s) => !linkedSet.has(s.id))
+  return [...linkedSpouses, ...rest]
+}
+
 function childCoupleKey(child: TreeMember): string {
   const f = child.sharedFatherMemberId?.trim() ?? ''
   const m = child.sharedMotherMemberId?.trim() ?? ''
@@ -156,8 +182,9 @@ export function buildPedigreeLayout({
   const gpAll = members.filter((m) => m.role === 'grandparent')
   const parents = orderHousehold(members.filter((m) => m.role === 'parent'))
   const siblings = members.filter((m) => m.role === 'sibling')
-  const spouses = members.filter((m) => m.role === 'spouse')
+  const spousesRaw = members.filter((m) => m.role === 'spouse')
   const children = members.filter((m) => m.role === 'child')
+  const spouses = orderSpousesAdjacentToSelf(spousesRaw, children, selfMemberIds)
 
   const showGG = gg.length > 0
   const showGP = gpAll.length > 0 || allowAdds || showGG
@@ -602,14 +629,22 @@ export function buildPedigreeLayout({
       return ax - bx
     })
 
+    let lastGroupRight = -Infinity
     sortedGroups.forEach(([, kids]) => {
-      const anchorX = childCoupleAnchorX(
+      let anchorX = childCoupleAnchorX(
         kids[0],
         selfX,
         selfMemberIds,
         memberX,
         legacySpouseX,
       )
+      const groupSpan = Math.max(0, kids.length - 1) * pitch
+      const groupLeft = anchorX - groupSpan / 2
+      if (groupLeft < lastGroupRight + unitGap) {
+        anchorX += lastGroupRight + unitGap - groupLeft
+      }
+      lastGroupRight = anchorX + groupSpan / 2
+
       const groupTargets: Target[] = []
       kids.forEach((member, j) => {
         const x = anchorX + (j - (kids.length - 1) / 2) * pitch
@@ -628,18 +663,22 @@ export function buildPedigreeLayout({
     if (allowAdds) {
       const addAnchorX =
         legacySpouseX != null ? (selfX + legacySpouseX) / 2 : selfX
+      let addX = addAnchorX
+      if (addX <= lastGroupRight + unitGap) {
+        addX = lastGroupRight + unitGap + pitch / 2
+      }
       nodes.push({
         key: 'add:child',
         kind: 'add',
         modal: 'child',
         label: 'Add Child',
-        x: addAnchorX,
+        x: addX,
         y: kidsTop,
       })
       bracket(
         addAnchorX,
         fromY,
-        [{ x: addAnchorX, y: kidsTop, dashed: true }],
+        [{ x: addX, y: kidsTop, dashed: true }],
         kidsTop - busOffset,
       )
     }
