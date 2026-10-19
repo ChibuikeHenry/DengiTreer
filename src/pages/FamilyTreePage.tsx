@@ -31,6 +31,7 @@ import {
   resolveUserProfileForForm,
 } from '../lib/userProfile'
 import { hasSelfOnTree } from '../lib/treeStorage'
+import { canViewerEditTreeMember } from '../lib/profileClaim'
 import type { DashboardContext, MemberModalKind } from './HomePage'
 
 const ADD_MEMBER_MENU: { label: string; kind: MemberModalKind }[] = [
@@ -58,6 +59,8 @@ function StarterDiagram({
   centerProfileHref,
   centerRoleLabel,
   exploreHint,
+  allowMemberEdit,
+  centerSelfMemberIds,
   fullTreeView,
   treeRef,
 }: {
@@ -77,6 +80,8 @@ function StarterDiagram({
   centerProfileHref?: string | null
   centerRoleLabel?: string
   exploreHint?: boolean
+  allowMemberEdit?: boolean
+  centerSelfMemberIds?: string[]
   fullTreeView?: boolean
   treeRef?: Ref<PedigreeTreeHandle>
 }) {
@@ -103,6 +108,8 @@ function StarterDiagram({
         centerProfileHref={centerProfileHref}
         centerRoleLabel={centerRoleLabel}
         exploreHint={exploreHint}
+        allowMemberEdit={allowMemberEdit}
+        centerSelfMemberIds={centerSelfMemberIds}
       />
     </div>
   )
@@ -185,6 +192,14 @@ export default function FamilyTreePage() {
   )
   const selfListLabel = centerHasProfileName ? centerName : 'You'
   const treeSubscriptionUid = exploreRootUid ?? user?.uid ?? null
+
+  function viewerCanEditMember(member: TreeMember) {
+    return canViewerEditTreeMember(member, user?.uid, treeSubscriptionUid)
+  }
+
+  useEffect(() => {
+    if (isExploreView) setEditingMember(null)
+  }, [isExploreView])
 
   useEffect(() => {
     if (!treeSubscriptionUid) {
@@ -313,7 +328,7 @@ export default function FamilyTreePage() {
       navigate(`/home/member/${encodeURIComponent(member.id)}`)
       return
     }
-    if (member.inviterCanEdit) {
+    if (viewerCanEditMember(member)) {
       setEditingMember(member)
       return
     }
@@ -521,6 +536,10 @@ export default function FamilyTreePage() {
               centerProfileHref={isExploreView ? null : '/home/profile'}
               centerRoleLabel={isExploreView ? 'Tree center' : undefined}
               exploreHint
+              allowMemberEdit={!isExploreView}
+              centerSelfMemberIds={
+                claimedInviteToken ? [claimedInviteToken] : []
+              }
               fullTreeView={fullTreeView}
               treeRef={treeRef}
             />
@@ -548,7 +567,7 @@ export default function FamilyTreePage() {
                 </li>
                 {members.map((member) => (
                   <li key={member.id} className="ft-list-person">
-                    {member.inviterCanEdit ? (
+                    {viewerCanEditMember(member) ? (
                       <button
                         type="button"
                         onClick={() => handleMemberAction(member)}
@@ -645,7 +664,11 @@ export default function FamilyTreePage() {
         viewerUid={user?.uid ?? null}
         viewerInvitedByUid={viewerInvitedByUid}
         onClose={() => setActionMember(null)}
-        onEdit={(member) => setEditingMember(member)}
+        onEdit={
+          isExploreView ? undefined : (member) => setEditingMember(member)
+        }
+        allowEdit={!isExploreView}
+        treeOwnerUid={treeSubscriptionUid}
       />
 
       {!fullTreeView ? (

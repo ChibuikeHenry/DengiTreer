@@ -11,6 +11,8 @@ import {
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
+import { resolveChildCoParentMemberId } from '../hooks/useTreeParentPickOptions'
+import { useAuth } from '../context/AuthContext'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
@@ -33,6 +35,7 @@ const BIRTH_ORDER_OPTIONS = [
 ]
 
 export default function AddChildModal({ open, onClose, onAdded }: Props) {
+  const { user } = useAuth()
   const [firstName, setFirstName] = useState('')
   const [middleName, setMiddleName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -53,6 +56,11 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (!user) return
+    const sharedFatherMemberId =
+      (await resolveChildCoParentMemberId(user, fatherId)) ?? undefined
+    const sharedMotherMemberId =
+      (await resolveChildCoParentMemberId(user, motherId)) ?? undefined
     await submit({
       firstName,
       middleName,
@@ -65,6 +73,8 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
       bio: bio.trim() || undefined,
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+      sharedFatherMemberId,
+      sharedMotherMemberId,
     })
   }
 

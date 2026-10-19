@@ -5,6 +5,8 @@ import {
   type MemberPrivacy,
 } from './memberPrivacy'
 import {
+  genderForSiblingRelationship,
+  genderFromParentSlot,
   siblingRelationshipLabel,
   type ParentKind,
   type ParentSlot,
@@ -94,8 +96,34 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     dateOfBirth: record.dateOfBirth,
     dateOfDeath: record.dateOfDeath,
     inviteeEmail: record.inviteeEmail,
-    gender: record.gender ?? genderFromSiblingRelationship(record.siblingRelationship),
+    gender: resolveTreeMemberGender({
+      gender: record.gender,
+      parentSlot: record.parentSlot,
+      role: record.role,
+      siblingRelationship: record.siblingRelationship,
+    }),
   }
+}
+
+/** Form/display gender: stored value, else infer from parent role or sibling relationship. */
+export function resolveTreeMemberGender(member: {
+  gender?: string | null
+  parentSlot?: ParentSlot | null
+  role?: InviteRole | string
+  siblingRelationship?: SiblingRelationship | null
+}): string | null {
+  const stored = normalizeTreeMemberGender(member.gender)
+  if (stored) return stored
+  if (member.role === 'parent') {
+    return genderFromParentSlot(member.parentSlot)
+  }
+  if (member.siblingRelationship) {
+    return (
+      genderFromSiblingRelationship(member.siblingRelationship) ??
+      genderForSiblingRelationship(member.siblingRelationship)
+    )
+  }
+  return null
 }
 
 function genderFromSiblingRelationship(
@@ -149,7 +177,6 @@ const VIEWER_ROLE_TABLE: Partial<
     parent: 'grandparent',
     spouse: 'parent',
     child: 'sibling',
-    sibling: 'sibling',
     grandparent: 'great-grandparent',
     'great-grandparent': 'great-grandparent',
   },
@@ -241,8 +268,26 @@ export function subscribeTreeMembers(
         ) {
           parentSlot = inviterMember.parentSlot === 'father' ? 'mother' : 'father'
         }
-        // roles were re-mapped for this viewer, so the stored lineage side no longer applies
-        return [{ ...m, role, parentSlot, lineageSide: null, inviterCanEdit: false }]
+
+        const inviterSide =
+          inviterMember?.parentSlot === 'father'
+            ? 'paternal'
+            : inviterMember?.parentSlot === 'mother'
+              ? 'maternal'
+              : null
+
+        let lineageSide: TreeMember['lineageSide'] = null
+        let parentKind = m.parentKind
+
+        if (inviterRelation === 'child') {
+          if (role === 'grandparent') lineageSide = inviterSide
+          else if (role === 'great-grandparent') lineageSide = m.lineageSide ?? inviterSide
+          if (role === 'parent' && m.role === 'spouse') {
+            parentKind = 'step'
+          }
+        }
+
+        return [{ ...m, role, parentSlot, parentKind, lineageSide, inviterCanEdit: false }]
       })
 
     const seen = new Set<string>()

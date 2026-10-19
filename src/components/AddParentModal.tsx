@@ -13,7 +13,11 @@ import {
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { DashIcons } from './DashboardLayout'
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
-import type { ParentKind, ParentSlot } from '../lib/siblingRelationship'
+import {
+  genderFromParentSlot,
+  type ParentKind,
+  type ParentSlot,
+} from '../lib/siblingRelationship'
 
 const parentTypes = [
   {
@@ -157,7 +161,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
       lastName: resolvedLast,
       inviteeEmail: email.trim() || undefined,
       memberStatus: status,
-      gender: gender || undefined,
+      gender: gender || genderFromParentSlot(parentSlot) || undefined,
       photoFile: photo.file,
       privacy,
       bio: bio.trim() || undefined,

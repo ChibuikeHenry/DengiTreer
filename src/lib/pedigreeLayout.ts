@@ -98,13 +98,56 @@ const mean = (values: number[]) =>
 
 type Target = { x: number; y: number; dashed?: boolean }
 
+function childCoupleKey(child: TreeMember): string {
+  const f = child.sharedFatherMemberId?.trim() ?? ''
+  const m = child.sharedMotherMemberId?.trim() ?? ''
+  if (!f && !m) return '__legacy__'
+  return `${f}|${m}`
+}
+
+function coParentX(
+  memberId: string | null | undefined,
+  selfX: number,
+  selfMemberIds: Set<string>,
+  memberX: Map<string, number>,
+): number | null {
+  const id = memberId?.trim()
+  if (!id) return null
+  if (selfMemberIds.has(id)) return selfX
+  const x = memberX.get(id)
+  return x ?? null
+}
+
+/** Midpoint on the self row for lines to this child's recorded parent(s). */
+function childCoupleAnchorX(
+  child: TreeMember,
+  selfX: number,
+  selfMemberIds: Set<string>,
+  memberX: Map<string, number>,
+  fallbackSpouseX: number | null,
+): number {
+  const fatherX = coParentX(child.sharedFatherMemberId, selfX, selfMemberIds, memberX)
+  const motherX = coParentX(child.sharedMotherMemberId, selfX, selfMemberIds, memberX)
+  if (fatherX != null && motherX != null) return (fatherX + motherX) / 2
+  if (motherX != null) return (selfX + motherX) / 2
+  if (fatherX != null) return (selfX + fatherX) / 2
+  if (fallbackSpouseX != null) return (selfX + fallbackSpouseX) / 2
+  return selfX
+}
+
 export function buildPedigreeLayout({
   members,
   allowAdds,
+  centerSelfMemberIds = [],
 }: {
   members: TreeMember[]
   allowAdds: boolean
+  /** Invite tokens for the centered person — matches stored co-parent ids for "You". */
+  centerSelfMemberIds?: string[]
 }): PedigreeLayout {
+  const selfMemberIds = new Set(
+    centerSelfMemberIds.map((id) => id.trim()).filter(Boolean),
+  )
   const { nodeW, nodeH, av, pitch, rowGap, unitGap, pad, busOffset } = PED
   /** visual height of an "add" circle including its label */
   const addH = av + 26
@@ -451,61 +494,155 @@ export function buildPedigreeLayout({
   /* ------------------------------------------------------- great-grandparents */
   if (showGG) {
     const ggTop = rowTop(ggRow)
-    // a step grandparent is not the child of a great-grandparent: leave them off the bus
-    const blood = gpPlaced.filter((p) => !isStep(p.member))
-    const fed = (blood.length ? blood : gpPlaced).map((p) => p.x)
-    const anchor = householdAnchor(gg)
-    const dropX = fed.length ? mean(fed) : aimX
-    const center = dropX - anchor.offset
-    const n = gg.length
-    const xs = gg.map((_, k) => center + (k - (n - 1) / 2) * pitch)
-    gg.forEach((m, k) => {
-      nodes.push({ key: `m:${m.id}`, kind: 'member', member: m, x: xs[k], y: ggTop })
-      if (k > 0) hJoin(xs[k - 1], xs[k], ggTop)
-    })
-    bracket(
-      dropX,
-      anchor.atAvatar ? ggTop + av / 2 : underLabelY(ggTop),
-      fed.map((x) => ({ x, y: gpTop })),
-      gpTop - busOffset,
+    const ggAll = members.filter((m) => m.role === 'great-grandparent')
+
+    const bucketGreatGrandparents = (all: TreeMember[]) => {
+      const paternal = all.filter((m) => m.lineageSide === 'paternal')
+      const maternal = all.filter((m) => m.lineageSide === 'maternal')
+      const unsided: TreeMember[] = []
+      for (const m of all.filter((g) => !g.lineageSide)) {
+        if (m.parentSlot === 'father' && !paternal.length) paternal.push(m)
+        else if (m.parentSlot === 'mother' && !maternal.length) maternal.push(m)
+        else unsided.push(m)
+      }
+      return { paternal, maternal, unsided }
+    }
+
+    const buckets = bucketGreatGrandparents(ggAll)
+    const ggUnits = (
+      [
+        { key: 'paternal' as const, nodes: buckets.paternal },
+        { key: 'unsided' as const, nodes: buckets.unsided },
+        { key: 'maternal' as const, nodes: buckets.maternal },
+      ] as const
     )
+      .map((u) => {
+        const ordered = orderHousehold([...u.nodes])
+        return { key: u.key, nodes: ordered, anchor: householdAnchor(ordered) }
+      })
+      .filter((u) => u.nodes.length > 0)
+
+    const bloodGP = gpPlaced.filter((p) => !isStep(p.member))
+    const availableGP = bloodGP.length ? bloodGP : gpPlaced
+
+    const targetsByUnit = ggUnits.map((u) => {
+      const fed = availableGP.filter(
+        (p) => u.key === 'unsided' || p.member.lineageSide === u.key,
+      )
+      const list = fed.length ? fed : availableGP
+      if (list.length) {
+        return list.map((p) => ({ x: p.x, y: gpTop }))
+      }
+      return [{ x: aimX, y: gpTop, dashed: true }]
+    })
+
+    const wanted = targetsByUnit.map((t) => (t.length ? mean(t.map((x) => x.x)) : aimX))
+    const half = (n: number) => ((n - 1) / 2) * pitch
+    const drops = [...wanted]
+    for (let i = 1; i < ggUnits.length; i += 1) {
+      const prev = ggUnits[i - 1]
+      const cur = ggUnits[i]
+      const prevRight = half(prev.nodes.length) - prev.anchor.offset
+      const curLeft = -half(cur.nodes.length) - cur.anchor.offset
+      drops[i] = Math.max(drops[i], drops[i - 1] + prevRight - curLeft + pitch + unitGap)
+    }
+    const shift = mean(wanted) - mean(drops)
+    const busToGP = gpTop - busOffset
+
+    ggUnits.forEach((unit, ui) => {
+      const dropX = drops[ui] + shift
+      const center = dropX - unit.anchor.offset
+      const n = unit.nodes.length
+      const xs = unit.nodes.map((_, k) => center + (k - (n - 1) / 2) * pitch)
+      unit.nodes.forEach((m, k) => {
+        nodes.push({ key: `m:${m.id}`, kind: 'member', member: m, x: xs[k], y: ggTop })
+        if (k > 0) hJoin(xs[k - 1], xs[k], ggTop)
+      })
+      const targets = targetsByUnit[ui]
+      if (targets.length) {
+        bracket(
+          dropX,
+          unit.anchor.atAvatar ? ggTop + av / 2 : underLabelY(ggTop),
+          targets,
+          busToGP,
+        )
+      }
+    })
   }
 
   /* ----------------------------------------------------------------- children */
   if (showKids) {
     const kidsTop = rowTop(kidsRow)
-    const unitX = spouseXs.length ? (selfX + spouseXs[0]) / 2 : selfX
     const fromY = spouseXs.length ? selfTop + av / 2 : selfTop + nodeH - 4
-    const kidSlots: ({ member: TreeMember } | { add: true })[] = [
-      ...children.map((member) => ({ member })),
-      ...(allowAdds ? [{ add: true as const }] : []),
-    ]
-    const k = kidSlots.length
-    const targets: Target[] = []
-    kidSlots.forEach((slot, j) => {
-      const x = unitX + (j - (k - 1) / 2) * pitch
-      if ('member' in slot) {
-        nodes.push({
-          key: `m:${slot.member.id}`,
-          kind: 'member',
-          member: slot.member,
-          x,
-          y: kidsTop,
-        })
-        targets.push({ x, y: kidsTop })
-      } else {
-        nodes.push({
-          key: 'add:child',
-          kind: 'add',
-          modal: 'child',
-          label: 'Add Child',
-          x,
-          y: kidsTop,
-        })
-        targets.push({ x, y: kidsTop, dashed: true })
-      }
+    const legacySpouseX = spouseXs[0] ?? null
+
+    const coupleGroups = new Map<string, TreeMember[]>()
+    for (const child of children) {
+      const key = childCoupleKey(child)
+      const list = coupleGroups.get(key) ?? []
+      list.push(child)
+      coupleGroups.set(key, list)
+    }
+
+    const sortedGroups = [...coupleGroups.entries()].sort((a, b) => {
+      const ax = childCoupleAnchorX(
+        a[1][0],
+        selfX,
+        selfMemberIds,
+        memberX,
+        legacySpouseX,
+      )
+      const bx = childCoupleAnchorX(
+        b[1][0],
+        selfX,
+        selfMemberIds,
+        memberX,
+        legacySpouseX,
+      )
+      return ax - bx
     })
-    bracket(unitX, fromY, targets, kidsTop - busOffset)
+
+    sortedGroups.forEach(([, kids]) => {
+      const anchorX = childCoupleAnchorX(
+        kids[0],
+        selfX,
+        selfMemberIds,
+        memberX,
+        legacySpouseX,
+      )
+      const groupTargets: Target[] = []
+      kids.forEach((member, j) => {
+        const x = anchorX + (j - (kids.length - 1) / 2) * pitch
+        nodes.push({
+          key: `m:${member.id}`,
+          kind: 'member',
+          member,
+          x,
+          y: kidsTop,
+        })
+        groupTargets.push({ x, y: kidsTop })
+      })
+      bracket(anchorX, fromY, groupTargets, kidsTop - busOffset)
+    })
+
+    if (allowAdds) {
+      const addAnchorX =
+        legacySpouseX != null ? (selfX + legacySpouseX) / 2 : selfX
+      nodes.push({
+        key: 'add:child',
+        kind: 'add',
+        modal: 'child',
+        label: 'Add Child',
+        x: addAnchorX,
+        y: kidsTop,
+      })
+      bracket(
+        addAnchorX,
+        fromY,
+        [{ x: addAnchorX, y: kidsTop, dashed: true }],
+        kidsTop - busOffset,
+      )
+    }
   }
 
   /* ------------------------------------------------------------ normalise to 0,0 */

@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import MarketingHeader from '../components/MarketingHeader'
+import { useAuth } from '../context/AuthContext'
+import {
+  formatNaira,
+  PREMIUM_CHECKOUT_ENABLED,
+  PREMIUM_PLAN_ORDER,
+  PREMIUM_PLANS,
+  type PremiumPlanId,
+} from '../lib/premiumPlans'
 import './PricingPage.css'
-
-type BillingCycle = 'monthly' | 'quarterly' | 'yearly'
-
-const billingPrices: Record<BillingCycle, { amount: string; label: string; period: string }> = {
-  monthly: { amount: '₦1,000', label: '/monthly', period: '/month' },
-  quarterly: { amount: '₦2,500', label: '/Quarterly', period: '/quarter' },
-  yearly: { amount: '₦5,000', label: '/Yearly', period: '/year' },
-}
 
 type PricingPageProps = {
   /** When true, shown inside the dashboard (no marketing header). */
@@ -18,9 +18,43 @@ type PricingPageProps = {
 
 export default function PricingPage({ embedded = false }: PricingPageProps) {
   const navigate = useNavigate()
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>('monthly')
-  const activePricing = billingPrices[billingCycle]
+  const { user } = useAuth()
+  const [billingCycle, setBillingCycle] = useState<PremiumPlanId>('monthly')
+  const [checkoutNotice, setCheckoutNotice] = useState('')
+  const [paying, setPaying] = useState(false)
+
+  const activePlan = PREMIUM_PLANS[billingCycle]
   const concessionTo = embedded ? '/home/concession' : '/concession'
+
+  async function handleUpgrade() {
+    setCheckoutNotice('')
+    if (!embedded) {
+      navigate(`/signup?plan=premium&billing=${billingCycle}`)
+      return
+    }
+    if (!PREMIUM_CHECKOUT_ENABLED) {
+      setCheckoutNotice(
+        'Online payment is not available yet. You can still use Free forever, or request a concession while we finish checkout.',
+      )
+      return
+    }
+    if (!user) {
+      navigate('/login')
+      return
+    }
+    setPaying(true)
+    try {
+      const { initializePremiumPayment } = await import('../lib/premiumPayment')
+      const { authorizationUrl } = await initializePremiumPayment(billingCycle)
+      window.location.assign(authorizationUrl)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not start payment. Try again.'
+      setCheckoutNotice(message)
+    } finally {
+      setPaying(false)
+    }
+  }
 
   return (
     <div className={`pricing-page${embedded ? ' pricing-page-embedded' : ''}`}>
@@ -54,8 +88,20 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
             </Link>
           </div>
 
+          {!PREMIUM_CHECKOUT_ENABLED ? (
+            <p className="pricing-pay-message pricing-checkout-preview" role="status">
+              Premium checkout is coming soon — compare plans below. Payment is not charged from
+              this screen yet.
+            </p>
+          ) : null}
+
+          {checkoutNotice ? (
+            <p className="pricing-pay-message pricing-pay-success" role="status">
+              {checkoutNotice}
+            </p>
+          ) : null}
+
           <div className="pricing-grid">
-            {/* Free Card */}
             <div className="pricing-card card-free">
               <div className="card-top">
                 <div className="card-badge-row">
@@ -74,24 +120,23 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
                       <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
                     </svg>
                   </div>
-                  <span className="pill-badge badge-free">Best for beginners</span>
                 </div>
 
-                <h2 className="card-plan-title">Free</h2>
+                <h2 className="card-plan-title">Free forever</h2>
                 <p className="card-plan-desc">
-                  Start with what matters most - your immediate family.
+                  Start with what matters most — your immediate family.
                 </p>
 
                 <div className="card-price-wrap">
-                  <span className="price-amount">₦0</span>
-                  <span className="price-period">/ 7 days</span>
+                  <span className="price-amount">{formatNaira(0)}</span>
+                  <span className="price-period">forever</span>
                 </div>
 
                 <Link
                   to={embedded ? '/home/tree' : '/signup'}
                   className="btn-card-action btn-free"
                 >
-                  {embedded ? 'Continue on Free' : 'Get Started'}
+                  {embedded ? 'Continue on Free forever' : 'Get Started'}
                 </Link>
 
                 <ul className="card-features">
@@ -115,7 +160,6 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
               </div>
             </div>
 
-            {/* Premium Card */}
             <div className="pricing-card card-premium">
               <div className="card-premium-head">
                 <div className="card-badge-row">
@@ -136,71 +180,55 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
 
                 <h2 className="card-plan-title-light">Premium</h2>
                 <p className="card-plan-desc-light">
-                  Start with what matters most - your immediate family.
+                  Unlock extended family, downloads, and unlimited members on your tree.
+                </p>
+                <p className="pricing-one-time-note">
+                  One-time payment — no subscription or auto-renewal.
                 </p>
 
                 <div className="premium-price-row">
                   <div className="premium-price-left">
                     <div className="card-price-wrap-light">
-                      <span className="price-amount-light">{activePricing.amount}</span>
-                      <span className="price-period-light">{activePricing.label}</span>
+                      <span className="price-amount-light">
+                        {formatNaira(activePlan.amountNaira)}
+                      </span>
+                      <span className="price-period-light">{activePlan.priceSuffix}</span>
                     </div>
 
                     <button
                       type="button"
                       className="btn-card-action btn-upgrade"
-                      onClick={() =>
-                        embedded
-                          ? navigate('/home/settings?plan=premium')
-                          : navigate('/signup?plan=premium')
-                      }
+                      disabled={paying}
+                      onClick={() => void handleUpgrade()}
                     >
-                      Upgrade to Premium
+                      {paying
+                        ? 'Opening checkout…'
+                        : PREMIUM_CHECKOUT_ENABLED
+                          ? 'Pay once — get Premium'
+                          : 'Upgrade to Premium'}
                     </button>
                   </div>
 
                   <div className="premium-billing-options">
-                    <label
-                      className={`billing-option ${billingCycle === 'monthly' ? 'is-selected' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="billing-cycle"
-                        checked={billingCycle === 'monthly'}
-                        onChange={() => setBillingCycle('monthly')}
-                      />
-                      <span className="radio-dot" />
-                      <strong>₦1,000</strong>
-                      <span>/monthly</span>
-                    </label>
-
-                    <label
-                      className={`billing-option ${billingCycle === 'quarterly' ? 'is-selected' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="billing-cycle"
-                        checked={billingCycle === 'quarterly'}
-                        onChange={() => setBillingCycle('quarterly')}
-                      />
-                      <span className="radio-dot" />
-                      <strong>₦2,500</strong>
-                      <span>/Quarterly</span>
-                    </label>
-
-                    <label
-                      className={`billing-option ${billingCycle === 'yearly' ? 'is-selected' : ''}`}
-                    >
-                      <input
-                        type="radio"
-                        name="billing-cycle"
-                        checked={billingCycle === 'yearly'}
-                        onChange={() => setBillingCycle('yearly')}
-                      />
-                      <span className="radio-dot" />
-                      <strong>₦5,000</strong>
-                      <span>/Yearly</span>
-                    </label>
+                    {PREMIUM_PLAN_ORDER.map((planId) => {
+                      const plan = PREMIUM_PLANS[planId]
+                      return (
+                        <label
+                          key={planId}
+                          className={`billing-option ${billingCycle === planId ? 'is-selected' : ''}`}
+                        >
+                          <input
+                            type="radio"
+                            name="billing-cycle"
+                            checked={billingCycle === planId}
+                            onChange={() => setBillingCycle(planId)}
+                          />
+                          <span className="radio-dot" />
+                          <strong>{formatNaira(plan.amountNaira)}</strong>
+                          <span>{plan.pickerLabel}</span>
+                        </label>
+                      )
+                    })}
                   </div>
                 </div>
               </div>
@@ -209,7 +237,8 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
                 <ul className="card-features features-premium">
                   <li>
                     <span className="check-icon check-premium">✔</span>
-                    See and explore your extended family (grandparents, aunts, uncles, cousins and more)
+                    See and explore your extended family (grandparents, aunts, uncles, cousins and
+                    more)
                   </li>
                   <li>
                     <span className="check-icon check-premium">✔</span>
@@ -233,7 +262,6 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
           </div>
         </div>
       </main>
-
     </div>
   )
 }

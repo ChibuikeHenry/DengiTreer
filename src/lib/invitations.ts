@@ -149,6 +149,8 @@ const updatePendingFamilyMemberProfileFn = httpsCallable<
     parentSlot?: ParentSlot
     inviteeEmail?: string | null
     gender?: string | null
+    sharedFatherMemberId?: string | null
+    sharedMotherMemberId?: string | null
   },
   { ok: boolean }
 >(functions, 'updatePendingFamilyMemberProfile')
@@ -258,10 +260,18 @@ export async function updatePendingFamilyMemberProfile(input: {
   parentSlot?: ParentSlot
   inviteeEmail?: string | null
   gender?: string | null
+  sharedFatherMemberId?: string | null
+  sharedMotherMemberId?: string | null
 }) {
   const payload = { ...input }
   if (input.inviteeEmail !== undefined) {
     payload.inviteeEmail = normalizeInviteeEmail(input.inviteeEmail) ?? null
+  }
+  if (input.sharedFatherMemberId !== undefined) {
+    payload.sharedFatherMemberId = input.sharedFatherMemberId?.trim() || null
+  }
+  if (input.sharedMotherMemberId !== undefined) {
+    payload.sharedMotherMemberId = input.sharedMotherMemberId?.trim() || null
   }
   const result = await updatePendingFamilyMemberProfileFn(payload)
   return result.data

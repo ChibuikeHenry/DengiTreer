@@ -174,6 +174,9 @@ type ParentSelectFieldsProps = {
   motherId?: string
   onFatherId?: (id: string) => void
   onMotherId?: (id: string) => void
+  /** Overrides default empty-list hints (e.g. profile vs add sibling). */
+  emptyFathersHint?: string
+  emptyMothersHint?: string
 }
 
 function parentOptionLabel(option: ParentPickOption) {
@@ -188,9 +191,17 @@ export function ParentSelectFields({
   motherId = '',
   onFatherId,
   onMotherId,
+  emptyFathersHint,
+  emptyMothersHint,
 }: ParentSelectFieldsProps) {
   const { fathers, mothers } = useTreeParentPickOptions(active, mode)
   const isSibling = mode === 'sibling'
+  const defaultEmptyFathersHint = isSibling
+    ? 'Add your parents to the tree first, then you can link siblings to them.'
+    : 'Add yourself and invite your spouse (or co-parent) to see choices here.'
+  const defaultEmptyMothersHint = isSibling
+    ? 'Add your parents to the tree first, then you can link siblings to them.'
+    : 'Only people on your tree that you added or invited appear in this list.'
 
   return (
     <div className="form-row form-row-2">
@@ -209,11 +220,7 @@ export function ParentSelectFields({
           ))}
         </select>
         {fathers.length === 0 ? (
-          <span className="field-hint">
-            {isSibling
-              ? 'Add your parents to the tree first, then you can link siblings to them.'
-              : 'Add yourself and invite your spouse (or co-parent) to see choices here.'}
-          </span>
+          <span className="field-hint">{emptyFathersHint ?? defaultEmptyFathersHint}</span>
         ) : null}
       </label>
       <label className="field">
@@ -231,11 +238,7 @@ export function ParentSelectFields({
           ))}
         </select>
         {mothers.length === 0 ? (
-          <span className="field-hint">
-            {isSibling
-              ? 'Add your parents to the tree first, then you can link siblings to them.'
-              : 'Only people on your tree that you added or invited appear in this list.'}
-          </span>
+          <span className="field-hint">{emptyMothersHint ?? defaultEmptyMothersHint}</span>
         ) : null}
       </label>
     </div>

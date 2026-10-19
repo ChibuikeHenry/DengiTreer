@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ProfileAvatar from './ProfileAvatar'
 import { treeMemberRoleLabel, type TreeMember } from '../lib/familyTreeMembers'
+import { canViewerEditTreeMember } from '../lib/profileClaim'
 import {
   exploreAccessHint,
   resolveExploreAccess,
@@ -15,6 +16,9 @@ type Props = {
   viewerInvitedByUid: string | null
   onClose: () => void
   onEdit?: (member: TreeMember) => void
+  /** When false, never offer edit (e.g. while exploring someone else’s tree). */
+  allowEdit?: boolean
+  treeOwnerUid?: string | null
 }
 
 export default function ExploreTreeMemberModal({
@@ -24,6 +28,8 @@ export default function ExploreTreeMemberModal({
   viewerInvitedByUid,
   onClose,
   onEdit,
+  allowEdit = true,
+  treeOwnerUid = null,
 }: Props) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -68,6 +74,8 @@ export default function ExploreTreeMemberModal({
   if (!open || !member) return null
 
   const roleLabel = treeMemberRoleLabel(member)
+  const canEditThisMember =
+    allowEdit && canViewerEditTreeMember(member, viewerUid, treeOwnerUid ?? viewerUid)
 
   function handleExplore() {
     if (!exploreRootUid) return
@@ -105,14 +113,14 @@ export default function ExploreTreeMemberModal({
           <p className="explore-member-hint">
             {member.profileClaimed
               ? 'This person has claimed their profile on DengiTree.'
-              : member.inviterCanEdit
+              : canEditThisMember
                 ? 'Invite pending — you can still update their details before they join.'
                 : 'This person is on your tree through extended family. You can view them but not edit their details.'}
           </p>
         </div>
 
         <div className="explore-member-actions">
-          {member.inviterCanEdit && onEdit ? (
+          {canEditThisMember && onEdit ? (
             <button
               type="button"
               className="btn-modal-primary"
@@ -131,7 +139,7 @@ export default function ExploreTreeMemberModal({
           ) : canExplore && exploreRootUid ? (
             <button
               type="button"
-              className={member.inviterCanEdit ? 'btn-modal-outline' : 'btn-modal-primary'}
+              className={canEditThisMember ? 'btn-modal-outline' : 'btn-modal-primary'}
               onClick={handleExplore}
             >
               Explore their family tree
@@ -141,7 +149,7 @@ export default function ExploreTreeMemberModal({
               Their tree isn&apos;t shared with you yet. They need to join through your invite
               link.
             </p>
-          ) : !member.inviterCanEdit ? (
+          ) : !canEditThisMember ? (
             <p className="explore-member-unavailable">
               Only the person who invited them can edit this profile before it is claimed.
             </p>

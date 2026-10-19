@@ -1,4 +1,5 @@
-import type { InvitationRecord } from './invitations'
+import type { InvitationRecord, InviteRole } from './invitations'
+import type { TreeMember } from './familyTreeMembers'
 
 /** Invitee has accepted and owns their profile; inviter must not edit stub data. */
 export function isProfileClaimed(record: Pick<InvitationRecord, 'status' | 'profileClaimed' | 'joinedUid'>): boolean {
@@ -6,9 +7,40 @@ export function isProfileClaimed(record: Pick<InvitationRecord, 'status' | 'prof
   return record.status === 'joined' && !!record.joinedUid
 }
 
-export function canInviterEditInvitation(
-  record: Pick<InvitationRecord, 'status' | 'profileClaimed' | 'joinedUid' | 'memberStatus'>,
+const TREE_FAMILY_ROLES = new Set<InviteRole>([
+  'spouse',
+  'parent',
+  'grandparent',
+  'great-grandparent',
+  'child',
+  'sibling',
+])
+
+/** Invites to join DengiTree only — not a family-tree member stub. */
+export function isPlatformShareInvite(
+  record: Pick<InvitationRecord, 'role'>,
 ): boolean {
+  return record.role === 'member'
+}
+
+export function canInviterEditInvitation(
+  record: Pick<
+    InvitationRecord,
+    'status' | 'profileClaimed' | 'joinedUid' | 'memberStatus' | 'role'
+  >,
+): boolean {
+  if (isPlatformShareInvite(record)) return false
+  if (!TREE_FAMILY_ROLES.has(record.role)) return false
   if (isProfileClaimed(record)) return false
   return true
+}
+
+/** True when the signed-in user may edit this member on the tree they are currently viewing. */
+export function canViewerEditTreeMember(
+  member: Pick<TreeMember, 'inviterCanEdit'>,
+  viewerUid: string | null | undefined,
+  treeOwnerUid: string | null | undefined,
+): boolean {
+  if (!viewerUid || !treeOwnerUid || viewerUid !== treeOwnerUid) return false
+  return member.inviterCanEdit
 }

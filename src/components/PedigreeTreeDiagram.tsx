@@ -43,11 +43,13 @@ function PedigreeMemberNode({
   viewer,
   onSelectMember,
   exploreHint = false,
+  allowMemberEdit = true,
 }: {
   member: TreeMember
   viewer: TreeAvatarViewerContext | null
   onSelectMember?: (member: TreeMember) => void
   exploreHint?: boolean
+  allowMemberEdit?: boolean
 }) {
   const yearsLabel = formatLifeYearsLine(
     member.dateOfBirth,
@@ -64,7 +66,7 @@ function PedigreeMemberNode({
       onClick={() => onSelectMember?.(member)}
       style={isClickable ? { cursor: 'pointer' } : undefined}
       title={
-        member.inviterCanEdit
+        allowMemberEdit && member.inviterCanEdit
           ? 'Click to edit member details'
           : exploreHint && (member.joinedUid || member.id.startsWith('inviter-'))
             ? 'Click to explore their family tree'
@@ -129,6 +131,8 @@ export default function PedigreeTreeDiagram({
   centerProfileHref = '/home/profile',
   centerRoleLabel,
   exploreHint = false,
+  allowMemberEdit = true,
+  centerSelfMemberIds = [],
   maxScale = 1,
   handleRef,
 }: {
@@ -148,13 +152,15 @@ export default function PedigreeTreeDiagram({
   centerProfileHref?: string | null
   centerRoleLabel?: string
   exploreHint?: boolean
+  allowMemberEdit?: boolean
+  centerSelfMemberIds?: string[]
   /** how far the diagram may be enlarged when there is spare room (full view uses > 1) */
   maxScale?: number
   handleRef?: Ref<PedigreeTreeHandle>
 }) {
   const layout = useMemo(
-    () => buildPedigreeLayout({ members, allowAdds }),
-    [members, allowAdds],
+    () => buildPedigreeLayout({ members, allowAdds, centerSelfMemberIds }),
+    [members, allowAdds, centerSelfMemberIds],
   )
 
   // scale the whole canvas down (or up in full view) so it fits the available width
@@ -288,6 +294,7 @@ export default function PedigreeTreeDiagram({
                   viewer={viewer}
                   onSelectMember={onSelectMember}
                   exploreHint={exploreHint}
+                  allowMemberEdit={allowMemberEdit}
                 />
               ) : node.kind === 'add' ? (
                 <AddCircle label={node.label} onClick={() => openModal(node.modal)} />

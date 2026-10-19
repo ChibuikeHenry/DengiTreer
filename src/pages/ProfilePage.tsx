@@ -8,6 +8,7 @@ import {
   ContactFields,
   MemberBioField,
   OccupationEducationFields,
+  ParentSelectFields,
   PersonalInfoFields,
 } from '../components/familyFormFields'
 import {
@@ -39,6 +40,8 @@ export default function ProfilePage() {
   const [photoURL, setPhotoURL] = useState<string | null>(null)
   const [bio, setBio] = useState('')
   const [profilePrivacy, setProfilePrivacy] = useState<MemberPrivacy>('family_members')
+  const [fatherId, setFatherId] = useState('')
+  const [motherId, setMotherId] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -63,6 +66,8 @@ export default function ProfilePage() {
       setProfilePrivacy(
         parseMemberPrivacy(profile.profilePrivacy ?? profile.defaultMemberPrivacy),
       )
+      setFatherId(profile.treeFatherMemberId ?? '')
+      setMotherId(profile.treeMotherMemberId ?? '')
       setLoading(false)
     })()
 
@@ -111,6 +116,8 @@ export default function ProfilePage() {
         dateOfBirth: dob.trim(),
         bio: bio.trim(),
         profilePrivacy,
+        treeFatherMemberId: fatherId,
+        treeMotherMemberId: motherId,
       })
 
       if (nextPhotoURL) setPhotoURL(nextPhotoURL)
@@ -188,6 +195,25 @@ export default function ProfilePage() {
                 onDob={setDob}
                 onGender={setGender}
                 onStatus={setStatus}
+              />
+            </section>
+
+            <section className="profile-section">
+              <h2>Your parents on the family tree</h2>
+              <p className="field-hint">
+                Choose who is your father and mother on your tree. To add new parent records, go
+                to{' '}
+                <Link to="/home/tree">Family Tree</Link> and use Add Parent.
+              </p>
+              <ParentSelectFields
+                active={!loading}
+                mode="sibling"
+                fatherId={fatherId}
+                motherId={motherId}
+                onFatherId={setFatherId}
+                onMotherId={setMotherId}
+                emptyFathersHint="No fathers on your tree yet. Add a parent on the Family Tree page, then select them here."
+                emptyMothersHint="No mothers on your tree yet. Add a parent on the Family Tree page, then select them here."
               />
             </section>
 

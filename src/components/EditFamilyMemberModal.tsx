@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
 import {
   ContactFields,
   MemberBioField,
+  ParentSelectFields,
   PersonalInfoFields,
 } from './familyFormFields'
+import {
+  coParentPickIdFromStored,
+  resolveChildCoParentMemberId,
+  selfCoParentMemberIds,
+} from '../hooks/useTreeParentPickOptions'
 import MemberPrivacyFields from './MemberPrivacyFields'
 import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
@@ -15,8 +21,13 @@ import {
 } from '../lib/invitations'
 import { parseMemberPrivacy, type MemberPrivacy } from '../lib/memberPrivacy'
 import { uploadFamilyMemberPhoto } from '../lib/profilePhoto'
-import type { TreeMember } from '../lib/familyTreeMembers'
-import type { ParentKind, ParentSlot } from '../lib/siblingRelationship'
+import { resolveTreeMemberGender, type TreeMember } from '../lib/familyTreeMembers'
+import {
+  genderFromParentSlot,
+  type ParentKind,
+  type ParentSlot,
+} from '../lib/siblingRelationship'
+import { resolveUserProfileForForm } from '../lib/userProfile'
 
 type EditFamilyMemberModalProps = {
   open: boolean
@@ -48,26 +59,68 @@ export default function EditFamilyMemberModal({
   const [privacy, setPrivacy] = useState<MemberPrivacy>('family_members')
 
   const isParent = member?.role === 'parent'
+  const usesSharedParents = member?.role === 'child' || member?.role === 'sibling'
+  const parentPickMode = member?.role === 'sibling' ? 'sibling' : 'child'
   const [parentKind, setParentKind] = useState<ParentKind>('biological')
   const [parentSlot, setParentSlot] = useState<ParentSlot>('father')
+  const [fatherId, setFatherId] = useState('')
+  const [motherId, setMotherId] = useState('')
+  const formLoadedForMemberId = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!open || !member) return
+    if (!open) {
+      formLoadedForMemberId.current = null
+      return
+    }
+    if (!member) return
+    if (formLoadedForMemberId.current === member.id) return
+    formLoadedForMemberId.current = member.id
+
+    const slot = member.parentSlot ?? 'father'
     setFirstName(member.firstName)
     setMiddleName('')
     setLastName(member.lastName)
     setEmail(member.inviteeEmail ?? '')
-    setGender(member.gender ?? '')
+    setGender(
+      resolveTreeMemberGender({
+        gender: member.gender,
+        parentSlot: slot,
+        role: member.role,
+        siblingRelationship: member.siblingRelationship,
+      }) ?? '',
+    )
     setDob(member.dateOfBirth ?? '')
     setDod(member.dateOfDeath ?? '')
     setStatus(member.memberStatus)
     setBio(member.bio)
     setPrivacy(parseMemberPrivacy(member.privacy))
     setParentKind(member.parentKind ?? 'biological')
-    setParentSlot(member.parentSlot ?? 'father')
+    setParentSlot(slot)
+    setFatherId(member.sharedFatherMemberId ?? '')
+    setMotherId(member.sharedMotherMemberId ?? '')
     setError('')
     photo.reset()
-  }, [open, member])
+
+    if (!user || (member.role !== 'child' && member.role !== 'sibling')) return
+
+    let cancelled = false
+    ;(async () => {
+      if (member.role === 'sibling') {
+        setFatherId(member.sharedFatherMemberId ?? '')
+        setMotherId(member.sharedMotherMemberId ?? '')
+        return
+      }
+      const profile = await resolveUserProfileForForm(user)
+      if (cancelled) return
+      const selfIds = selfCoParentMemberIds(profile)
+      setFatherId(coParentPickIdFromStored(member.sharedFatherMemberId, selfIds))
+      setMotherId(coParentPickIdFromStored(member.sharedMotherMemberId, selfIds))
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, member, user, photo])
 
   if (!member) return null
 
@@ -90,6 +143,26 @@ export default function EditFamilyMemberModal({
         photoURL = await uploadFamilyMemberPhoto(user.uid, member.role, photo.file)
       }
 
+      let sharedFatherMemberId: string | null | undefined
+      let sharedMotherMemberId: string | null | undefined
+      if (member.role === 'child') {
+        sharedFatherMemberId = await resolveChildCoParentMemberId(user, fatherId)
+        sharedMotherMemberId = await resolveChildCoParentMemberId(user, motherId)
+      } else if (member.role === 'sibling') {
+        sharedFatherMemberId = fatherId.trim() || null
+        sharedMotherMemberId = motherId.trim() || null
+      }
+
+      const genderSave =
+        gender.trim() ||
+        (isParent ? genderFromParentSlot(parentSlot) : null) ||
+        resolveTreeMemberGender({
+          gender,
+          parentSlot,
+          role: member.role,
+          siblingRelationship: member.siblingRelationship,
+        })
+
       await updatePendingFamilyMemberProfile({
         token: member.id,
         firstName: firstName.trim(),
@@ -102,8 +175,11 @@ export default function EditFamilyMemberModal({
         dateOfDeath: status === 'deceased' ? dod.trim() || null : null,
         memberStatus: status,
         privacy,
-        gender: gender.trim() || null,
+        gender: genderSave,
         ...(isParent ? { parentKind, parentSlot } : {}),
+        ...(member.role === 'child' || member.role === 'sibling'
+          ? { sharedFatherMemberId, sharedMotherMemberId }
+          : {}),
       })
 
       onUpdated()
@@ -148,6 +224,25 @@ export default function EditFamilyMemberModal({
         />
       </section>
 
+      {usesSharedParents ? (
+        <section className="modal-section">
+          <h3>{member.role === 'child' ? 'Parent(s)' : 'Shared parents'}</h3>
+          <p className="field-hint">
+            {member.role === 'child'
+              ? 'Choose who is this child’s parent(s) on your tree (you and/or your spouse or co-parent).'
+              : 'Choose this sibling’s father and mother on your family tree.'}
+          </p>
+          <ParentSelectFields
+            active={open}
+            mode={parentPickMode}
+            fatherId={fatherId}
+            motherId={motherId}
+            onFatherId={setFatherId}
+            onMotherId={setMotherId}
+          />
+        </section>
+      ) : null}
+
       {isParent ? (
         <section className="modal-section">
           <h3>Parent Type & Role</h3>
@@ -167,7 +262,12 @@ export default function EditFamilyMemberModal({
               <span>Parent Role</span>
               <select
                 value={parentSlot}
-                onChange={(e) => setParentSlot(e.target.value as ParentSlot)}
+                onChange={(e) => {
+                  const next = e.target.value as ParentSlot
+                  setParentSlot(next)
+                  const implied = genderFromParentSlot(next)
+                  if (implied) setGender(implied)
+                }}
               >
                 <option value="father">Father</option>
                 <option value="mother">Mother</option>

@@ -196,7 +196,7 @@ export default function ConcessionRequestPage({ embedded = false }: ConcessionRe
             <h1 id={titleId}>Request a Concession</h1>
             <p>
               We are here to support you. If you need a discount, special pricing or you
-              can&apos;t afford the subscription plans, please complete the form below.
+              can&apos;t afford the premium plans, please complete the form below.
             </p>
           </header>
           {formBody}
@@ -214,7 +214,7 @@ export default function ConcessionRequestPage({ embedded = false }: ConcessionRe
             <h1 id={titleId}>Request a Concession</h1>
             <p>
               We are here to support you. If you need a discount, special pricing or you
-              can&apos;t afford the subscription plans, please complete the form below.
+              can&apos;t afford the premium plans, please complete the form below.
             </p>
           </header>
           {formBody}

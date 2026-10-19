@@ -182,3 +182,36 @@ export function useTreeParentPickOptions(
 
   return mode === 'sibling' ? siblingOptions : childOptions
 }
+
+export function selfCoParentMemberIds(profile: {
+  inviteToken?: string
+  claimedInviteToken?: string
+}): string[] {
+  return [profile.claimedInviteToken, profile.inviteToken]
+    .map((token) => token?.trim())
+    .filter((token): token is string => Boolean(token))
+}
+
+/** Map stored co-parent token back to ParentSelectFields value (`self` or member id). */
+export function coParentPickIdFromStored(
+  storedId: string | null | undefined,
+  selfMemberIds: string[],
+): string {
+  const id = storedId?.trim()
+  if (!id) return ''
+  if (selfMemberIds.includes(id)) return 'self'
+  return id
+}
+
+export async function resolveChildCoParentMemberId(
+  user: { uid: string; displayName: string | null; email: string | null },
+  pickId: string,
+): Promise<string | null> {
+  const trimmed = pickId.trim()
+  if (!trimmed) return null
+  if (trimmed === 'self') {
+    const profile = await resolveUserProfileForForm(user)
+    return selfCoParentMemberIds(profile)[0] ?? null
+  }
+  return trimmed
+}

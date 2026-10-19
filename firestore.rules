@@ -54,6 +54,11 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /premiumPayments/{reference} {
+      allow read: if isAuthed() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+
     match /concessionRequests/{docId} {
       allow create: if request.resource.data.email is string
         && request.resource.data.reason is string

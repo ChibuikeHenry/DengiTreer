@@ -34,6 +34,14 @@ export function parseParentSlot(value: unknown): ParentSlot {
   return PARENT_SLOTS.has(v) ? v : 'unknown'
 }
 
+export function genderFromParentSlot(
+  slot: ParentSlot | null | undefined,
+): 'male' | 'female' | null {
+  if (slot === 'father') return 'male'
+  if (slot === 'mother') return 'female'
+  return null
+}
+
 export function genderForSiblingRelationship(
   type: SiblingRelationship,
 ): 'male' | 'female' | null {

@@ -293,9 +293,13 @@ async function createInvitationRecord(
       ? parseLineageSide(data.lineageSide)
       : null
   const sharedFatherMemberId =
-    role === 'sibling' ? String(data.sharedFatherMemberId ?? '').trim() || null : null
+    role === 'sibling' || role === 'child'
+      ? String(data.sharedFatherMemberId ?? '').trim() || null
+      : null
   const sharedMotherMemberId =
-    role === 'sibling' ? String(data.sharedMotherMemberId ?? '').trim() || null : null
+    role === 'sibling' || role === 'child'
+      ? String(data.sharedMotherMemberId ?? '').trim() || null
+      : null
   const siblingRelationship =
     role === 'sibling' && data.siblingRelationship
       ? (String(data.siblingRelationship).trim() as SiblingRelationship)
@@ -757,6 +761,43 @@ type UpdatePendingMemberInput = {
   parentSlot?: ParentSlot
   inviteeEmail?: string | null
   gender?: string | null
+  sharedFatherMemberId?: string | null
+  sharedMotherMemberId?: string | null
+}
+
+function inviterSelfMemberIds(userData: Record<string, unknown> | undefined): string[] {
+  const ids: string[] = []
+  const inviteToken = String(userData?.inviteToken ?? '').trim()
+  const claimed = String(userData?.claimedInviteToken ?? '').trim()
+  if (inviteToken) ids.push(inviteToken)
+  if (claimed) ids.push(claimed)
+  return ids
+}
+
+function assertChildCoParentId(
+  allFamilyDocs: FirebaseFirestore.QueryDocumentSnapshot[],
+  selfMemberIds: string[],
+  id: string | null,
+  label: string,
+) {
+  if (!id) return
+  const onTree = allFamilyDocs.some((doc) => doc.id === id)
+  const isSelf = selfMemberIds.includes(id)
+  if (!onTree && !isSelf) {
+    throw new HttpsError('invalid-argument', `${label} must be you or someone on your tree.`)
+  }
+}
+
+function assertSiblingParentId(
+  allFamilyDocs: FirebaseFirestore.QueryDocumentSnapshot[],
+  id: string | null,
+  label: string,
+) {
+  if (!id) return
+  const doc = allFamilyDocs.find((entry) => entry.id === id)
+  if (!doc || doc.data().role !== 'parent') {
+    throw new HttpsError('invalid-argument', `${label} must be a parent on your tree.`)
+  }
 }
 
 export const updatePendingFamilyMemberProfile = onCall(async (request) => {
@@ -817,10 +858,19 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
     const familyMembersCol = db.collection('users').doc(uid).collection('familyMembers')
     const familySnap = await tx.get(familyMemberRef)
     const allFamilySnap = await tx.get(familyMembersCol)
+    const inviterUserSnap = await tx.get(db.collection('users').doc(uid))
+    const selfMemberIds = inviterSelfMemberIds(inviterUserSnap.data())
 
     const doc = snap.data()!
     if (doc.inviterUid !== uid) {
       throw new HttpsError('permission-denied', 'You can only edit people you invited.')
+    }
+
+    if (doc.role === 'member') {
+      throw new HttpsError(
+        'failed-precondition',
+        'This invite is only for joining DengiTree, not a family tree profile you can edit.',
+      )
     }
 
     if (doc.status !== 'pending' || doc.profileClaimed === true || doc.joinedUid != null) {
@@ -892,6 +942,33 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
       }
     }
 
+    if (doc.role === 'child' || doc.role === 'sibling') {
+      if (data.sharedFatherMemberId !== undefined) {
+        const fatherId =
+          data.sharedFatherMemberId === null
+            ? null
+            : String(data.sharedFatherMemberId ?? '').trim() || null
+        if (doc.role === 'child') {
+          assertChildCoParentId(allFamilySnap.docs, selfMemberIds, fatherId, 'Father')
+        } else {
+          assertSiblingParentId(allFamilySnap.docs, fatherId, 'Father')
+        }
+        invitationUpdate.sharedFatherMemberId = fatherId
+      }
+      if (data.sharedMotherMemberId !== undefined) {
+        const motherId =
+          data.sharedMotherMemberId === null
+            ? null
+            : String(data.sharedMotherMemberId ?? '').trim() || null
+        if (doc.role === 'child') {
+          assertChildCoParentId(allFamilySnap.docs, selfMemberIds, motherId, 'Mother')
+        } else {
+          assertSiblingParentId(allFamilySnap.docs, motherId, 'Mother')
+        }
+        invitationUpdate.sharedMotherMemberId = motherId
+      }
+    }
+
     tx.update(ref, invitationUpdate)
 
     if (familySnap.exists) {
@@ -929,6 +1006,20 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
         }
         if (data.parentSlot !== undefined) {
           familyUpdate.parentSlot = parseParentSlot(data.parentSlot)
+        }
+      }
+      if (doc.role === 'child' || doc.role === 'sibling') {
+        if (data.sharedFatherMemberId !== undefined) {
+          familyUpdate.sharedFatherMemberId =
+            data.sharedFatherMemberId === null
+              ? null
+              : String(data.sharedFatherMemberId ?? '').trim() || null
+        }
+        if (data.sharedMotherMemberId !== undefined) {
+          familyUpdate.sharedMotherMemberId =
+            data.sharedMotherMemberId === null
+              ? null
+              : String(data.sharedMotherMemberId ?? '').trim() || null
         }
       }
       tx.update(familyMemberRef, familyUpdate)
@@ -1092,3 +1183,5 @@ export const updateFamilyMemberPrivacy = onCall(async (request) => {
 
   return { ok: true }
 })
+
+export { initializePremiumPayment, verifyPremiumPayment } from './premiumPayments'

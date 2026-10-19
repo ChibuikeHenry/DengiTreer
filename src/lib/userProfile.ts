@@ -99,10 +99,12 @@ export async function saveUserProfile(
     payload.defaultMemberPrivacy = profile.defaultMemberPrivacy
   }
   if (profile.treeFatherMemberId !== undefined) {
-    payload.treeFatherMemberId = profile.treeFatherMemberId
+    const id = profile.treeFatherMemberId?.trim()
+    payload.treeFatherMemberId = id || null
   }
   if (profile.treeMotherMemberId !== undefined) {
-    payload.treeMotherMemberId = profile.treeMotherMemberId
+    const id = profile.treeMotherMemberId?.trim()
+    payload.treeMotherMemberId = id || null
   }
 
   await setDoc(doc(db, 'users', uid), payload, { merge: true })

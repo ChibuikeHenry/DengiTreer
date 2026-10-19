@@ -374,7 +374,9 @@ export default function InvitationsPage() {
                   <span className="inv-date">
                     {tab === 'sent' ? 'Sent' : 'Received'} on{' '}
                     {formatInviteDate(item.createdAt) || '—'}
-                    {item.role !== 'member' ? ` · ${inviteRoleLabel(item.role)}` : ''}
+                    {item.role === 'member'
+                      ? ' · Platform invite (not on your tree)'
+                      : ` · ${inviteRoleLabel(item.role)}`}
                   </span>
                   {tab === 'sent' && item.role !== 'member' ? (
                     <label className="inv-privacy">
