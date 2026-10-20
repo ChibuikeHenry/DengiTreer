@@ -87,12 +87,14 @@ export type InvitationRecord = {
   dateOfBirth: string | null
   dateOfDeath: string | null
   gender: string | null
+  treeMergeOffered: boolean
+  treeMergeInviterNotice: string | null
   createdAt: Date | null
 }
 
 const createFamilyMemberInviteFn = httpsCallable<
   FamilyMemberInviteInput,
-  { token: string; joinUrl: string }
+  { token: string; joinUrl: string; treeMergeOffered?: boolean; mergeNotice?: string | null }
 >(functions, 'createFamilyMemberInvite')
 
 const createShareInviteFn = httpsCallable<
@@ -152,7 +154,7 @@ const updatePendingFamilyMemberProfileFn = httpsCallable<
     sharedFatherMemberId?: string | null
     sharedMotherMemberId?: string | null
   },
-  { ok: boolean }
+  { ok: boolean; treeMergeOffered?: boolean; mergeNotice?: string | null }
 >(functions, 'updatePendingFamilyMemberProfile')
 
 const claimPendingInvitationsForEmailFn = httpsCallable<
@@ -317,6 +319,10 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
     dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth) : null,
     dateOfDeath: data.dateOfDeath ? String(data.dateOfDeath) : null,
     gender: (data.gender as string | null) ?? null,
+    treeMergeOffered: data.treeMergeOffered === true,
+    treeMergeInviterNotice: data.treeMergeInviterNotice
+      ? String(data.treeMergeInviterNotice)
+      : null,
     createdAt: timestampToDate(data.createdAt as Timestamp | undefined),
   }
 }

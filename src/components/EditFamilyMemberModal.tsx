@@ -163,7 +163,7 @@ export default function EditFamilyMemberModal({
           siblingRelationship: member.siblingRelationship,
         })
 
-      await updatePendingFamilyMemberProfile({
+      const updateResult = await updatePendingFamilyMemberProfile({
         token: member.id,
         firstName: firstName.trim(),
         middleName: middleName.trim(),
@@ -182,6 +182,13 @@ export default function EditFamilyMemberModal({
           : {}),
       })
 
+      if (updateResult.mergeNotice) {
+        window.alert(updateResult.mergeNotice)
+      } else if (updateResult.treeMergeOffered) {
+        window.alert(
+          'This person already has a family tree on DengiTree. They will be asked to merge their tree with yours.',
+        )
+      }
       onUpdated()
       onClose()
     } catch (err) {

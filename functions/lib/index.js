@@ -1,11 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.declineTreeMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
 const https_1 = require("firebase-functions/v2/https");
 const v2_1 = require("firebase-functions/v2");
+const inviteAccept_1 = require("./inviteAccept");
+const treeMerge_1 = require("./treeMerge");
 (0, app_1.initializeApp)();
 (0, v2_1.setGlobalOptions)({ region: 'us-central1' });
 const db = (0, firestore_1.getFirestore)();
@@ -317,17 +319,32 @@ async function createInvitationRecord(uid, authToken, data) {
             userParentPatch.treeMotherMemberId = token;
         await db.collection('users').doc(uid).set(userParentPatch, { merge: true });
     }
+    let treeMergeOffered = false;
+    let mergeNotice = null;
     if (memberStatus === 'living' && inviteeEmail) {
-        await queueInviteEmail({
-            to: inviteeEmail,
+        const mergeResult = await (0, treeMerge_1.offerTreeMergeForInvitation)({
+            invitationToken: token,
+            inviterUid: uid,
             inviterName,
-            inviteeFirstName: firstName,
-            role,
+            inviteeEmail,
+            roleLabel: roleLabel(role),
             joinUrl,
             personalMessage: data.personalMessage,
         });
+        treeMergeOffered = mergeResult.offered;
+        mergeNotice = mergeResult.notice;
+        if (!mergeResult.offered) {
+            await queueInviteEmail({
+                to: inviteeEmail,
+                inviterName,
+                inviteeFirstName: firstName,
+                role,
+                joinUrl,
+                personalMessage: data.personalMessage,
+            });
+        }
     }
-    return { token, joinUrl };
+    return { token, joinUrl, treeMergeOffered, mergeNotice };
 }
 exports.createFamilyMemberInvite = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -460,47 +477,6 @@ async function callerEmail(uid, token) {
         .toLowerCase();
     return fromProfile || null;
 }
-function buildClaimUserPatch(existing, invite, options) {
-    const role = asInviteRole(invite.role);
-    const inviterUid = String(invite.inviterUid ?? '').trim();
-    const existingInviter = String(existing?.invitedByUid ?? '').trim();
-    const setAnchor = Boolean(inviterUid) && (options.forceAnchor || !existingInviter);
-    const patch = {
-        profileClaimed: true,
-        updatedAt: firestore_1.FieldValue.serverTimestamp(),
-    };
-    if (setAnchor) {
-        patch.familyRole = role;
-        patch.invitedByUid = inviterUid;
-        patch.inviteToken = options.token;
-        patch.claimedInviteToken = options.token;
-        if (!String(existing?.profilePrivacy ?? '').trim()) {
-            patch.profilePrivacy = parseMemberPrivacy(invite.privacy);
-        }
-    }
-    const firstName = String(invite.inviteeFirstName ?? '').trim();
-    const middleName = String(invite.inviteeMiddleName ?? '').trim();
-    const lastName = String(invite.inviteeLastName ?? '').trim();
-    const photoURL = String(invite.photoURL ?? '').trim();
-    const bio = String(invite.bio ?? '').trim();
-    const dateOfBirth = String(invite.dateOfBirth ?? '').trim();
-    const email = String(invite.inviteeEmail ?? '').trim().toLowerCase();
-    if (firstName && !String(existing?.firstName ?? '').trim())
-        patch.firstName = firstName;
-    if (middleName && !String(existing?.middleName ?? '').trim())
-        patch.middleName = middleName;
-    if (lastName && !String(existing?.lastName ?? '').trim())
-        patch.lastName = lastName;
-    if (photoURL && !String(existing?.photoURL ?? '').trim())
-        patch.photoURL = photoURL;
-    if (bio && !String(existing?.bio ?? '').trim())
-        patch.bio = bio;
-    if (dateOfBirth && !String(existing?.dateOfBirth ?? '').trim())
-        patch.dateOfBirth = dateOfBirth;
-    if (email && !String(existing?.email ?? '').trim())
-        patch.email = email;
-    return patch;
-}
 exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Sign in to accept this invitation.');
@@ -509,55 +485,12 @@ exports.acceptInvitation = (0, https_1.onCall)(async (request) => {
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
     }
-    const ref = db.collection('invitations').doc(token);
     const userEmail = await callerEmail(request.auth.uid, request.auth.token);
-    const joinedUid = request.auth.uid;
-    let role = 'member';
-    await db.runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
-        if (!snap.exists) {
-            throw new https_1.HttpsError('not-found', 'Invitation not found.');
-        }
-        const invite = snap.data();
-        const alreadyJoinedByMe = invite.status !== 'pending' && invite.joinedUid === joinedUid;
-        if (invite.status !== 'pending' && !alreadyJoinedByMe) {
-            throw new https_1.HttpsError('failed-precondition', 'Invitation already accepted.');
-        }
-        const inviteeEmail = String(invite.inviteeEmail ?? '')
-            .trim()
-            .toLowerCase();
-        if (inviteeEmail && userEmail !== inviteeEmail) {
-            throw new https_1.HttpsError('permission-denied', 'Sign in with the email address this invitation was sent to.');
-        }
-        role = asInviteRole(invite.role);
-        const inviterUid = String(invite.inviterUid ?? '').trim();
-        const userRef = db.collection('users').doc(joinedUid);
-        const userSnap = await tx.get(userRef);
-        const familyMemberRef = inviterUid && role !== 'member'
-            ? db.collection('users').doc(inviterUid).collection('familyMembers').doc(token)
-            : null;
-        const familySnap = familyMemberRef ? await tx.get(familyMemberRef) : null;
-        const firstName = String(invite.inviteeFirstName ?? '').trim();
-        const middleName = String(invite.inviteeMiddleName ?? '').trim();
-        const lastName = String(invite.inviteeLastName ?? '').trim();
-        const displayName = String(invite.inviteeName ?? '').trim() ||
-            [firstName, middleName, lastName].filter(Boolean).join(' ');
-        if (!alreadyJoinedByMe) {
-            tx.update(ref, {
-                status: 'joined',
-                joinedAt: firestore_1.FieldValue.serverTimestamp(),
-                joinedUid,
-                profileClaimed: true,
-            });
-        }
-        tx.set(userRef, buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: true }), { merge: true });
-        if (familySnap?.exists && familyMemberRef) {
-            tx.update(familyMemberRef, {
-                claimedByUid: joinedUid,
-                claimedAt: firestore_1.FieldValue.serverTimestamp(),
-                displayName: displayName || familySnap.data()?.displayName || null,
-            });
-        }
+    const role = await (0, inviteAccept_1.completeInvitationAccept)({
+        token,
+        joinedUid: request.auth.uid,
+        userEmail,
+        forceAnchor: true,
     });
     return {
         ok: true,
@@ -620,7 +553,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
     const gender = data.gender === undefined ? undefined : String(data.gender ?? '').trim() || null;
     const ref = db.collection('invitations').doc(token);
     const uid = request.auth.uid;
-    let emailToSend = null;
+    const emailOut = { payload: null };
     await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists) {
@@ -780,7 +713,7 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
         }
         if (emailJustAddedOrChanged && newEmail && memberStatus === 'living') {
             const joinUrl = `${APP_ORIGIN}/join/${token}`;
-            emailToSend = {
+            emailOut.payload = {
                 to: newEmail,
                 inviterName: doc.inviterName || 'A family member',
                 inviteeFirstName: firstName || doc.inviteeFirstName || '',
@@ -790,10 +723,49 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
             };
         }
     });
+    const emailToSend = emailOut.payload;
+    let treeMergeOffered = false;
+    let mergeNotice = null;
     if (emailToSend) {
-        await queueInviteEmail(emailToSend);
+        const mergeResult = await (0, treeMerge_1.offerTreeMergeForInvitation)({
+            invitationToken: token,
+            inviterUid: uid,
+            inviterName: emailToSend.inviterName,
+            inviteeEmail: emailToSend.to,
+            roleLabel: roleLabel(emailToSend.role),
+            joinUrl: emailToSend.joinUrl,
+            personalMessage: emailToSend.personalMessage,
+        });
+        treeMergeOffered = mergeResult.offered;
+        mergeNotice = mergeResult.notice;
+        if (!mergeResult.offered) {
+            await queueInviteEmail(emailToSend);
+        }
     }
-    return { ok: true };
+    else {
+        const inviteSnap = await ref.get();
+        const invite = inviteSnap.data();
+        const existingEmail = normalizeInviteeEmail(invite?.inviteeEmail);
+        if (existingEmail &&
+            invite?.memberStatus !== 'deceased' &&
+            invite?.status === 'pending' &&
+            invite?.treeMergeOffered !== true) {
+            const joinUrl = `${APP_ORIGIN}/join/${token}`;
+            const mergeResult = await (0, treeMerge_1.offerTreeMergeForInvitation)({
+                invitationToken: token,
+                inviterUid: uid,
+                inviterName: String(invite?.inviterName ?? 'A family member'),
+                inviteeEmail: existingEmail,
+                roleLabel: roleLabel(asInviteRole(invite?.role)),
+                joinUrl,
+                personalMessage: invite?.personalMessage ?? null,
+                sendEmail: false,
+            });
+            treeMergeOffered = mergeResult.offered;
+            mergeNotice = mergeResult.notice;
+        }
+    }
+    return { ok: true, treeMergeOffered, mergeNotice };
 });
 exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -842,7 +814,7 @@ exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) =>
                 joinedUid,
                 profileClaimed: true,
             });
-            tx.set(userRef, buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: false }), { merge: true });
+            tx.set(userRef, (0, inviteAccept_1.buildClaimUserPatch)(userSnap.data(), invite, { token, forceAnchor: false }), { merge: true });
             if (familySnap?.exists && familyMemberRef) {
                 tx.update(familyMemberRef, {
                     claimedByUid: joinedUid,
@@ -864,7 +836,7 @@ exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) =>
             const inviteSnap = await tx.get(best.ref);
             if (!inviteSnap.exists)
                 return;
-            tx.set(userRef, buildClaimUserPatch(userSnap.data(), inviteSnap.data(), {
+            tx.set(userRef, (0, inviteAccept_1.buildClaimUserPatch)(userSnap.data(), inviteSnap.data(), {
                 token: best.id,
                 forceAnchor: false,
             }), { merge: true });
@@ -912,4 +884,7 @@ exports.updateFamilyMemberPrivacy = (0, https_1.onCall)(async (request) => {
 var premiumPayments_1 = require("./premiumPayments");
 Object.defineProperty(exports, "initializePremiumPayment", { enumerable: true, get: function () { return premiumPayments_1.initializePremiumPayment; } });
 Object.defineProperty(exports, "verifyPremiumPayment", { enumerable: true, get: function () { return premiumPayments_1.verifyPremiumPayment; } });
+var treeMerge_2 = require("./treeMerge");
+Object.defineProperty(exports, "acceptTreeMerge", { enumerable: true, get: function () { return treeMerge_2.acceptTreeMerge; } });
+Object.defineProperty(exports, "declineTreeMerge", { enumerable: true, get: function () { return treeMerge_2.declineTreeMerge; } });
 //# sourceMappingURL=index.js.map

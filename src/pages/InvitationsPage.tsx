@@ -20,6 +20,13 @@ import {
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import type { TreeMember } from '../lib/familyTreeMembers'
 import { canInviterEditInvitation, isProfileClaimed } from '../lib/profileClaim'
+import {
+  acceptTreeMerge,
+  declineTreeMerge,
+  subscribeMergeRequestsForTokens,
+  type TreeMergeRequest,
+} from '../lib/treeMerge'
+import { setSelfOnTree } from '../lib/treeStorage'
 
 type Tab = 'sent' | 'received'
 
@@ -67,6 +74,11 @@ export default function InvitationsPage() {
   const [creatingLink, setCreatingLink] = useState(false)
   const [privacyUpdatingId, setPrivacyUpdatingId] = useState<string | null>(null)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
+  const [mergesByToken, setMergesByToken] = useState<Map<string, TreeMergeRequest | null>>(
+    () => new Map(),
+  )
+  const [mergeActionToken, setMergeActionToken] = useState<string | null>(null)
+  const [mergeError, setMergeError] = useState('')
 
   useEffect(() => {
     if (!user?.uid) return
@@ -88,6 +100,46 @@ export default function InvitationsPage() {
       (err) => setListError(err.message),
     )
   }, [user?.email])
+
+  const invitationTokens = useMemo(() => {
+    const ids = new Set<string>()
+    for (const item of sent) ids.add(item.token)
+    for (const item of received) ids.add(item.token)
+    return [...ids]
+  }, [sent, received])
+
+  useEffect(() => {
+    return subscribeMergeRequestsForTokens(
+      invitationTokens,
+      setMergesByToken,
+      (err) => console.warn('Tree merge request listen failed:', err),
+    )
+  }, [invitationTokens.join('|')])
+
+  async function handleAcceptMerge(token: string) {
+    setMergeError('')
+    setMergeActionToken(token)
+    try {
+      await acceptTreeMerge(token)
+      setSelfOnTree()
+    } catch (err) {
+      setMergeError(getCallableErrorMessage(err))
+    } finally {
+      setMergeActionToken(null)
+    }
+  }
+
+  async function handleDeclineMerge(token: string) {
+    setMergeError('')
+    setMergeActionToken(token)
+    try {
+      await declineTreeMerge(token)
+    } catch (err) {
+      setMergeError(getCallableErrorMessage(err))
+    } finally {
+      setMergeActionToken(null)
+    }
+  }
 
   useEffect(() => {
     if (!composing || inviteLink || !user) return
@@ -362,10 +414,21 @@ export default function InvitationsPage() {
         </p>
       ) : null}
 
+      {mergeError ? (
+        <p className="modal-form-error" role="alert">
+          {mergeError}
+        </p>
+      ) : null}
+
       <section className="home-card inv-list-panel">
         {activeList.length ? (
           <ul className="inv-cards">
-            {activeList.map((item) => (
+            {activeList.map((item) => {
+              const merge = mergesByToken.get(item.token) ?? null
+              const mergePending =
+                merge?.status === 'pending' ||
+                (item.treeMergeOffered && item.status === 'pending' && merge === null)
+              return (
               <li key={item.id} className="inv-card">
                 <span className="inv-avatar">{initialsFor(item)}</span>
                 <div className="inv-card-body">
@@ -377,7 +440,25 @@ export default function InvitationsPage() {
                     {item.role === 'member'
                       ? ' · Platform invite (not on your tree)'
                       : ` · ${inviteRoleLabel(item.role)}`}
+                    {mergePending ? ' · Tree merge offered' : null}
+                    {merge?.status === 'accepted' ? ' · Trees merged' : null}
+                    {merge?.status === 'declined' ? ' · Merge declined' : null}
                   </span>
+                  {tab === 'received' && mergePending ? (
+                    <p className="inv-merge-note">
+                      You already have a family tree. Accept merge to copy your relatives into
+                      their tree and join as {inviteRoleLabel(item.role).toLowerCase()}.
+                    </p>
+                  ) : null}
+                  {tab === 'sent' && mergePending ? (
+                    <p className="inv-merge-note">
+                      This person already has a tree — they can accept a merge from their Received
+                      tab.
+                    </p>
+                  ) : null}
+                  {tab === 'sent' && item.treeMergeInviterNotice && !mergePending ? (
+                    <p className="inv-merge-note">{item.treeMergeInviterNotice}</p>
+                  ) : null}
                   {tab === 'sent' && item.role !== 'member' ? (
                     <label className="inv-privacy">
                       <span className="sr-only">Who can view {displayName(item)}</span>
@@ -420,6 +501,26 @@ export default function InvitationsPage() {
                       ? 'Joined'
                       : 'Pending'}
                 </span>
+                {tab === 'received' && mergePending && item.status === 'pending' ? (
+                  <div className="inv-merge-actions">
+                    <button
+                      type="button"
+                      className="inv-send-btn inv-merge-accept"
+                      disabled={mergeActionToken === item.token}
+                      onClick={() => void handleAcceptMerge(item.token)}
+                    >
+                      {mergeActionToken === item.token ? 'Merging…' : 'Accept merge'}
+                    </button>
+                    <button
+                      type="button"
+                      className="inv-menu"
+                      disabled={mergeActionToken === item.token}
+                      onClick={() => void handleDeclineMerge(item.token)}
+                    >
+                      Decline merge
+                    </button>
+                  </div>
+                ) : null}
                 {tab === 'sent' && canInviterEditInvitation(item) ? (
                   <button
                     type="button"
@@ -458,7 +559,7 @@ export default function InvitationsPage() {
                   </button>
                 ) : null}
               </li>
-            ))}
+            )})}
           </ul>
         ) : (
           <p className="inv-empty">

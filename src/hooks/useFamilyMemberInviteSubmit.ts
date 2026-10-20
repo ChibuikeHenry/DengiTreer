@@ -42,12 +42,19 @@ export function useFamilyMemberInviteSubmit(
           photoURL = await uploadFamilyMemberPhoto(user.uid, targetRole, photoFile)
         }
 
-        await sendFamilyMemberInvite({
+        const result = await sendFamilyMemberInvite({
           role: targetRole,
           ...inviteFields,
           inviteeEmail: normalizeInviteeEmail(inviteFields.inviteeEmail),
           photoURL,
         })
+        if (result.mergeNotice) {
+          window.alert(result.mergeNotice)
+        } else if (result.treeMergeOffered) {
+          window.alert(
+            'This person already has a family tree on DengiTree. They will be asked to merge their tree with yours.',
+          )
+        }
         if (onAdded) onAdded()
         else onClose()
       } catch (err) {

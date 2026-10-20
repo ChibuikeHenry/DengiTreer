@@ -3,6 +3,8 @@ import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { initializeApp } from 'firebase-admin/app'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { setGlobalOptions } from 'firebase-functions/v2'
+import { buildClaimUserPatch, completeInvitationAccept } from './inviteAccept'
+import { offerTreeMergeForInvitation } from './treeMerge'
 
 initializeApp()
 setGlobalOptions({ region: 'us-central1' })
@@ -426,18 +428,34 @@ async function createInvitationRecord(
     await db.collection('users').doc(uid).set(userParentPatch, { merge: true })
   }
 
+  let treeMergeOffered = false
+  let mergeNotice: string | null = null
+
   if (memberStatus === 'living' && inviteeEmail) {
-    await queueInviteEmail({
-      to: inviteeEmail,
+    const mergeResult = await offerTreeMergeForInvitation({
+      invitationToken: token,
+      inviterUid: uid,
       inviterName,
-      inviteeFirstName: firstName,
-      role,
+      inviteeEmail,
+      roleLabel: roleLabel(role),
       joinUrl,
       personalMessage: data.personalMessage,
     })
+    treeMergeOffered = mergeResult.offered
+    mergeNotice = mergeResult.notice
+    if (!mergeResult.offered) {
+      await queueInviteEmail({
+        to: inviteeEmail,
+        inviterName,
+        inviteeFirstName: firstName,
+        role,
+        joinUrl,
+        personalMessage: data.personalMessage,
+      })
+    }
   }
 
-  return { token, joinUrl }
+  return { token, joinUrl, treeMergeOffered, mergeNotice }
 }
 
 export const createFamilyMemberInvite = onCall(async (request) => {
@@ -614,50 +632,6 @@ async function callerEmail(
   return fromProfile || null
 }
 
-function buildClaimUserPatch(
-  existing: FirebaseFirestore.DocumentData | undefined,
-  invite: FirebaseFirestore.DocumentData,
-  options: { token: string; forceAnchor: boolean },
-): Record<string, unknown> {
-  const role = asInviteRole(invite.role)
-  const inviterUid = String(invite.inviterUid ?? '').trim()
-  const existingInviter = String(existing?.invitedByUid ?? '').trim()
-  const setAnchor = Boolean(inviterUid) && (options.forceAnchor || !existingInviter)
-
-  const patch: Record<string, unknown> = {
-    profileClaimed: true,
-    updatedAt: FieldValue.serverTimestamp(),
-  }
-
-  if (setAnchor) {
-    patch.familyRole = role
-    patch.invitedByUid = inviterUid
-    patch.inviteToken = options.token
-    patch.claimedInviteToken = options.token
-    if (!String(existing?.profilePrivacy ?? '').trim()) {
-      patch.profilePrivacy = parseMemberPrivacy(invite.privacy)
-    }
-  }
-
-  const firstName = String(invite.inviteeFirstName ?? '').trim()
-  const middleName = String(invite.inviteeMiddleName ?? '').trim()
-  const lastName = String(invite.inviteeLastName ?? '').trim()
-  const photoURL = String(invite.photoURL ?? '').trim()
-  const bio = String(invite.bio ?? '').trim()
-  const dateOfBirth = String(invite.dateOfBirth ?? '').trim()
-  const email = String(invite.inviteeEmail ?? '').trim().toLowerCase()
-
-  if (firstName && !String(existing?.firstName ?? '').trim()) patch.firstName = firstName
-  if (middleName && !String(existing?.middleName ?? '').trim()) patch.middleName = middleName
-  if (lastName && !String(existing?.lastName ?? '').trim()) patch.lastName = lastName
-  if (photoURL && !String(existing?.photoURL ?? '').trim()) patch.photoURL = photoURL
-  if (bio && !String(existing?.bio ?? '').trim()) patch.bio = bio
-  if (dateOfBirth && !String(existing?.dateOfBirth ?? '').trim()) patch.dateOfBirth = dateOfBirth
-  if (email && !String(existing?.email ?? '').trim()) patch.email = email
-
-  return patch
-}
-
 export const acceptInvitation = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in to accept this invitation.')
@@ -668,74 +642,12 @@ export const acceptInvitation = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'Missing invitation token.')
   }
 
-  const ref = db.collection('invitations').doc(token)
   const userEmail = await callerEmail(request.auth.uid, request.auth.token)
-  const joinedUid = request.auth.uid
-  let role: InviteRole = 'member'
-
-  await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref)
-    if (!snap.exists) {
-      throw new HttpsError('not-found', 'Invitation not found.')
-    }
-
-    const invite = snap.data()!
-    const alreadyJoinedByMe =
-      invite.status !== 'pending' && invite.joinedUid === joinedUid
-    if (invite.status !== 'pending' && !alreadyJoinedByMe) {
-      throw new HttpsError('failed-precondition', 'Invitation already accepted.')
-    }
-
-    const inviteeEmail = String(invite.inviteeEmail ?? '')
-      .trim()
-      .toLowerCase()
-    if (inviteeEmail && userEmail !== inviteeEmail) {
-      throw new HttpsError(
-        'permission-denied',
-        'Sign in with the email address this invitation was sent to.',
-      )
-    }
-
-    role = asInviteRole(invite.role)
-    const inviterUid = String(invite.inviterUid ?? '').trim()
-    const userRef = db.collection('users').doc(joinedUid)
-    const userSnap = await tx.get(userRef)
-
-    const familyMemberRef =
-      inviterUid && role !== 'member'
-        ? db.collection('users').doc(inviterUid).collection('familyMembers').doc(token)
-        : null
-    const familySnap = familyMemberRef ? await tx.get(familyMemberRef) : null
-
-    const firstName = String(invite.inviteeFirstName ?? '').trim()
-    const middleName = String(invite.inviteeMiddleName ?? '').trim()
-    const lastName = String(invite.inviteeLastName ?? '').trim()
-    const displayName =
-      String(invite.inviteeName ?? '').trim() ||
-      [firstName, middleName, lastName].filter(Boolean).join(' ')
-
-    if (!alreadyJoinedByMe) {
-      tx.update(ref, {
-        status: 'joined',
-        joinedAt: FieldValue.serverTimestamp(),
-        joinedUid,
-        profileClaimed: true,
-      })
-    }
-
-    tx.set(
-      userRef,
-      buildClaimUserPatch(userSnap.data(), invite, { token, forceAnchor: true }),
-      { merge: true },
-    )
-
-    if (familySnap?.exists && familyMemberRef) {
-      tx.update(familyMemberRef, {
-        claimedByUid: joinedUid,
-        claimedAt: FieldValue.serverTimestamp(),
-        displayName: displayName || familySnap.data()?.displayName || null,
-      })
-    }
+  const role = await completeInvitationAccept({
+    token,
+    joinedUid: request.auth.uid,
+    userEmail,
+    forceAnchor: true,
   })
 
   return {
@@ -835,14 +747,15 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
   const ref = db.collection('invitations').doc(token)
   const uid = request.auth.uid
 
-  let emailToSend: {
+  type PendingInviteEmail = {
     to: string
     inviterName: string
     inviteeFirstName: string
     role: InviteRole
     joinUrl: string
     personalMessage?: string | null
-  } | null = null
+  }
+  const emailOut: { payload: PendingInviteEmail | null } = { payload: null }
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref)
@@ -1027,7 +940,7 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
 
     if (emailJustAddedOrChanged && newEmail && memberStatus === 'living') {
       const joinUrl = `${APP_ORIGIN}/join/${token}`
-      emailToSend = {
+      emailOut.payload = {
         to: newEmail,
         inviterName: doc.inviterName || 'A family member',
         inviteeFirstName: firstName || doc.inviteeFirstName || '',
@@ -1038,11 +951,52 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
     }
   })
 
+  const emailToSend = emailOut.payload
+  let treeMergeOffered = false
+  let mergeNotice: string | null = null
+
   if (emailToSend) {
-    await queueInviteEmail(emailToSend)
+    const mergeResult = await offerTreeMergeForInvitation({
+      invitationToken: token,
+      inviterUid: uid,
+      inviterName: emailToSend.inviterName,
+      inviteeEmail: emailToSend.to,
+      roleLabel: roleLabel(emailToSend.role),
+      joinUrl: emailToSend.joinUrl,
+      personalMessage: emailToSend.personalMessage,
+    })
+    treeMergeOffered = mergeResult.offered
+    mergeNotice = mergeResult.notice
+    if (!mergeResult.offered) {
+      await queueInviteEmail(emailToSend)
+    }
+  } else {
+    const inviteSnap = await ref.get()
+    const invite = inviteSnap.data()
+    const existingEmail = normalizeInviteeEmail(invite?.inviteeEmail)
+    if (
+      existingEmail &&
+      invite?.memberStatus !== 'deceased' &&
+      invite?.status === 'pending' &&
+      invite?.treeMergeOffered !== true
+    ) {
+      const joinUrl = `${APP_ORIGIN}/join/${token}`
+      const mergeResult = await offerTreeMergeForInvitation({
+        invitationToken: token,
+        inviterUid: uid,
+        inviterName: String(invite?.inviterName ?? 'A family member'),
+        inviteeEmail: existingEmail,
+        roleLabel: roleLabel(asInviteRole(invite?.role)),
+        joinUrl,
+        personalMessage: invite?.personalMessage ?? null,
+        sendEmail: false,
+      })
+      treeMergeOffered = mergeResult.offered
+      mergeNotice = mergeResult.notice
+    }
   }
 
-  return { ok: true }
+  return { ok: true, treeMergeOffered, mergeNotice }
 })
 
 export const claimPendingInvitationsForEmail = onCall(async (request) => {
@@ -1185,3 +1139,4 @@ export const updateFamilyMemberPrivacy = onCall(async (request) => {
 })
 
 export { initializePremiumPayment, verifyPremiumPayment } from './premiumPayments'
+export { acceptTreeMerge, declineTreeMerge } from './treeMerge'

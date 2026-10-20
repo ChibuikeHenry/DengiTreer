@@ -57,7 +57,9 @@ export default function ManageTreesPage() {
             </li>
             <li>
               <span>Merge two trees</span>
-              <UpcomingBadge />
+              <Link to="/home/invitations" className="manage-tree-link">
+                Via invitations
+              </Link>
             </li>
             <li>
               <span>Archive tree</span>

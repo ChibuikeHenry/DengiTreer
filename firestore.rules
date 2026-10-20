@@ -50,6 +50,17 @@ service cloud.firestore {
       }
     }
 
+    match /treeMergeRequests/{token} {
+      // Separate allow read lines so list/get queries stay valid (OR in one rule breaks queries).
+      allow read: if isAuthed() && resource.data.inviterUid == request.auth.uid;
+      allow read: if isAuthed() && resource.data.inviteeUid == request.auth.uid;
+      allow read: if isAuthed()
+        && resource.data.inviteeEmail != null
+        && request.auth.token.email != null
+        && resource.data.inviteeEmail == request.auth.token.email;
+      allow write: if false;
+    }
+
     match /mail/{docId} {
       allow read, write: if false;
     }
