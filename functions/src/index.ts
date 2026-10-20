@@ -1002,6 +1002,77 @@ export const updatePendingFamilyMemberProfile = onCall(async (request) => {
   return { ok: true, treeMergeOffered, mergeNotice }
 })
 
+export const removeFamilyMemberFromTree = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to remove this family member.')
+  }
+
+  const token = String((request.data as { token?: string })?.token ?? '').trim()
+  if (!token) {
+    throw new HttpsError('invalid-argument', 'Missing invitation token.')
+  }
+
+  const uid = request.auth.uid
+  const inviteRef = db.collection('invitations').doc(token)
+  const familyMemberRef = db
+    .collection('users')
+    .doc(uid)
+    .collection('familyMembers')
+    .doc(token)
+  const mergeRef = db.collection('treeMergeRequests').doc(token)
+
+  await db.runTransaction(async (tx) => {
+    const inviteSnap = await tx.get(inviteRef)
+    if (!inviteSnap.exists) {
+      throw new HttpsError('not-found', 'Family member not found.')
+    }
+
+    const doc = inviteSnap.data()!
+    if (doc.inviterUid !== uid) {
+      throw new HttpsError('permission-denied', 'You can only remove people you added to your tree.')
+    }
+
+    if (doc.role === 'member') {
+      throw new HttpsError(
+        'failed-precondition',
+        'This is a platform invite, not a family tree member you can remove here.',
+      )
+    }
+
+    const joinedUid = doc.joinedUid != null ? String(doc.joinedUid).trim() : ''
+    if (joinedUid && joinedUid === uid) {
+      throw new HttpsError('failed-precondition', 'You cannot remove yourself from your tree.')
+    }
+
+    let inviteeUserSnap: FirebaseFirestore.DocumentSnapshot | null = null
+    if (joinedUid) {
+      inviteeUserSnap = await tx.get(db.collection('users').doc(joinedUid))
+    }
+
+    tx.delete(inviteRef)
+    tx.delete(familyMemberRef)
+    tx.delete(mergeRef)
+
+    if (inviteeUserSnap?.exists) {
+      const invitee = inviteeUserSnap.data()!
+      const anchorToken = String(
+        invitee.claimedInviteToken ?? invitee.inviteToken ?? '',
+      ).trim()
+      if (String(invitee.invitedByUid ?? '') === uid && anchorToken === token) {
+        tx.update(inviteeUserSnap.ref, {
+          invitedByUid: FieldValue.delete(),
+          inviteToken: FieldValue.delete(),
+          claimedInviteToken: FieldValue.delete(),
+          familyRole: FieldValue.delete(),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      }
+    }
+  })
+
+  return { ok: true }
+})
+
 export const claimPendingInvitationsForEmail = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in to claim invitations.')

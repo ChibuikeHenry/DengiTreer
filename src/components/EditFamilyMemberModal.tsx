@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import {
   getCallableErrorMessage,
+  removeFamilyMemberFromTree,
   updatePendingFamilyMemberProfile,
 } from '../lib/invitations'
 import { parseMemberPrivacy, type MemberPrivacy } from '../lib/memberPrivacy'
@@ -34,6 +35,7 @@ type EditFamilyMemberModalProps = {
   member: TreeMember | null
   onClose: () => void
   onUpdated: () => void
+  onRemoved?: () => void
 }
 
 export default function EditFamilyMemberModal({
@@ -41,10 +43,12 @@ export default function EditFamilyMemberModal({
   member,
   onClose,
   onUpdated,
+  onRemoved,
 }: EditFamilyMemberModalProps) {
   const { user } = useAuth()
   const photo = usePhotoPicker()
   const [submitting, setSubmitting] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const [error, setError] = useState('')
 
   const [firstName, setFirstName] = useState('')
@@ -198,6 +202,32 @@ export default function EditFamilyMemberModal({
     }
   }
 
+  async function handleRemove() {
+    if (!member || removing || submitting) return
+    const claimed = member.profileClaimed || member.joinedUid
+    const confirmed = window.confirm(
+      claimed
+        ? `Remove ${member.displayName} from your tree?\n\nTheir account stays on DengiTree. They will disappear from your tree and you can invite them again to test merge.`
+        : `Remove ${member.displayName} from your tree?\n\nTheir pending invite and any merge request will be canceled. You can add them again later (useful for testing merge).`,
+    )
+    if (!confirmed) return
+
+    setError('')
+    setRemoving(true)
+    try {
+      await removeFamilyMemberFromTree(member.id)
+      onRemoved?.()
+      onUpdated()
+      onClose()
+    } catch (err) {
+      setError(getCallableErrorMessage(err))
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  const busy = submitting || removing
+
   return (
     <ModalFrame
       open={open}
@@ -208,7 +238,7 @@ export default function EditFamilyMemberModal({
       submittingText={email.trim() ? 'Sending invite…' : 'Saving changes…'}
       onSubmit={handleSubmit}
       formError={error}
-      submitting={submitting}
+      submitting={busy}
     >
       <section className="modal-section">
         <h3>1. Personal Information</h3>
@@ -303,6 +333,22 @@ export default function EditFamilyMemberModal({
       </section>
 
       <MemberPrivacyFields privacy={privacy} onPrivacyChange={setPrivacy} sectionNumber={4} />
+
+      <section className="modal-section modal-section-danger">
+        <h3>Remove from tree</h3>
+        <p className="field-hint">
+          Remove this person from your tree (including if they already claimed their account). Their
+          login is not deleted; you can invite them again afterward.
+        </p>
+        <button
+          type="button"
+          className="btn-tree-remove"
+          disabled={busy}
+          onClick={() => void handleRemove()}
+        >
+          {removing ? 'Removing…' : 'Remove from tree'}
+        </button>
+      </section>
     </ModalFrame>
   )
 }

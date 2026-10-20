@@ -159,6 +159,11 @@ const updatePendingFamilyMemberProfileFn = httpsCallable<
   { ok: boolean; treeMergeOffered?: boolean; mergeNotice?: string | null }
 >(functions, 'updatePendingFamilyMemberProfile')
 
+const removeFamilyMemberFromTreeFn = httpsCallable<{ token: string }, { ok: boolean }>(
+  functions,
+  'removeFamilyMemberFromTree',
+)
+
 const claimPendingInvitationsForEmailFn = httpsCallable<
   void,
   { claimedCount: number }
@@ -278,6 +283,11 @@ export async function updatePendingFamilyMemberProfile(input: {
     payload.sharedMotherMemberId = input.sharedMotherMemberId?.trim() || null
   }
   const result = await updatePendingFamilyMemberProfileFn(payload)
+  return result.data
+}
+
+export async function removeFamilyMemberFromTree(token: string) {
+  const result = await removeFamilyMemberFromTreeFn({ token: token.trim() })
   return result.data
 }
 

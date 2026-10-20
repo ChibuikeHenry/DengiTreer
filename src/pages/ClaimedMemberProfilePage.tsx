@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import ProfileAvatar from '../components/ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
@@ -13,6 +13,10 @@ import {
 } from '../lib/familyTreeMembers'
 import { formatDisplayDate } from '../lib/lifeDates'
 import { memberPrivacyScopeLabel } from '../lib/memberPrivacy'
+import {
+  getCallableErrorMessage,
+  removeFamilyMemberFromTree,
+} from '../lib/invitations'
 import { isClaimedTreeMember } from '../lib/profileClaim'
 import { resolveExploreAccess } from '../lib/treeExplore'
 import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
@@ -23,7 +27,10 @@ function FieldIcon({ children }: { children: ReactNode }) {
 
 export default function ClaimedMemberProfilePage() {
   const { memberId } = useParams<{ memberId: string }>()
+  const navigate = useNavigate()
   const { user } = useAuth()
+  const [removing, setRemoving] = useState(false)
+  const [removeError, setRemoveError] = useState('')
   const [members, setMembers] = useState<TreeMember[]>([])
   const [viewerName, setViewerName] = useState('')
   const [viewerInvitedByUid, setViewerInvitedByUid] = useState<string | null>(null)
@@ -108,6 +115,24 @@ export default function ClaimedMemberProfilePage() {
   const bio = formatBioForDisplay(member.bio)
   const genderTone = avatarGenderToneForMember(member, avatarViewer)
   const claimed = isClaimedTreeMember(member)
+
+  async function handleRemoveFromTree() {
+    if (!member || removing) return
+    const confirmed = window.confirm(
+      `Remove ${member.displayName} from your tree?\n\nTheir DengiTree account is not deleted. You can invite them again afterward.`,
+    )
+    if (!confirmed) return
+    setRemoveError('')
+    setRemoving(true)
+    try {
+      await removeFamilyMemberFromTree(member.id)
+      navigate('/home/tree')
+    } catch (err) {
+      setRemoveError(getCallableErrorMessage(err))
+    } finally {
+      setRemoving(false)
+    }
+  }
 
   return (
     <div className="claimed-member-page">
@@ -270,6 +295,28 @@ export default function ClaimedMemberProfilePage() {
           </div>
         </div>
       </section>
+
+      {member.inviterCanRemove ? (
+        <section className="claimed-card claimed-card-remove">
+          <h2>Remove from your tree</h2>
+          <p className="claimed-readonly-note">
+            Remove this person from your family tree. Their login and account stay on DengiTree.
+          </p>
+          {removeError ? (
+            <p className="modal-form-error" role="alert">
+              {removeError}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            className="btn-tree-remove"
+            disabled={removing}
+            onClick={() => void handleRemoveFromTree()}
+          >
+            {removing ? 'Removing…' : 'Remove from tree'}
+          </button>
+        </section>
+      ) : null}
     </div>
   )
 }

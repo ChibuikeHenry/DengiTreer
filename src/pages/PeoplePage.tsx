@@ -16,6 +16,10 @@ import {
   subscribeTreeMembers,
   type TreeMember,
 } from '../lib/familyTreeMembers'
+import {
+  getCallableErrorMessage,
+  removeFamilyMemberFromTree,
+} from '../lib/invitations'
 import { resolveUserProfileForForm } from '../lib/userProfile'
 import { hasSelfOnTree } from '../lib/treeStorage'
 import type { DashboardContext } from './HomePage'
@@ -32,6 +36,8 @@ export default function PeoplePage() {
   const [joinedFamily, setJoinedFamily] = useState(false)
   const [query, setQuery] = useState('')
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [removeError, setRemoveError] = useState('')
   const selfOnTree = useMemo(
     () => hasSelfOnTree() || members.length > 0 || joinedFamily,
     [treeVersion, members.length, joinedFamily],
@@ -41,6 +47,25 @@ export default function PeoplePage() {
     if (!user?.uid) return
     return subscribeTreeMembers(user.uid, setMembers)
   }, [user?.uid, treeVersion])
+
+  async function handleRemoveMember(member: TreeMember) {
+    const claimed = member.profileClaimed || member.joinedUid
+    const confirmed = window.confirm(
+      claimed
+        ? `Remove ${member.displayName} from your tree?\n\nTheir DengiTree account is not deleted. They will no longer appear on your tree, and their link to your tree through this invite will be cleared so you can invite them again.`
+        : `Remove ${member.displayName} from your tree?\n\nTheir pending invite and any merge request will be canceled.`,
+    )
+    if (!confirmed) return
+    setRemoveError('')
+    setRemovingId(member.id)
+    try {
+      await removeFamilyMemberFromTree(member.id)
+    } catch (err) {
+      setRemoveError(getCallableErrorMessage(err))
+    } finally {
+      setRemovingId(null)
+    }
+  }
 
   useEffect(() => {
     if (!user) return
@@ -159,15 +184,29 @@ export default function PeoplePage() {
                   </span>
                   <span className="people-row-bio">{formatBioForDisplay(member.bio)}</span>
                 </div>
-                {member.inviterCanEdit ? (
-                  <button
-                    type="button"
-                    className="people-row-action"
-                    onClick={() => setEditingMember(member)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    Edit profile
-                  </button>
+                {member.inviterCanEdit || member.inviterCanRemove ? (
+                  <div className="people-row-actions">
+                    {member.inviterCanEdit ? (
+                      <button
+                        type="button"
+                        className="people-row-action"
+                        onClick={() => setEditingMember(member)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        Edit profile
+                      </button>
+                    ) : null}
+                    {member.inviterCanRemove ? (
+                      <button
+                        type="button"
+                        className="people-row-remove"
+                        disabled={removingId === member.id}
+                        onClick={() => void handleRemoveMember(member)}
+                      >
+                        {removingId === member.id ? 'Removing…' : 'Remove from tree'}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : member.profileClaimed ? (
                   <Link to={`/home/member/${member.id}`} className="people-row-action">
                     View profile
@@ -178,6 +217,12 @@ export default function PeoplePage() {
               </li>
             ))}
           </ul>
+        ) : null}
+
+        {removeError ? (
+          <p className="modal-form-error" role="alert">
+            {removeError}
+          </p>
         ) : null}
 
         <EditFamilyMemberModal

@@ -363,35 +363,44 @@
 
 .mf-modal-toast {
   position: absolute;
-  right: 1rem;
-  bottom: 4.5rem;
-  left: 1rem;
+  right: 0.85rem;
+  bottom: 4.25rem;
+  left: auto;
   z-index: 5;
+  width: auto;
+  max-width: min(20rem, calc(100% - 1.75rem));
   background: #eef8e8;
   border: 1px solid #b8d4a8;
-  border-radius: 14px;
-  padding: 1rem 1.1rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 0.55rem 0.65rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
 }
 
 .mf-modal-toast-text {
-  margin: 0 0 0.75rem;
-  font-size: 0.88rem;
-  line-height: 1.45;
+  margin: 0;
+  flex: 1 1 9.5rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
   text-align: left;
 }
 
 .mf-modal-toast-actions {
   display: flex;
+  flex-shrink: 0;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .mf-btn-primary-sm,
 .mf-btn-outline-sm {
   border-radius: 999px;
-  padding: 0.45rem 0.85rem;
+  padding: 0.32rem 0.65rem;
   font: inherit;
+  font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
   border: none;

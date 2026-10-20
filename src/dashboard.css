@@ -1066,6 +1066,7 @@
 }
 
 .modal-panel {
+  position: relative;
   width: min(100%, 720px);
   max-height: min(92vh, 900px);
   overflow: auto;
@@ -1531,6 +1532,65 @@
 
 .btn-modal-primary:hover {
   background: #4a7a2e;
+}
+
+.modal-section-danger {
+  border-top: 1px solid var(--dash-border);
+  padding-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+.modal-section-danger h3 {
+  color: #b42318;
+}
+
+.btn-tree-remove {
+  margin-top: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: 1px solid #fecdca;
+  background: #fff5f5;
+  color: #b42318;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-tree-remove:hover:not(:disabled) {
+  background: #fee4e2;
+}
+
+.btn-tree-remove:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.people-row-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: inherit;
+  color: #b42318;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.people-row-remove:hover {
+  color: #912018;
+}
+
+.people-row-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.people-row-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
 }
 
 .btn-modal-primary:disabled {

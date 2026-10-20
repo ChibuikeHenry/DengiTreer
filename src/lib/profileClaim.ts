@@ -44,6 +44,14 @@ export function canInviterEditInvitation(
   return true
 }
 
+/** Inviter may remove this person from their tree (pending or claimed). */
+export function canInviterRemoveFromTree(
+  record: Pick<InvitationRecord, 'role'>,
+): boolean {
+  if (isPlatformShareInvite(record)) return false
+  return TREE_FAMILY_ROLES.has(record.role)
+}
+
 /** True when the signed-in user may edit this member on the tree they are currently viewing. */
 export function canViewerEditTreeMember(
   member: Pick<TreeMember, 'inviterCanEdit'>,

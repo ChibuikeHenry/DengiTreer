@@ -7,6 +7,7 @@ import {
   formatInviteDate,
   getCallableErrorMessage,
   inviteRoleLabel,
+  removeFamilyMemberFromTree,
   sendShareInviteEmail,
   subscribeReceivedInvitations,
   subscribeSentInvitations,
@@ -19,7 +20,11 @@ import {
 } from '../lib/memberPrivacy'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import type { TreeMember } from '../lib/familyTreeMembers'
-import { canInviterEditInvitation, isProfileClaimed } from '../lib/profileClaim'
+import {
+  canInviterEditInvitation,
+  canInviterRemoveFromTree,
+  isProfileClaimed,
+} from '../lib/profileClaim'
 import {
   isMergePending,
   subscribeMergeRequestsForTokens,
@@ -73,6 +78,8 @@ export default function InvitationsPage() {
   const [creatingLink, setCreatingLink] = useState(false)
   const [privacyUpdatingId, setPrivacyUpdatingId] = useState<string | null>(null)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
+  const [removingToken, setRemovingToken] = useState<string | null>(null)
+  const [removeError, setRemoveError] = useState('')
   const [mergesByToken, setMergesByToken] = useState<Map<string, TreeMergeRequest | null>>(
     () => new Map(),
   )
@@ -118,6 +125,26 @@ export default function InvitationsPage() {
       console.warn('Tree merge sync failed:', err),
     )
   }, [user?.uid])
+
+  async function handleRemoveFromTree(item: InvitationRecord) {
+    const name = item.inviteeName || 'this person'
+    const claimed = isProfileClaimed(item)
+    const confirmed = window.confirm(
+      claimed
+        ? `Remove ${name} from your tree?\n\nTheir DengiTree account is not deleted.`
+        : `Remove ${name} from your tree?`,
+    )
+    if (!confirmed) return
+    setRemoveError('')
+    setRemovingToken(item.token)
+    try {
+      await removeFamilyMemberFromTree(item.token)
+    } catch (err) {
+      setRemoveError(getCallableErrorMessage(err))
+    } finally {
+      setRemovingToken(null)
+    }
+  }
 
   const pendingMergeOnReceived = useMemo(() => {
     return received.filter((item) =>
@@ -403,6 +430,12 @@ export default function InvitationsPage() {
         </p>
       ) : null}
 
+      {removeError ? (
+        <p className="modal-form-error" role="alert">
+          {removeError}
+        </p>
+      ) : null}
+
       {pendingMergeOnReceived.length > 0 ? (
         <div className="inv-merge-banner" role="status">
           <strong>
@@ -531,6 +564,7 @@ export default function InvitationsPage() {
                         joinedUid: item.joinedUid,
                         profileClaimed: isProfileClaimed(item),
                         inviterCanEdit: canInviterEditInvitation(item),
+                        inviterCanRemove: canInviterRemoveFromTree(item),
                         privacy: item.privacy,
                         bio: item.bio,
                         parentSlot: item.parentSlot,
@@ -547,6 +581,17 @@ export default function InvitationsPage() {
                     style={{ fontSize: '0.8rem', padding: '4px 8px', cursor: 'pointer' }}
                   >
                     Edit
+                  </button>
+                ) : null}
+                {tab === 'sent' && canInviterRemoveFromTree(item) ? (
+                  <button
+                    type="button"
+                    className="people-row-remove"
+                    disabled={removingToken === item.token}
+                    onClick={() => void handleRemoveFromTree(item)}
+                    style={{ fontSize: '0.8rem', marginLeft: '0.35rem' }}
+                  >
+                    {removingToken === item.token ? 'Removing…' : 'Remove'}
                   </button>
                 ) : null}
               </li>

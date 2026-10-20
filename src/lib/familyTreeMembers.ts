@@ -15,7 +15,11 @@ import {
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from './firebase'
 import { subscribeSentInvitations, type InvitationRecord } from './invitations'
-import { canInviterEditInvitation, isProfileClaimed } from './profileClaim'
+import {
+  canInviterEditInvitation,
+  canInviterRemoveFromTree,
+  isProfileClaimed,
+} from './profileClaim'
 import { fetchUserProfile } from './userProfile'
 import { setSelfOnTree } from './treeStorage'
 
@@ -31,6 +35,7 @@ export type TreeMember = {
   joinedUid: string | null
   profileClaimed: boolean
   inviterCanEdit: boolean
+  inviterCanRemove: boolean
   privacy: MemberPrivacy
   bio: string
   parentSlot: ParentSlot | null
@@ -85,6 +90,7 @@ export function mapInvitationToTreeMember(record: InvitationRecord): TreeMember 
     joinedUid: record.joinedUid,
     profileClaimed: claimed,
     inviterCanEdit: canInviterEditInvitation(record),
+    inviterCanRemove: canInviterRemoveFromTree(record),
     privacy: record.privacy,
     bio: record.bio,
     parentSlot: record.parentSlot,
@@ -287,7 +293,17 @@ export function subscribeTreeMembers(
           }
         }
 
-        return [{ ...m, role, parentSlot, parentKind, lineageSide, inviterCanEdit: false }]
+        return [
+          {
+            ...m,
+            role,
+            parentSlot,
+            parentKind,
+            lineageSide,
+            inviterCanEdit: false,
+            inviterCanRemove: false,
+          },
+        ]
       })
 
     const seen = new Set<string>()
@@ -354,6 +370,7 @@ export function subscribeTreeMembers(
           gender: inviterProfile.gender ?? null,
           profileClaimed: true,
           inviterCanEdit: false,
+          inviterCanRemove: false,
           privacy: inviterProfile.profilePrivacy
             ? parseMemberPrivacy(inviterProfile.profilePrivacy)
             : DEFAULT_MEMBER_PRIVACY,

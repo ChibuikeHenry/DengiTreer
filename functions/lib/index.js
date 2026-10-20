@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -767,6 +767,61 @@ exports.updatePendingFamilyMemberProfile = (0, https_1.onCall)(async (request) =
         }
     }
     return { ok: true, treeMergeOffered, mergeNotice };
+});
+exports.removeFamilyMemberFromTree = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to remove this family member.');
+    }
+    const token = String(request.data?.token ?? '').trim();
+    if (!token) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
+    }
+    const uid = request.auth.uid;
+    const inviteRef = db.collection('invitations').doc(token);
+    const familyMemberRef = db
+        .collection('users')
+        .doc(uid)
+        .collection('familyMembers')
+        .doc(token);
+    const mergeRef = db.collection('treeMergeRequests').doc(token);
+    await db.runTransaction(async (tx) => {
+        const inviteSnap = await tx.get(inviteRef);
+        if (!inviteSnap.exists) {
+            throw new https_1.HttpsError('not-found', 'Family member not found.');
+        }
+        const doc = inviteSnap.data();
+        if (doc.inviterUid !== uid) {
+            throw new https_1.HttpsError('permission-denied', 'You can only remove people you added to your tree.');
+        }
+        if (doc.role === 'member') {
+            throw new https_1.HttpsError('failed-precondition', 'This is a platform invite, not a family tree member you can remove here.');
+        }
+        const joinedUid = doc.joinedUid != null ? String(doc.joinedUid).trim() : '';
+        if (joinedUid && joinedUid === uid) {
+            throw new https_1.HttpsError('failed-precondition', 'You cannot remove yourself from your tree.');
+        }
+        let inviteeUserSnap = null;
+        if (joinedUid) {
+            inviteeUserSnap = await tx.get(db.collection('users').doc(joinedUid));
+        }
+        tx.delete(inviteRef);
+        tx.delete(familyMemberRef);
+        tx.delete(mergeRef);
+        if (inviteeUserSnap?.exists) {
+            const invitee = inviteeUserSnap.data();
+            const anchorToken = String(invitee.claimedInviteToken ?? invitee.inviteToken ?? '').trim();
+            if (String(invitee.invitedByUid ?? '') === uid && anchorToken === token) {
+                tx.update(inviteeUserSnap.ref, {
+                    invitedByUid: firestore_1.FieldValue.delete(),
+                    inviteToken: firestore_1.FieldValue.delete(),
+                    claimedInviteToken: firestore_1.FieldValue.delete(),
+                    familyRole: firestore_1.FieldValue.delete(),
+                    updatedAt: firestore_1.FieldValue.serverTimestamp(),
+                });
+            }
+        }
+    });
+    return { ok: true };
 });
 exports.claimPendingInvitationsForEmail = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
