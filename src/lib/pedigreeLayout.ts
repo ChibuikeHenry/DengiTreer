@@ -629,7 +629,9 @@ export function buildPedigreeLayout({
       return ax - bx
     })
 
-    let lastGroupRight = -Infinity
+    /** Right edge (px) of the rightmost placed child node box on this row. */
+    let lastGroupRightEdge = -Infinity
+    const halfW = nodeW / 2
     sortedGroups.forEach(([, kids]) => {
       let anchorX = childCoupleAnchorX(
         kids[0],
@@ -639,11 +641,11 @@ export function buildPedigreeLayout({
         legacySpouseX,
       )
       const groupSpan = Math.max(0, kids.length - 1) * pitch
-      const groupLeft = anchorX - groupSpan / 2
-      if (groupLeft < lastGroupRight + unitGap) {
-        anchorX += lastGroupRight + unitGap - groupLeft
+      const groupLeftEdge = anchorX - groupSpan / 2 - halfW
+      if (groupLeftEdge < lastGroupRightEdge + unitGap) {
+        anchorX += lastGroupRightEdge + unitGap - groupLeftEdge
       }
-      lastGroupRight = anchorX + groupSpan / 2
+      lastGroupRightEdge = anchorX + groupSpan / 2 + halfW
 
       const groupTargets: Target[] = []
       kids.forEach((member, j) => {
@@ -664,8 +666,9 @@ export function buildPedigreeLayout({
       const addAnchorX =
         legacySpouseX != null ? (selfX + legacySpouseX) / 2 : selfX
       let addX = addAnchorX
-      if (addX <= lastGroupRight + unitGap) {
-        addX = lastGroupRight + unitGap + pitch / 2
+      const addLeft = addX - halfW
+      if (addLeft < lastGroupRightEdge + unitGap) {
+        addX = lastGroupRightEdge + unitGap + halfW
       }
       nodes.push({
         key: 'add:child',
