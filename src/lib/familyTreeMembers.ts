@@ -318,7 +318,8 @@ export function subscribeTreeMembers(
       return true
     })
 
-    void enrichClaimedMembers(allMembers).then(onChange)
+    onChange(allMembers)
+    void enrichClaimedMembers(allMembers).then(onChange).catch(() => onChange(allMembers))
   }
 
   unsub1 = subscribeSentInvitations(

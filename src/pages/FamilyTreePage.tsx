@@ -325,7 +325,9 @@ export default function FamilyTreePage() {
       setEditingMember(member)
       return
     }
-    navigate(`/home/member/${encodeURIComponent(member.id)}`)
+    navigate(`/home/member/${encodeURIComponent(member.id)}`, {
+      state: { treeOwnerUid: treeSubscriptionUid ?? user?.uid },
+    })
   }
 
   async function runDownload() {

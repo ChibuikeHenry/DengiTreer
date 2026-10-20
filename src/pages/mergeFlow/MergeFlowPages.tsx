@@ -273,10 +273,21 @@ export function MergeIncomingPage() {
   }, [token])
 
   if (error) {
+    const stale =
+      error.toLowerCase().includes('not found') ||
+      error.toLowerCase().includes('missing an update')
     return (
       <MergeShell title="Merge request">
         <p className="modal-form-error">{error}</p>
-        <Link to="/home/invitations">Back to invitations</Link>
+        {stale ? (
+          <p className="mf-lede">
+            This request may have been removed or already handled. Check Invitations or add the
+            person again to start a new merge.
+          </p>
+        ) : null}
+        <Link to="/home/invitations" className="mf-btn-outline-wide mf-link-btn">
+          Back to invitations
+        </Link>
       </MergeShell>
     )
   }

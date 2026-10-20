@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import ProfileAvatar from '../components/ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
@@ -27,11 +27,18 @@ function FieldIcon({ children }: { children: ReactNode }) {
 
 export default function ClaimedMemberProfilePage() {
   const { memberId } = useParams<{ memberId: string }>()
+  const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const treeOwnerUid =
+    (location.state as { treeOwnerUid?: string } | null)?.treeOwnerUid?.trim() ||
+    user?.uid ||
+    null
   const [removing, setRemoving] = useState(false)
   const [removeError, setRemoveError] = useState('')
   const [members, setMembers] = useState<TreeMember[]>([])
+  const [membersReady, setMembersReady] = useState(false)
+  const [membersError, setMembersError] = useState('')
   const [viewerName, setViewerName] = useState('')
   const [viewerInvitedByUid, setViewerInvitedByUid] = useState<string | null>(null)
   const [viewerGender, setViewerGender] = useState<string | null>(null)
@@ -41,9 +48,25 @@ export default function ClaimedMemberProfilePage() {
   const [exploreRootUid, setExploreRootUid] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!user?.uid) return
-    return subscribeTreeMembers(user.uid, setMembers)
-  }, [user?.uid])
+    if (!treeOwnerUid) {
+      setMembers([])
+      setMembersReady(true)
+      return
+    }
+    setMembersReady(false)
+    setMembersError('')
+    return subscribeTreeMembers(
+      treeOwnerUid,
+      (next) => {
+        setMembers(next)
+        setMembersReady(true)
+      },
+      (err) => {
+        setMembersError(err.message)
+        setMembersReady(true)
+      },
+    )
+  }, [treeOwnerUid])
 
   useEffect(() => {
     if (!user) return
@@ -62,10 +85,13 @@ export default function ClaimedMemberProfilePage() {
     }
   }, [user])
 
-  const member = useMemo(
-    () => members.find((m) => m.id === memberId) ?? null,
-    [members, memberId],
-  )
+  const member = useMemo(() => {
+    if (!memberId) return null
+    const id = decodeURIComponent(memberId)
+    return (
+      members.find((m) => m.id === id || m.joinedUid === id || m.id === memberId) ?? null
+    )
+  }, [members, memberId])
 
   const avatarViewer = useMemo(
     () =>
@@ -102,7 +128,20 @@ export default function ClaimedMemberProfilePage() {
         <Link to="/home/tree" className="claimed-back">
           ← Back to Family Tree
         </Link>
-        <p className="claimed-loading">Loading profile…</p>
+        {!membersReady ? (
+          <p className="claimed-loading">Loading profile…</p>
+        ) : (
+          <>
+            <p className="claimed-loading">
+              {membersError
+                ? `Could not load this profile: ${membersError}`
+                : 'This person is not on the tree anymore, or the link is outdated.'}
+            </p>
+            <Link to="/home/tree" className="mf-btn-outline-wide mf-link-btn" style={{ marginTop: '1rem' }}>
+              Return to Family Tree
+            </Link>
+          </>
+        )}
       </div>
     )
   }

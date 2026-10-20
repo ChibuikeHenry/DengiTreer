@@ -17,6 +17,27 @@ service cloud.firestore {
         : null;
     }
 
+    function invitationPath(token) {
+      return /databases/$(database)/documents/invitations/$(token);
+    }
+
+    function invitationExists(token) {
+      return exists(invitationPath(token));
+    }
+
+    /** Inviter may listen on merge doc id (invitation token) even before merge doc exists. */
+    function isInviterOfInvitation(token) {
+      return invitationExists(token)
+        && get(invitationPath(token)).data.inviterUid == request.auth.uid;
+    }
+
+    function isInviteeEmailOfInvitation(token) {
+      return invitationExists(token)
+        && get(invitationPath(token)).data.inviteeEmail != null
+        && request.auth.token.email != null
+        && get(invitationPath(token)).data.inviteeEmail == request.auth.token.email;
+    }
+
     match /invitations/{token} {
       allow read: if isAuthed() && resource.data.inviterUid == request.auth.uid;
       allow read: if isAuthed() && resource.data.joinedUid == request.auth.uid;
@@ -52,12 +73,16 @@ service cloud.firestore {
 
     match /treeMergeRequests/{token} {
       // Separate allow read lines so list/get queries stay valid (OR in one rule breaks queries).
-      allow read: if isAuthed() && resource.data.inviterUid == request.auth.uid;
-      allow read: if isAuthed() && resource.data.inviteeUid == request.auth.uid;
+      allow read: if isAuthed() && resource != null && resource.data.inviterUid == request.auth.uid;
+      allow read: if isAuthed() && resource != null && resource.data.inviteeUid == request.auth.uid;
       allow read: if isAuthed()
+        && resource != null
         && resource.data.inviteeEmail != null
         && request.auth.token.email != null
         && resource.data.inviteeEmail == request.auth.token.email;
+      // Doc listeners on missing merge docs (token = invitation id) — resource is null.
+      allow read: if isInviterOfInvitation(token);
+      allow read: if isInviteeEmailOfInvitation(token);
       allow write: if false;
     }
 

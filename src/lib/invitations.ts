@@ -366,7 +366,12 @@ export async function acceptPersistedInvitationIfAny(): Promise<{
       console.error('[invite] accept failed', err)
       acceptError = getCallableErrorMessage(err)
       const code = (err as { code?: string })?.code
-      if (code === 'functions/not-found' || code === 'functions/already-exists') {
+      if (
+        code === 'functions/not-found' ||
+        code === 'functions/already-exists' ||
+        code === 'functions/invalid-argument' ||
+        code === 'functions/failed-precondition'
+      ) {
         clearPersistedInviteToken()
       }
     }
@@ -491,8 +496,8 @@ export function inviteRoleLabel(role: InviteRole): string {
 export function getCallableErrorMessage(error: unknown): string {
   if (typeof error === 'object' && error && 'code' in error) {
     const code = String((error as { code: string }).code)
-    if (code === 'functions/unavailable') {
-      return 'Invitation service is not available yet. Deploy Cloud Functions and try again.'
+    if (code === 'functions/unavailable' || code === 'functions/not-found') {
+      return 'Server is missing an update. Run deploy (npm run deploy:backend) or try again in a minute.'
     }
     if ('message' in error && typeof (error as { message: string }).message === 'string') {
       return (error as { message: string }).message

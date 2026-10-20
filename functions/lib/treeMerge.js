@@ -650,7 +650,12 @@ exports.syncTreeMergeOffers = (0, https_1.onCall)(async (request) => {
         const email = normalizeEmail(data.inviteeEmail);
         if (!email)
             continue;
-        await ensureOffer(doc.id, uid, String(data.inviterName ?? 'A family member'), email, data.role, data.personalMessage);
+        try {
+            await ensureOffer(doc.id, uid, String(data.inviterName ?? 'A family member'), email, data.role, data.personalMessage);
+        }
+        catch (err) {
+            console.warn('syncTreeMergeOffers: skip invite', doc.id, err);
+        }
     }
     if (userEmail) {
         const receivedSnap = await db()
@@ -669,7 +674,12 @@ exports.syncTreeMergeOffers = (0, https_1.onCall)(async (request) => {
             const email = normalizeEmail(data.inviteeEmail);
             if (!email)
                 continue;
-            await ensureOffer(doc.id, inviterUid, String(data.inviterName ?? 'A family member'), email, data.role, data.personalMessage);
+            try {
+                await ensureOffer(doc.id, inviterUid, String(data.inviterName ?? 'A family member'), email, data.role, data.personalMessage);
+            }
+            catch (err) {
+                console.warn('syncTreeMergeOffers: skip received invite', doc.id, err);
+            }
         }
     }
     return { created };
