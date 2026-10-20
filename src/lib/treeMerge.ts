@@ -2,7 +2,7 @@ import { doc, onSnapshot, type Timestamp } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from './firebase'
 
-export type TreeMergeStatus = 'pending' | 'accepted' | 'declined'
+export type TreeMergeStatus = 'pending' | 'accepted' | 'declined' | 'undone'
 
 export type TreeMergeRequest = {
   id: string
@@ -30,6 +30,11 @@ const syncTreeMergeOffersFn = httpsCallable<void, { created: number }>(
   'syncTreeMergeOffers',
 )
 
+const unmergeFamilyTreesFn = httpsCallable<
+  { token: string },
+  { ok: boolean; restoredCount: number; inviterUid: string; inviteeUid: string }
+>(functions, 'unmergeFamilyTrees')
+
 function timestampToDate(value: Timestamp | null | undefined): Date | null {
   if (!value || typeof value.toDate !== 'function') return null
   return value.toDate()
@@ -45,7 +50,10 @@ function mapMergeDoc(docSnap: { id: string; data: () => Record<string, unknown> 
     inviteeUid: String(data.inviteeUid ?? ''),
     inviteeEmail: (data.inviteeEmail as string | null) ?? null,
     status:
-      status === 'accepted' || status === 'declined' || status === 'pending'
+      status === 'accepted' ||
+      status === 'declined' ||
+      status === 'pending' ||
+      status === 'undone'
         ? status
         : 'pending',
     createdAt: timestampToDate(data.createdAt as Timestamp | undefined),
@@ -122,6 +130,11 @@ export async function declineTreeMerge(token: string) {
 
 export async function syncTreeMergeOffers() {
   const result = await syncTreeMergeOffersFn()
+  return result.data
+}
+
+export async function unmergeFamilyTrees(token: string) {
+  const result = await unmergeFamilyTreesFn({ token })
   return result.data
 }
 

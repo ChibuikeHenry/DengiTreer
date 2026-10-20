@@ -1257,4 +1257,5 @@ export {
   getMergeRequesterFamily,
   getTreeMergeRequest,
   syncTreeMergeOffers,
+  unmergeFamilyTrees,
 } from './treeMerge'

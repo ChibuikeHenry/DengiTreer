@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncTreeMergeOffers = exports.declineTreeMerge = exports.acceptTreeMerge = exports.getMergeRequesterFamily = exports.getTreeMergeRequest = exports.checkInviteeEmailForMerge = void 0;
+exports.syncTreeMergeOffers = exports.unmergeFamilyTrees = exports.declineTreeMerge = exports.acceptTreeMerge = exports.getMergeRequesterFamily = exports.getTreeMergeRequest = exports.checkInviteeEmailForMerge = void 0;
 exports.findUidByEmail = findUidByEmail;
 exports.countTreeMembers = countTreeMembers;
 exports.offerTreeMergeForInvitation = offerTreeMergeForInvitation;
@@ -400,7 +400,11 @@ function remapId(idMap, oldId) {
         return null;
     return idMap.get(trimmed) ?? null;
 }
-async function copyInviteeTreeIntoInviter(inviterUid, inviteeUid) {
+function stripMergeMeta(data) {
+    const { mergedFromUid, mergedFromToken, ...rest } = data;
+    return rest;
+}
+async function copyInviteeTreeIntoInviter(inviterUid, inviteeUid, invitationToken) {
     const inviteeUserSnap = await db().collection('users').doc(inviteeUid).get();
     const inviteeUser = inviteeUserSnap.data() ?? {};
     const skipMemberIds = new Set();
@@ -513,6 +517,7 @@ async function copyInviteeTreeIntoInviter(inviterUid, inviteeUid) {
     queue(() => batch.set(db().collection('users').doc(inviteeUid), {
         treeMergedIntoUid: inviterUid,
         treeMergedAt: firestore_1.FieldValue.serverTimestamp(),
+        treeMergeInvitationToken: invitationToken,
         updatedAt: firestore_1.FieldValue.serverTimestamp(),
     }, { merge: true }));
     batches.push(batch);
@@ -571,7 +576,7 @@ exports.acceptTreeMerge = (0, https_1.onCall)(async (request) => {
             respondedAt: firestore_1.FieldValue.serverTimestamp(),
         });
     });
-    copiedCount = await copyInviteeTreeIntoInviter(inviterUid, uid);
+    copiedCount = await copyInviteeTreeIntoInviter(inviterUid, uid, token);
     await (0, inviteAccept_1.completeInvitationAccept)({
         token,
         joinedUid: uid,
@@ -607,6 +612,147 @@ exports.declineTreeMerge = (0, https_1.onCall)(async (request) => {
         });
     });
     return { ok: true };
+});
+function remapIdBack(inviterToInvitee, id) {
+    if (!id)
+        return null;
+    const trimmed = String(id).trim();
+    if (!trimmed)
+        return null;
+    return inviterToInvitee.get(trimmed) ?? trimmed;
+}
+/** Restore invitee-owned relatives that were copied into the inviter's tree during merge. */
+async function restoreInviteeTreeFromInviter(inviterUid, inviteeUid) {
+    const [inviterInvitesSnap, inviterMembersSnap, inviterUserSnap] = await Promise.all([
+        db().collection('invitations').where('inviterUid', '==', inviterUid).get(),
+        db().collection('users').doc(inviterUid).collection('familyMembers').get(),
+        db().collection('users').doc(inviterUid).get(),
+    ]);
+    const inviterToInvitee = new Map();
+    const mergedInviteDocs = [];
+    const mergedMemberDocs = [];
+    for (const doc of inviterInvitesSnap.docs) {
+        const data = doc.data();
+        if (String(data.mergedFromUid ?? '') !== inviteeUid)
+            continue;
+        const originalToken = String(data.mergedFromToken ?? '').trim();
+        if (!originalToken)
+            continue;
+        inviterToInvitee.set(doc.id, originalToken);
+        mergedInviteDocs.push(doc);
+    }
+    for (const doc of inviterMembersSnap.docs) {
+        const data = doc.data();
+        if (String(data.mergedFromUid ?? '') !== inviteeUid)
+            continue;
+        const originalToken = String(data.mergedFromToken ?? '').trim();
+        if (!originalToken)
+            continue;
+        inviterToInvitee.set(doc.id, originalToken);
+        mergedMemberDocs.push(doc);
+    }
+    if (inviterToInvitee.size === 0)
+        return 0;
+    const removedInviterIds = new Set(inviterToInvitee.keys());
+    const inviterUser = inviterUserSnap.data() ?? {};
+    const inviterProfilePatch = {};
+    for (const key of ['treeFatherMemberId', 'treeMotherMemberId']) {
+        const id = String(inviterUser[key] ?? '').trim();
+        if (id && removedInviterIds.has(id)) {
+            inviterProfilePatch[key] = firestore_1.FieldValue.delete();
+        }
+    }
+    let batch = db().batch();
+    let ops = 0;
+    const batches = [];
+    const queue = (fn) => {
+        fn();
+        ops++;
+        if (ops >= 400) {
+            batches.push(batch);
+            batch = db().batch();
+            ops = 0;
+        }
+    };
+    for (const doc of mergedInviteDocs) {
+        const originalToken = inviterToInvitee.get(doc.id);
+        const data = stripMergeMeta(doc.data());
+        queue(() => batch.set(db().collection('invitations').doc(originalToken), {
+            ...data,
+            token: originalToken,
+            inviterUid: inviteeUid,
+            sharedFatherMemberId: remapIdBack(inviterToInvitee, data.sharedFatherMemberId),
+            sharedMotherMemberId: remapIdBack(inviterToInvitee, data.sharedMotherMemberId),
+            updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        }));
+        queue(() => batch.delete(doc.ref));
+    }
+    for (const doc of mergedMemberDocs) {
+        const originalToken = inviterToInvitee.get(doc.id);
+        const data = stripMergeMeta(doc.data());
+        queue(() => batch.set(db().collection('users').doc(inviteeUid).collection('familyMembers').doc(originalToken), {
+            ...data,
+            inviteToken: originalToken,
+            sharedFatherMemberId: remapIdBack(inviterToInvitee, data.sharedFatherMemberId),
+            sharedMotherMemberId: remapIdBack(inviterToInvitee, data.sharedMotherMemberId),
+            updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        }));
+        queue(() => batch.delete(doc.ref));
+    }
+    if (Object.keys(inviterProfilePatch).length > 0) {
+        queue(() => batch.set(db().collection('users').doc(inviterUid), inviterProfilePatch, { merge: true }));
+    }
+    queue(() => batch.set(db().collection('users').doc(inviteeUid), {
+        treeMergedIntoUid: firestore_1.FieldValue.delete(),
+        treeMergedAt: firestore_1.FieldValue.delete(),
+        treeMergeInvitationToken: firestore_1.FieldValue.delete(),
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
+    }, { merge: true }));
+    batches.push(batch);
+    for (const b of batches) {
+        await b.commit();
+    }
+    return inviterToInvitee.size;
+}
+exports.unmergeFamilyTrees = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to unmerge family trees.');
+    }
+    const token = String(request.data?.token ?? '').trim();
+    if (!token) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
+    }
+    const uid = request.auth.uid;
+    const mergeRef = mergeRequestRef(token);
+    const mergeSnap = await mergeRef.get();
+    if (!mergeSnap.exists) {
+        throw new https_1.HttpsError('not-found', 'Merge request not found.');
+    }
+    const merge = mergeSnap.data();
+    if (merge.status !== 'accepted') {
+        throw new https_1.HttpsError('failed-precondition', 'These trees are not merged, or the merge was already undone.');
+    }
+    const inviterUid = String(merge.inviterUid ?? '').trim();
+    const inviteeUid = String(merge.inviteeUid ?? '').trim();
+    if (!inviterUid || !inviteeUid) {
+        throw new https_1.HttpsError('failed-precondition', 'Invalid merge record.');
+    }
+    if (uid !== inviterUid && uid !== inviteeUid) {
+        throw new https_1.HttpsError('permission-denied', 'You cannot unmerge this family tree.');
+    }
+    const inviteeUserSnap = await db().collection('users').doc(inviteeUid).get();
+    const mergedInto = String(inviteeUserSnap.data()?.treeMergedIntoUid ?? '').trim();
+    if (mergedInto && mergedInto !== inviterUid) {
+        throw new https_1.HttpsError('failed-precondition', 'This account is linked to a different merged tree.');
+    }
+    const restoredCount = await restoreInviteeTreeFromInviter(inviterUid, inviteeUid);
+    await mergeRef.set({
+        status: 'undone',
+        undoneAt: firestore_1.FieldValue.serverTimestamp(),
+        undoneByUid: uid,
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { ok: true, restoredCount, inviterUid, inviteeUid };
 });
 function mergeReviewUrl(invitationToken) {
     return `${APP_ORIGIN}/join/${invitationToken}`;

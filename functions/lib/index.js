@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -977,4 +977,5 @@ Object.defineProperty(exports, "declineTreeMerge", { enumerable: true, get: func
 Object.defineProperty(exports, "getMergeRequesterFamily", { enumerable: true, get: function () { return treeMerge_2.getMergeRequesterFamily; } });
 Object.defineProperty(exports, "getTreeMergeRequest", { enumerable: true, get: function () { return treeMerge_2.getTreeMergeRequest; } });
 Object.defineProperty(exports, "syncTreeMergeOffers", { enumerable: true, get: function () { return treeMerge_2.syncTreeMergeOffers; } });
+Object.defineProperty(exports, "unmergeFamilyTrees", { enumerable: true, get: function () { return treeMerge_2.unmergeFamilyTrees; } });
 //# sourceMappingURL=index.js.map

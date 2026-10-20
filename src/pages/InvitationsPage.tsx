@@ -29,6 +29,7 @@ import {
   isMergePending,
   subscribeMergeRequestsForTokens,
   syncTreeMergeOffers,
+  unmergeFamilyTrees,
   type TreeMergeRequest,
 } from '../lib/treeMerge'
 
@@ -80,6 +81,8 @@ export default function InvitationsPage() {
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
   const [removingToken, setRemovingToken] = useState<string | null>(null)
   const [removeError, setRemoveError] = useState('')
+  const [unmergingToken, setUnmergingToken] = useState<string | null>(null)
+  const [unmergeError, setUnmergeError] = useState('')
   const [mergesByToken, setMergesByToken] = useState<Map<string, TreeMergeRequest | null>>(
     () => new Map(),
   )
@@ -125,6 +128,22 @@ export default function InvitationsPage() {
       console.warn('Tree merge sync failed:', err),
     )
   }, [user?.uid])
+
+  async function handleUnmergeTrees(item: InvitationRecord) {
+    const confirmed = window.confirm(
+      'Unmerge these family trees?\n\nRelatives copied from the other tree will be removed from the combined tree and restored on their original account. You can merge again later.',
+    )
+    if (!confirmed) return
+    setUnmergeError('')
+    setUnmergingToken(item.token)
+    try {
+      await unmergeFamilyTrees(item.token)
+    } catch (err) {
+      setUnmergeError(getCallableErrorMessage(err))
+    } finally {
+      setUnmergingToken(null)
+    }
+  }
 
   async function handleRemoveFromTree(item: InvitationRecord) {
     const name = item.inviteeName || 'this person'
@@ -436,6 +455,12 @@ export default function InvitationsPage() {
         </p>
       ) : null}
 
+      {unmergeError ? (
+        <p className="modal-form-error" role="alert">
+          {unmergeError}
+        </p>
+      ) : null}
+
       {pendingMergeOnReceived.length > 0 ? (
         <div className="inv-merge-banner" role="status">
           <strong>
@@ -472,6 +497,7 @@ export default function InvitationsPage() {
                       : ` · ${inviteRoleLabel(item.role)}`}
                     {mergePending ? ' · Tree merge offered' : null}
                     {merge?.status === 'accepted' ? ' · Trees merged' : null}
+                    {merge?.status === 'undone' ? ' · Merge undone' : null}
                     {merge?.status === 'declined' ? ' · Merge declined' : null}
                   </span>
                   {tab === 'received' && mergePending ? (
@@ -488,6 +514,12 @@ export default function InvitationsPage() {
                   ) : null}
                   {tab === 'sent' && item.treeMergeInviterNotice && !mergePending ? (
                     <p className="inv-merge-note">{item.treeMergeInviterNotice}</p>
+                  ) : null}
+                  {merge?.status === 'accepted' && item.role !== 'member' ? (
+                    <p className="inv-merge-note">
+                      Your trees are combined. Unmerge to split copied relatives back onto each
+                      account (for testing or if you merged by mistake).
+                    </p>
                   ) : null}
                   {tab === 'sent' && item.role !== 'member' ? (
                     <label className="inv-privacy">
@@ -544,6 +576,17 @@ export default function InvitationsPage() {
                       Review merge request
                     </Link>
                   </div>
+                ) : null}
+                {merge?.status === 'accepted' && item.role !== 'member' ? (
+                  <button
+                    type="button"
+                    className="people-row-remove"
+                    disabled={unmergingToken === item.token}
+                    onClick={() => void handleUnmergeTrees(item)}
+                    style={{ fontSize: '0.8rem', marginLeft: '0.35rem' }}
+                  >
+                    {unmergingToken === item.token ? 'Unmerging…' : 'Unmerge trees'}
+                  </button>
                 ) : null}
                 {tab === 'sent' && canInviterEditInvitation(item) ? (
                   <button

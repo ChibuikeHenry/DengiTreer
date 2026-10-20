@@ -10,7 +10,7 @@ function db() {
   return getFirestore()
 }
 
-export type TreeMergeStatus = 'pending' | 'accepted' | 'declined'
+export type TreeMergeStatus = 'pending' | 'accepted' | 'declined' | 'undone'
 
 type InviteRole =
   | 'spouse'
@@ -475,7 +475,16 @@ function remapId(
   return idMap.get(trimmed) ?? null
 }
 
-async function copyInviteeTreeIntoInviter(inviterUid: string, inviteeUid: string): Promise<number> {
+function stripMergeMeta(data: Record<string, unknown>): Record<string, unknown> {
+  const { mergedFromUid, mergedFromToken, ...rest } = data
+  return rest
+}
+
+async function copyInviteeTreeIntoInviter(
+  inviterUid: string,
+  inviteeUid: string,
+  invitationToken: string,
+): Promise<number> {
   const inviteeUserSnap = await db().collection('users').doc(inviteeUid).get()
   const inviteeUser = inviteeUserSnap.data() ?? {}
   const skipMemberIds = new Set<string>()
@@ -598,6 +607,7 @@ async function copyInviteeTreeIntoInviter(inviterUid: string, inviteeUid: string
       {
         treeMergedIntoUid: inviterUid,
         treeMergedAt: FieldValue.serverTimestamp(),
+        treeMergeInvitationToken: invitationToken,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -676,7 +686,7 @@ export const acceptTreeMerge = onCall(async (request) => {
     })
   })
 
-  copiedCount = await copyInviteeTreeIntoInviter(inviterUid, uid)
+  copiedCount = await copyInviteeTreeIntoInviter(inviterUid, uid, token)
   await completeInvitationAccept({
     token,
     joinedUid: uid,
@@ -717,6 +727,206 @@ export const declineTreeMerge = onCall(async (request) => {
   })
 
   return { ok: true }
+})
+
+function remapIdBack(
+  inviterToInvitee: Map<string, string>,
+  id: string | null | undefined,
+): string | null {
+  if (!id) return null
+  const trimmed = String(id).trim()
+  if (!trimmed) return null
+  return inviterToInvitee.get(trimmed) ?? trimmed
+}
+
+/** Restore invitee-owned relatives that were copied into the inviter's tree during merge. */
+async function restoreInviteeTreeFromInviter(
+  inviterUid: string,
+  inviteeUid: string,
+): Promise<number> {
+  const [inviterInvitesSnap, inviterMembersSnap, inviterUserSnap] = await Promise.all([
+    db().collection('invitations').where('inviterUid', '==', inviterUid).get(),
+    db().collection('users').doc(inviterUid).collection('familyMembers').get(),
+    db().collection('users').doc(inviterUid).get(),
+  ])
+
+  const inviterToInvitee = new Map<string, string>()
+  const mergedInviteDocs: QueryDocumentSnapshot[] = []
+  const mergedMemberDocs: QueryDocumentSnapshot[] = []
+
+  for (const doc of inviterInvitesSnap.docs) {
+    const data = doc.data()
+    if (String(data.mergedFromUid ?? '') !== inviteeUid) continue
+    const originalToken = String(data.mergedFromToken ?? '').trim()
+    if (!originalToken) continue
+    inviterToInvitee.set(doc.id, originalToken)
+    mergedInviteDocs.push(doc)
+  }
+
+  for (const doc of inviterMembersSnap.docs) {
+    const data = doc.data()
+    if (String(data.mergedFromUid ?? '') !== inviteeUid) continue
+    const originalToken = String(data.mergedFromToken ?? '').trim()
+    if (!originalToken) continue
+    inviterToInvitee.set(doc.id, originalToken)
+    mergedMemberDocs.push(doc)
+  }
+
+  if (inviterToInvitee.size === 0) return 0
+
+  const removedInviterIds = new Set(inviterToInvitee.keys())
+  const inviterUser = inviterUserSnap.data() ?? {}
+  const inviterProfilePatch: Record<string, unknown> = {}
+  for (const key of ['treeFatherMemberId', 'treeMotherMemberId'] as const) {
+    const id = String(inviterUser[key] ?? '').trim()
+    if (id && removedInviterIds.has(id)) {
+      inviterProfilePatch[key] = FieldValue.delete()
+    }
+  }
+
+  let batch = db().batch()
+  let ops = 0
+  const batches = []
+
+  const queue = (fn: () => void) => {
+    fn()
+    ops++
+    if (ops >= 400) {
+      batches.push(batch)
+      batch = db().batch()
+      ops = 0
+    }
+  }
+
+  for (const doc of mergedInviteDocs) {
+    const originalToken = inviterToInvitee.get(doc.id)!
+    const data = stripMergeMeta(doc.data() as Record<string, unknown>)
+    queue(() =>
+      batch.set(db().collection('invitations').doc(originalToken), {
+        ...data,
+        token: originalToken,
+        inviterUid: inviteeUid,
+        sharedFatherMemberId: remapIdBack(
+          inviterToInvitee,
+          data.sharedFatherMemberId as string,
+        ),
+        sharedMotherMemberId: remapIdBack(
+          inviterToInvitee,
+          data.sharedMotherMemberId as string,
+        ),
+        updatedAt: FieldValue.serverTimestamp(),
+      }),
+    )
+    queue(() => batch.delete(doc.ref))
+  }
+
+  for (const doc of mergedMemberDocs) {
+    const originalToken = inviterToInvitee.get(doc.id)!
+    const data = stripMergeMeta(doc.data() as Record<string, unknown>)
+    queue(() =>
+      batch.set(
+        db().collection('users').doc(inviteeUid).collection('familyMembers').doc(originalToken),
+        {
+          ...data,
+          inviteToken: originalToken,
+          sharedFatherMemberId: remapIdBack(
+            inviterToInvitee,
+            data.sharedFatherMemberId as string,
+          ),
+          sharedMotherMemberId: remapIdBack(
+            inviterToInvitee,
+            data.sharedMotherMemberId as string,
+          ),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+      ),
+    )
+    queue(() => batch.delete(doc.ref))
+  }
+
+  if (Object.keys(inviterProfilePatch).length > 0) {
+    queue(() =>
+      batch.set(db().collection('users').doc(inviterUid), inviterProfilePatch, { merge: true }),
+    )
+  }
+
+  queue(() =>
+    batch.set(
+      db().collection('users').doc(inviteeUid),
+      {
+        treeMergedIntoUid: FieldValue.delete(),
+        treeMergedAt: FieldValue.delete(),
+        treeMergeInvitationToken: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    ),
+  )
+
+  batches.push(batch)
+  for (const b of batches) {
+    await b.commit()
+  }
+
+  return inviterToInvitee.size
+}
+
+export const unmergeFamilyTrees = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to unmerge family trees.')
+  }
+
+  const token = String((request.data as { token?: string })?.token ?? '').trim()
+  if (!token) {
+    throw new HttpsError('invalid-argument', 'Missing invitation token.')
+  }
+
+  const uid = request.auth.uid
+  const mergeRef = mergeRequestRef(token)
+
+  const mergeSnap = await mergeRef.get()
+  if (!mergeSnap.exists) {
+    throw new HttpsError('not-found', 'Merge request not found.')
+  }
+  const merge = mergeSnap.data()!
+  if (merge.status !== 'accepted') {
+    throw new HttpsError(
+      'failed-precondition',
+      'These trees are not merged, or the merge was already undone.',
+    )
+  }
+
+  const inviterUid = String(merge.inviterUid ?? '').trim()
+  const inviteeUid = String(merge.inviteeUid ?? '').trim()
+  if (!inviterUid || !inviteeUid) {
+    throw new HttpsError('failed-precondition', 'Invalid merge record.')
+  }
+  if (uid !== inviterUid && uid !== inviteeUid) {
+    throw new HttpsError('permission-denied', 'You cannot unmerge this family tree.')
+  }
+
+  const inviteeUserSnap = await db().collection('users').doc(inviteeUid).get()
+  const mergedInto = String(inviteeUserSnap.data()?.treeMergedIntoUid ?? '').trim()
+  if (mergedInto && mergedInto !== inviterUid) {
+    throw new HttpsError(
+      'failed-precondition',
+      'This account is linked to a different merged tree.',
+    )
+  }
+
+  const restoredCount = await restoreInviteeTreeFromInviter(inviterUid, inviteeUid)
+
+  await mergeRef.set(
+    {
+      status: 'undone' satisfies TreeMergeStatus,
+      undoneAt: FieldValue.serverTimestamp(),
+      undoneByUid: uid,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+
+  return { ok: true, restoredCount, inviterUid, inviteeUid }
 })
 
 export function mergeReviewUrl(invitationToken: string): string {
