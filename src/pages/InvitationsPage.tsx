@@ -21,12 +21,11 @@ import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import type { TreeMember } from '../lib/familyTreeMembers'
 import { canInviterEditInvitation, isProfileClaimed } from '../lib/profileClaim'
 import {
-  acceptTreeMerge,
-  declineTreeMerge,
+  isMergePending,
   subscribeMergeRequestsForTokens,
+  syncTreeMergeOffers,
   type TreeMergeRequest,
 } from '../lib/treeMerge'
-import { setSelfOnTree } from '../lib/treeStorage'
 
 type Tab = 'sent' | 'received'
 
@@ -77,9 +76,6 @@ export default function InvitationsPage() {
   const [mergesByToken, setMergesByToken] = useState<Map<string, TreeMergeRequest | null>>(
     () => new Map(),
   )
-  const [mergeActionToken, setMergeActionToken] = useState<string | null>(null)
-  const [mergeError, setMergeError] = useState('')
-
   useEffect(() => {
     if (!user?.uid) return
     return subscribeSentInvitations(
@@ -116,30 +112,18 @@ export default function InvitationsPage() {
     )
   }, [invitationTokens.join('|')])
 
-  async function handleAcceptMerge(token: string) {
-    setMergeError('')
-    setMergeActionToken(token)
-    try {
-      await acceptTreeMerge(token)
-      setSelfOnTree()
-    } catch (err) {
-      setMergeError(getCallableErrorMessage(err))
-    } finally {
-      setMergeActionToken(null)
-    }
-  }
+  useEffect(() => {
+    if (!user?.uid) return
+    void syncTreeMergeOffers().catch((err) =>
+      console.warn('Tree merge sync failed:', err),
+    )
+  }, [user?.uid])
 
-  async function handleDeclineMerge(token: string) {
-    setMergeError('')
-    setMergeActionToken(token)
-    try {
-      await declineTreeMerge(token)
-    } catch (err) {
-      setMergeError(getCallableErrorMessage(err))
-    } finally {
-      setMergeActionToken(null)
-    }
-  }
+  const pendingMergeOnReceived = useMemo(() => {
+    return received.filter((item) =>
+      isMergePending(item, mergesByToken.get(item.token)),
+    )
+  }, [received, mergesByToken])
 
   useEffect(() => {
     if (!composing || inviteLink || !user) return
@@ -380,7 +364,12 @@ export default function InvitationsPage() {
       <header className="inv-list-head">
         <div>
           <h1>Invitations</h1>
-          <p>Manage your sent invitation and see who has joined.</p>
+          <p>
+            Manage sent and received invites.{' '}
+            <strong>Tree merge</strong> applies to family invites (spouse, parent, child, sibling)
+            — not generic “platform” share links. The person with the existing tree accepts merge
+            under <strong>Received</strong>.
+          </p>
         </div>
         <button type="button" className="inv-send-btn" onClick={() => setComposing(true)}>
           + Send invitation
@@ -414,10 +403,18 @@ export default function InvitationsPage() {
         </p>
       ) : null}
 
-      {mergeError ? (
-        <p className="modal-form-error" role="alert">
-          {mergeError}
-        </p>
+      {pendingMergeOnReceived.length > 0 ? (
+        <div className="inv-merge-banner" role="status">
+          <strong>
+            {pendingMergeOnReceived.length === 1
+              ? '1 family tree merge waiting for you'
+              : `${pendingMergeOnReceived.length} family tree merges waiting for you`}
+          </strong>
+          <p>
+            Open the <button type="button" className="inv-merge-tab-link" onClick={() => setTab('received')}>Received</button>{' '}
+            tab and choose <strong>Review merge request</strong> to combine your tree with theirs.
+          </p>
+        </div>
       ) : null}
 
       <section className="home-card inv-list-panel">
@@ -425,9 +422,9 @@ export default function InvitationsPage() {
           <ul className="inv-cards">
             {activeList.map((item) => {
               const merge = mergesByToken.get(item.token) ?? null
-              const mergePending =
-                merge?.status === 'pending' ||
-                (item.treeMergeOffered && item.status === 'pending' && merge === null)
+              const mergePending = isMergePending(item, merge)
+              const canAcceptMerge =
+                tab === 'received' && mergePending && item.role !== 'member'
               return (
               <li key={item.id} className="inv-card">
                 <span className="inv-avatar">{initialsFor(item)}</span>
@@ -481,6 +478,9 @@ export default function InvitationsPage() {
                     </label>
                   ) : null}
                 </div>
+                {tab === 'sent' && mergePending ? (
+                  <span className="inv-badge inv-badge-merge">Merge offered</span>
+                ) : null}
                 <span
                   className={`inv-badge inv-badge-${
                     isProfileClaimed(item)
@@ -501,24 +501,15 @@ export default function InvitationsPage() {
                       ? 'Joined'
                       : 'Pending'}
                 </span>
-                {tab === 'received' && mergePending && item.status === 'pending' ? (
+                {canAcceptMerge ? (
                   <div className="inv-merge-actions">
-                    <button
-                      type="button"
+                    <Link
+                      to={`/home/merge/incoming/${item.token}`}
                       className="inv-send-btn inv-merge-accept"
-                      disabled={mergeActionToken === item.token}
-                      onClick={() => void handleAcceptMerge(item.token)}
+                      style={{ textAlign: 'center', textDecoration: 'none' }}
                     >
-                      {mergeActionToken === item.token ? 'Merging…' : 'Accept merge'}
-                    </button>
-                    <button
-                      type="button"
-                      className="inv-menu"
-                      disabled={mergeActionToken === item.token}
-                      onClick={() => void handleDeclineMerge(item.token)}
-                    >
-                      Decline merge
-                    </button>
+                      Review merge request
+                    </Link>
                   </div>
                 ) : null}
                 {tab === 'sent' && canInviterEditInvitation(item) ? (

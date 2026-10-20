@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { ContactFields, MemberBioField } from './familyFormFields'
@@ -18,6 +18,8 @@ import {
   type ParentKind,
   type ParentSlot,
 } from '../lib/siblingRelationship'
+import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
+import MergeFamilyPrompt from './MergeFamilyPrompt'
 
 const parentTypes = [
   {
@@ -77,6 +79,46 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
   const photo = usePhotoPicker()
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('parent', onClose, onAdded)
   const [slotError, setSlotError] = useState('')
+  const [mergeDismissed, setMergeDismissed] = useState(false)
+  const { match: mergeMatch } = useMergeEmailCheck(email, open && status === 'living')
+
+  const isUnknownParent = relationship === UNKNOWN_RELATIONSHIP
+
+  const mergeInvitePayload = useMemo(() => {
+    const resolvedFirst = firstName.trim() || (isUnknownParent ? 'Unknown' : '')
+    const resolvedLast = lastName.trim() || (isUnknownParent ? 'Parent' : '')
+    const parentKind: ParentKind = parentType?.value ?? 'biological'
+    const parentSlot = relationshipToParentSlot(relationship)
+    return {
+      role: 'parent' as const,
+      firstName: resolvedFirst,
+      middleName: middleName.trim(),
+      lastName: resolvedLast,
+      inviteeEmail: email.trim() || undefined,
+      memberStatus: status,
+      gender: gender || genderFromParentSlot(parentSlot) || undefined,
+      privacy,
+      bio: bio.trim() || undefined,
+      parentSlot,
+      parentKind,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    }
+  }, [
+    firstName,
+    lastName,
+    middleName,
+    isUnknownParent,
+    parentType,
+    relationship,
+    email,
+    status,
+    gender,
+    privacy,
+    bio,
+    dob,
+    dateOfDeath,
+  ])
 
   useEffect(() => {
     if (!open || !user?.uid) {
@@ -102,8 +144,13 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
     setPhone('')
     setEmail('')
     setBio('')
+    setMergeDismissed(false)
     photo.reset()
   }, [open, photo.reset])
+
+  useEffect(() => {
+    setMergeDismissed(false)
+  }, [email])
 
   useEffect(() => {
     if (!open) return
@@ -129,11 +176,10 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
     onClose()
   }
 
-  const isUnknownParent = relationship === UNKNOWN_RELATIONSHIP
-
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!relationship) return
+    if (mergeMatch && !mergeDismissed) return
 
     const resolvedFirst = firstName.trim() || (isUnknownParent ? 'Unknown' : '')
     const resolvedLast = lastName.trim() || (isUnknownParent ? 'Parent' : '')
@@ -408,6 +454,15 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
             <p className="modal-form-error" role="alert">
               {slotError || error}
             </p>
+          ) : null}
+
+          {mergeMatch && !mergeDismissed ? (
+            <MergeFamilyPrompt
+              match={mergeMatch}
+              invitePayload={mergeInvitePayload}
+              onCloseModal={onClose}
+              onDismiss={() => setMergeDismissed(true)}
+            />
           ) : null}
 
           <footer className="modal-actions">

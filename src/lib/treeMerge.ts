@@ -25,6 +25,11 @@ const declineTreeMergeFn = httpsCallable<{ token: string }, { ok: boolean }>(
   'declineTreeMerge',
 )
 
+const syncTreeMergeOffersFn = httpsCallable<void, { created: number }>(
+  functions,
+  'syncTreeMergeOffers',
+)
+
 function timestampToDate(value: Timestamp | null | undefined): Date | null {
   if (!value || typeof value.toDate !== 'function') return null
   return value.toDate()
@@ -113,4 +118,19 @@ export async function acceptTreeMerge(token: string) {
 export async function declineTreeMerge(token: string) {
   const result = await declineTreeMergeFn({ token })
   return result.data
+}
+
+export async function syncTreeMergeOffers() {
+  const result = await syncTreeMergeOffersFn()
+  return result.data
+}
+
+export function isMergePending(
+  item: { token: string; treeMergeOffered: boolean; role: string },
+  merge: TreeMergeRequest | null | undefined,
+): boolean {
+  if (item.role === 'member') return false
+  if (merge?.status === 'accepted' || merge?.status === 'declined') return false
+  if (merge?.status === 'pending') return true
+  return item.treeMergeOffered
 }

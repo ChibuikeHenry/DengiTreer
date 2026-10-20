@@ -22,6 +22,7 @@ import {
 import type { AvatarGenderTone } from './ProfileAvatar'
 import { formatLifeYearsLine } from '../lib/lifeDates'
 import type { MemberPrivacy } from '../lib/memberPrivacy'
+import { isClaimedTreeMember } from '../lib/profileClaim'
 import { PED, buildPedigreeLayout } from '../lib/pedigreeLayout'
 import { renderTreePng } from '../lib/exportTreeImage'
 import type { DashboardContext } from '../pages/HomePage'
@@ -70,7 +71,7 @@ function PedigreeMemberNode({
           ? 'Click to edit member details'
           : exploreHint && (member.joinedUid || member.id.startsWith('inviter-'))
             ? 'Click to explore their family tree'
-            : member.profileClaimed
+            : isClaimedTreeMember(member)
               ? 'Click to view claimed profile'
               : undefined
       }

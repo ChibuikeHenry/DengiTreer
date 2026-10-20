@@ -15,6 +15,8 @@ import {
 import { subscribeTreeMembers, type TreeMember } from '../lib/familyTreeMembers'
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import type { ParentSlot } from '../lib/siblingRelationship'
+import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
+import MergeFamilyPrompt from './MergeFamilyPrompt'
 
 const relationships = ['Grandfather', 'Grandmother'] as const
 
@@ -59,6 +61,40 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
     onClose,
     onAdded,
   )
+  const [mergeDismissed, setMergeDismissed] = useState(false)
+  const { match: mergeMatch } = useMergeEmailCheck(email, open && status === 'living')
+
+  const mergeInvitePayload = useMemo(
+    () => ({
+      role: 'grandparent' as const,
+      firstName: firstName.trim(),
+      middleName: middleName.trim(),
+      lastName: lastName.trim(),
+      inviteeEmail: email.trim() || undefined,
+      memberStatus: status,
+      gender: gender || undefined,
+      privacy,
+      bio: bio.trim() || undefined,
+      parentSlot: relationshipToParentSlot(relationship),
+      lineageSide: placement.startsWith('fathers') ? ('paternal' as const) : ('maternal' as const),
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    }),
+    [
+      firstName,
+      middleName,
+      lastName,
+      email,
+      status,
+      gender,
+      privacy,
+      bio,
+      relationship,
+      placement,
+      dob,
+      dateOfDeath,
+    ],
+  )
 
   useEffect(() => {
     if (!open || !user?.uid) {
@@ -93,8 +129,13 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
     setEmail('')
     setBio('')
     setSlotError('')
+    setMergeDismissed(false)
     photo.reset()
   }, [open, photo.reset])
+
+  useEffect(() => {
+    setMergeDismissed(false)
+  }, [email])
 
   useEffect(() => {
     if (placement && grandparentSlotTaken(treeMembers, placement)) {
@@ -142,6 +183,7 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!placement || !relationship) return
+    if (mergeMatch && !mergeDismissed) return
 
     const resolvedFirst = firstName.trim()
     const resolvedLast = lastName.trim()
@@ -426,6 +468,15 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
             <p className="modal-form-error" role="alert">
               {slotError || error}
             </p>
+          ) : null}
+
+          {mergeMatch && !mergeDismissed ? (
+            <MergeFamilyPrompt
+              match={mergeMatch}
+              invitePayload={mergeInvitePayload}
+              onCloseModal={onClose}
+              onDismiss={() => setMergeDismissed(true)}
+            />
           ) : null}
 
           <footer className="modal-actions">

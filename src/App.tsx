@@ -18,6 +18,15 @@ import PeoplePage from './pages/PeoplePage'
 import PhotosPage from './pages/PhotosPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
+import {
+  MergeExistsPage,
+  MergeIncomingPage,
+  MergeMessagePage,
+  MergeReviewPage,
+  MergeSentPage,
+  MergeSeparatePage,
+  MergeViewFamilyPage,
+} from './pages/mergeFlow/MergeFlowPages'
 import './auth.css'
 
 export default function App() {
@@ -53,6 +62,13 @@ export default function App() {
             <Route path="settings" element={<SettingsPage />} />
             <Route path="premium" element={<PricingPage embedded />} />
             <Route path="concession" element={<ConcessionRequestPage embedded />} />
+            <Route path="merge/exists" element={<MergeExistsPage />} />
+            <Route path="merge/review" element={<MergeReviewPage />} />
+            <Route path="merge/message" element={<MergeMessagePage />} />
+            <Route path="merge/sent" element={<MergeSentPage />} />
+            <Route path="merge/separate" element={<MergeSeparatePage />} />
+            <Route path="merge/incoming/:token" element={<MergeIncomingPage />} />
+            <Route path="merge/incoming/:token/family" element={<MergeViewFamilyPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -17,6 +17,8 @@ import {
   type SiblingRelationship,
 } from '../lib/siblingRelationship'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
+import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
+import MergeFamilyPrompt from './MergeFamilyPrompt'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
@@ -38,6 +40,8 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
 
   const [privacy] = useDefaultMemberPrivacy(open)
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('sibling', onClose, onAdded)
+  const [mergeDismissed, setMergeDismissed] = useState(false)
+  const { match: mergeMatch } = useMergeEmailCheck(email, open && status === 'living')
 
   const sharedParents = useMemo(
     () => ({
@@ -89,8 +93,41 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
     if (g && gender !== g) setGender(g)
   }, [relationship, gender])
 
+  const mergeInvitePayload = useMemo(
+    () => ({
+      role: 'sibling' as const,
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email.trim() || undefined,
+      memberStatus: status,
+      gender: (genderForSiblingRelationship(relationship) ?? gender) || undefined,
+      privacy,
+      sharedFatherMemberId: fatherId || undefined,
+      sharedMotherMemberId: motherId || undefined,
+      siblingRelationship: relationship,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    }),
+    [
+      firstName,
+      middleName,
+      lastName,
+      email,
+      status,
+      gender,
+      relationship,
+      privacy,
+      fatherId,
+      motherId,
+      dob,
+      dateOfDeath,
+    ],
+  )
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (mergeMatch && !mergeDismissed) return
     await submit({
       firstName,
       middleName,
@@ -123,8 +160,13 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
     setBirthOrder('')
     setRelationship('sibling')
     relationshipEdited.current = false
+    setMergeDismissed(false)
     photo.reset()
   }, [open, photo.reset])
+
+  useEffect(() => {
+    setMergeDismissed(false)
+  }, [email])
 
   return (
     <ModalFrame
@@ -137,7 +179,7 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}
-      panelClassName="modal-panel-lg"
+      panelClassName="modal-panel-lg modal-panel-merge"
     >
       <section className="modal-section">
         <h3>1. Select Parents</h3>
@@ -225,6 +267,14 @@ export default function AddSiblingModal({ open, onClose, onAdded }: Props) {
           </label>
         ) : null}
       </section>
+      {mergeMatch && !mergeDismissed ? (
+        <MergeFamilyPrompt
+          match={mergeMatch}
+          invitePayload={mergeInvitePayload}
+          onCloseModal={onClose}
+          onDismiss={() => setMergeDismissed(true)}
+        />
+      ) : null}
     </ModalFrame>
   )
 }

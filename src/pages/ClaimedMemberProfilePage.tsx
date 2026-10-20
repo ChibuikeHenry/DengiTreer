@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import ProfileAvatar from '../components/ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
@@ -13,6 +13,7 @@ import {
 } from '../lib/familyTreeMembers'
 import { formatDisplayDate } from '../lib/lifeDates'
 import { memberPrivacyScopeLabel } from '../lib/memberPrivacy'
+import { isClaimedTreeMember } from '../lib/profileClaim'
 import { resolveExploreAccess } from '../lib/treeExplore'
 import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
 
@@ -22,7 +23,6 @@ function FieldIcon({ children }: { children: ReactNode }) {
 
 export default function ClaimedMemberProfilePage() {
   const { memberId } = useParams<{ memberId: string }>()
-  const navigate = useNavigate()
   const { user } = useAuth()
   const [members, setMembers] = useState<TreeMember[]>([])
   const [viewerName, setViewerName] = useState('')
@@ -89,13 +89,6 @@ export default function ClaimedMemberProfilePage() {
     }
   }, [member, user?.uid, viewerInvitedByUid])
 
-  useEffect(() => {
-    if (!memberId || members.length === 0) return
-    if (member && !member.profileClaimed) {
-      navigate('/home/tree', { replace: true })
-    }
-  }, [member, memberId, members.length, navigate])
-
   if (!member) {
     return (
       <div className="claimed-member-page">
@@ -114,6 +107,7 @@ export default function ClaimedMemberProfilePage() {
   const dob = formatDisplayDate(member.dateOfBirth)
   const bio = formatBioForDisplay(member.bio)
   const genderTone = avatarGenderToneForMember(member, avatarViewer)
+  const claimed = isClaimedTreeMember(member)
 
   return (
     <div className="claimed-member-page">
@@ -121,7 +115,9 @@ export default function ClaimedMemberProfilePage() {
         <Link to="/home/tree" className="claimed-back">
           ← Back to Family Tree
         </Link>
-        <span className="claimed-account-badge">Claimed Account</span>
+        <span className="claimed-account-badge">
+          {claimed ? 'Claimed Account' : 'Family member profile'}
+        </span>
       </div>
 
       <div className="claimed-member-grid">
@@ -195,8 +191,9 @@ export default function ClaimedMemberProfilePage() {
             <p>{bio}</p>
           </div>
           <p className="claimed-readonly-note">
-            This profile is managed by {member.displayName.split(/\s+/)[0] ?? 'them'}.
-            You can view details but not edit a claimed account.
+            {claimed
+              ? `This profile is managed by ${member.displayName.split(/\s+/)[0] ?? 'them'}. You can view details but not edit a claimed account.`
+              : 'This person is on your tree through extended family. You can view their details here but cannot edit them.'}
           </p>
         </section>
       </div>
@@ -205,7 +202,7 @@ export default function ClaimedMemberProfilePage() {
         <div className="claimed-relation-col">
           <h3>Father</h3>
           {father ? (
-            father.profileClaimed ? (
+            isClaimedTreeMember(father) ? (
               <Link to={`/home/member/${father.id}`} className="claimed-relation-person">
                 <ProfileAvatar
                   photoURL={father.photoURL}
@@ -235,7 +232,7 @@ export default function ClaimedMemberProfilePage() {
         <div className="claimed-relation-col">
           <h3>Mother</h3>
           {mother ? (
-            mother.profileClaimed ? (
+            isClaimedTreeMember(mother) ? (
               <Link to={`/home/member/${mother.id}`} className="claimed-relation-person">
                 <ProfileAvatar
                   photoURL={mother.photoURL}

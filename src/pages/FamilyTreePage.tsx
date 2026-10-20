@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { DashIcons } from '../components/DashboardLayout'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
-import ExploreTreeMemberModal from '../components/ExploreTreeMemberModal'
 import ProfileAvatar from '../components/ProfileAvatar'
 import PedigreeTreeDiagram, { type PedigreeTreeHandle } from '../components/PedigreeTreeDiagram'
 import { useAuth } from '../context/AuthContext'
@@ -136,7 +135,6 @@ export default function FamilyTreePage() {
   const [centerDateOfBirth, setCenterDateOfBirth] = useState<string | null>(null)
   const [centerPosition, setCenterPosition] = useState<string | null>(null)
   const [centerGender, setCenterGender] = useState<string | null>(null)
-  const [viewerInvitedByUid, setViewerInvitedByUid] = useState<string | null>(null)
   const [viewerGender, setViewerGender] = useState<string | null>(null)
   const [viewerPhotoURL, setViewerPhotoURL] = useState<string | null>(null)
   const [viewerName, setViewerName] = useState('')
@@ -146,7 +144,6 @@ export default function FamilyTreePage() {
   const [centerSelfMemberIds, setCenterSelfMemberIds] = useState<string[]>([])
   const [profileReady, setProfileReady] = useState(false)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
-  const [actionMember, setActionMember] = useState<TreeMember | null>(null)
   const [fullTreeView, setFullTreeView] = useState(false)
   const [addMemberMenuOpen, setAddMemberMenuOpen] = useState(false)
   const addMemberMenuRef = useRef<HTMLLIElement>(null)
@@ -220,7 +217,6 @@ export default function FamilyTreePage() {
       setCenterDateOfBirth(null)
       setCenterPosition(null)
       setCenterGender(null)
-      setViewerInvitedByUid(null)
       setViewerGender(null)
       setViewerPhotoURL(null)
       setViewerName('')
@@ -240,7 +236,6 @@ export default function FamilyTreePage() {
       setViewerGender(viewerProfile.gender?.trim() || null)
       setViewerPhotoURL(user.photoURL ?? viewerProfile.photoURL ?? null)
       setViewerPosition(positionLabel(viewerProfile.familyRole))
-      setViewerInvitedByUid(viewerProfile.invitedByUid?.trim() || null)
       setJoinedFamily(Boolean(viewerProfile.invitedByUid))
       const selfMemberIds = [
         viewerProfile.claimedInviteToken?.trim(),
@@ -326,15 +321,11 @@ export default function FamilyTreePage() {
   )
 
   function handleMemberAction(member: TreeMember) {
-    if (member.profileClaimed) {
-      navigate(`/home/member/${encodeURIComponent(member.id)}`)
-      return
-    }
     if (viewerCanEditMember(member)) {
       setEditingMember(member)
       return
     }
-    setActionMember(member)
+    navigate(`/home/member/${encodeURIComponent(member.id)}`)
   }
 
   async function runDownload() {
@@ -501,7 +492,9 @@ export default function FamilyTreePage() {
 
         {isExploreView ? (
           <div className="ft-explore-banner" role="status">
-            Viewing <strong>{centerName}</strong>&apos;s family tree.
+            <span className="ft-explore-banner-text">
+              Viewing <strong>{centerName}</strong>&apos;s family tree.
+            </span>
             <Link to="/home/tree">Return to your tree</Link>
           </div>
         ) : null}
@@ -656,19 +649,6 @@ export default function FamilyTreePage() {
         member={editingMember}
         onClose={() => setEditingMember(null)}
         onUpdated={() => {}}
-      />
-
-      <ExploreTreeMemberModal
-        open={actionMember !== null}
-        member={actionMember}
-        viewerUid={user?.uid ?? null}
-        viewerInvitedByUid={viewerInvitedByUid}
-        onClose={() => setActionMember(null)}
-        onEdit={
-          isExploreView ? undefined : (member) => setEditingMember(member)
-        }
-        allowEdit={!isExploreView}
-        treeOwnerUid={treeSubscriptionUid}
       />
 
       {!fullTreeView ? (

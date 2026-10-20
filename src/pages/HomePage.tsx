@@ -13,6 +13,7 @@ import { acceptPersistedInvitationIfAny } from '../lib/invitations'
 import { setSelfOnTree } from '../lib/treeStorage'
 import { fetchUserProfile } from '../lib/userProfile'
 import '../dashboard.css'
+import '../merge-flow.css'
 
 export type MemberModalKind =
   | 'yourself'

@@ -50,10 +50,6 @@ export function useFamilyMemberInviteSubmit(
         })
         if (result.mergeNotice) {
           window.alert(result.mergeNotice)
-        } else if (result.treeMergeOffered) {
-          window.alert(
-            'This person already has a family tree on DengiTree. They will be asked to merge their tree with yours.',
-          )
         }
         if (onAdded) onAdded()
         else onClose()

@@ -7,6 +7,15 @@ export function isProfileClaimed(record: Pick<InvitationRecord, 'status' | 'prof
   return record.status === 'joined' && !!record.joinedUid
 }
 
+/** Tree card / list — open claimed profile when they have joined DengiTree. */
+export function isClaimedTreeMember(
+  member: Pick<TreeMember, 'profileClaimed' | 'joinedUid' | 'inviteStatus'>,
+): boolean {
+  if (member.profileClaimed) return true
+  if (member.joinedUid) return true
+  return member.inviteStatus === 'joined'
+}
+
 const TREE_FAMILY_ROLES = new Set<InviteRole>([
   'spouse',
   'parent',

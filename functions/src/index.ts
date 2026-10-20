@@ -266,6 +266,7 @@ async function createInvitationRecord(
   uid: string,
   authToken: Record<string, unknown>,
   data: CreateInviteInput,
+  options?: { skipAutoMerge?: boolean },
 ) {
   const role = data.role
   if (
@@ -431,7 +432,7 @@ async function createInvitationRecord(
   let treeMergeOffered = false
   let mergeNotice: string | null = null
 
-  if (memberStatus === 'living' && inviteeEmail) {
+  if (memberStatus === 'living' && inviteeEmail && !options?.skipAutoMerge) {
     const mergeResult = await offerTreeMergeForInvitation({
       invitationToken: token,
       inviterUid: uid,
@@ -463,11 +464,13 @@ export const createFamilyMemberInvite = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'Sign in to send invitations.')
   }
 
-  const data = (request.data ?? {}) as CreateInviteInput
+  const data = (request.data ?? {}) as CreateInviteInput & { skipAutoMerge?: boolean }
+  const { skipAutoMerge, ...invite } = data
   return createInvitationRecord(
     request.auth.uid,
     request.auth.token,
-    data,
+    invite,
+    { skipAutoMerge: skipAutoMerge === true },
   )
 })
 
@@ -1138,5 +1141,49 @@ export const updateFamilyMemberPrivacy = onCall(async (request) => {
   return { ok: true }
 })
 
+export const submitTreeMergeRequest = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to send a merge request.')
+  }
+
+  const data = (request.data ?? {}) as CreateInviteInput & { mergeMessage?: string }
+  const mergeMessage = String(data.mergeMessage ?? '').trim()
+  const inviteeEmail = normalizeInviteeEmail(data.inviteeEmail)
+  if (!inviteeEmail) {
+    throw new HttpsError('invalid-argument', 'Email is required for a merge request.')
+  }
+
+  const uid = request.auth.uid
+  const inviterName =
+    (typeof request.auth.token.name === 'string' && request.auth.token.name) ||
+    (typeof request.auth.token.email === 'string' && request.auth.token.email) ||
+    'A family member'
+
+  const result = await createInvitationRecord(uid, request.auth.token, data, {
+    skipAutoMerge: true,
+  })
+
+  await offerTreeMergeForInvitation({
+    invitationToken: result.token,
+    inviterUid: uid,
+    inviterName,
+    inviteeEmail,
+    roleLabel: roleLabel(data.role ?? 'member'),
+    joinUrl: result.joinUrl,
+    personalMessage: data.personalMessage,
+    mergeMessage: mergeMessage || null,
+    sendEmail: true,
+  })
+
+  return { ok: true, token: result.token, joinUrl: result.joinUrl }
+})
+
 export { initializePremiumPayment, verifyPremiumPayment } from './premiumPayments'
-export { acceptTreeMerge, declineTreeMerge } from './treeMerge'
+export {
+  acceptTreeMerge,
+  checkInviteeEmailForMerge,
+  declineTreeMerge,
+  getMergeRequesterFamily,
+  getTreeMergeRequest,
+  syncTreeMergeOffers,
+} from './treeMerge'

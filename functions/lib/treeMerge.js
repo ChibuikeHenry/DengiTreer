@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.declineTreeMerge = exports.acceptTreeMerge = void 0;
+exports.syncTreeMergeOffers = exports.declineTreeMerge = exports.acceptTreeMerge = exports.getMergeRequesterFamily = exports.getTreeMergeRequest = exports.checkInviteeEmailForMerge = void 0;
 exports.findUidByEmail = findUidByEmail;
+exports.countTreeMembers = countTreeMembers;
 exports.offerTreeMergeForInvitation = offerTreeMergeForInvitation;
 exports.maybeCreateTreeMergeRequest = maybeCreateTreeMergeRequest;
 exports.mergeReviewUrl = mergeReviewUrl;
@@ -13,6 +14,19 @@ const inviteAccept_1 = require("./inviteAccept");
 const APP_ORIGIN = process.env.APP_ORIGIN ?? 'https://dengitree.web.app';
 function db() {
     return (0, firestore_1.getFirestore)();
+}
+function mergeRoleLabel(role) {
+    const map = {
+        spouse: 'Spouse',
+        parent: 'Parent',
+        grandparent: 'Grandparent',
+        'great-grandparent': 'Great-grandparent',
+        child: 'Child',
+        sibling: 'Sibling',
+        member: 'Family Member',
+    };
+    const key = String(role ?? 'member');
+    return map[key] ?? 'Family Member';
 }
 function newToken() {
     return (0, crypto_1.randomBytes)(6).toString('hex');
@@ -161,6 +175,129 @@ async function resolveMergeInvitee(inviteeEmail, inviterUid) {
 function mergeRequestRef(invitationToken) {
     return db().collection('treeMergeRequests').doc(invitationToken);
 }
+async function countTreeMembers(uid) {
+    const snap = await db().collection('users').doc(uid).collection('familyMembers').get();
+    return snap.size;
+}
+async function displayNameForUid(uid) {
+    const snap = await db().collection('users').doc(uid).get();
+    const data = snap.data() ?? {};
+    const name = [data.firstName, data.middleName, data.lastName]
+        .map((p) => String(p ?? '').trim())
+        .filter(Boolean)
+        .join(' ');
+    if (name)
+        return name;
+    const email = String(data.email ?? '').trim();
+    if (email)
+        return email.split('@')[0] ?? email;
+    return 'Family member';
+}
+exports.checkInviteeEmailForMerge = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to check this email.');
+    }
+    const email = normalizeEmail(request.data?.email);
+    if (!email) {
+        return { shouldMerge: false };
+    }
+    const inviterUid = request.auth.uid;
+    const resolved = await resolveMergeInvitee(email, inviterUid);
+    if (!resolved.shouldOffer || !resolved.inviteeUid) {
+        return {
+            shouldMerge: false,
+            notice: resolved.notice,
+        };
+    }
+    const [requesterMemberCount, inviteeMemberCount, requesterDisplayName, inviteeDisplayName] = await Promise.all([
+        countTreeMembers(inviterUid),
+        countTreeMembers(resolved.inviteeUid),
+        displayNameForUid(inviterUid),
+        displayNameForUid(resolved.inviteeUid),
+    ]);
+    return {
+        shouldMerge: true,
+        email,
+        inviteeUid: resolved.inviteeUid,
+        inviteeDisplayName,
+        inviteeMemberCount,
+        requesterDisplayName,
+        requesterMemberCount,
+        notice: resolved.notice,
+    };
+});
+exports.getTreeMergeRequest = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to view this merge request.');
+    }
+    const token = String(request.data?.token ?? '').trim();
+    if (!token)
+        throw new https_1.HttpsError('invalid-argument', 'Missing token.');
+    const mergeSnap = await mergeRequestRef(token).get();
+    if (!mergeSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Merge request not found.');
+    const merge = mergeSnap.data();
+    const uid = request.auth.uid;
+    const inviterUid = String(merge.inviterUid ?? '');
+    const inviteeUid = String(merge.inviteeUid ?? '');
+    if (uid !== inviterUid && uid !== inviteeUid) {
+        throw new https_1.HttpsError('permission-denied', 'You cannot view this merge request.');
+    }
+    const inviteSnap = await db().collection('invitations').doc(token).get();
+    const invite = inviteSnap.data() ?? {};
+    return {
+        token,
+        status: String(merge.status ?? 'pending'),
+        inviterUid,
+        inviteeUid,
+        inviteeEmail: normalizeEmail(merge.inviteeEmail),
+        inviterName: String(invite.inviterName ?? merge.requesterDisplayName ?? 'A family member'),
+        inviteeName: String(merge.inviteeDisplayName ?? invite.inviteeName ?? 'Family member'),
+        mergeMessage: String(merge.mergeMessage ?? invite.personalMessage ?? '').trim() || null,
+        requesterMemberCount: Number(merge.requesterMemberCount ?? 0),
+        inviteeMemberCount: Number(merge.inviteeMemberCount ?? 0),
+        roleLabel: mergeRoleLabel(invite.role),
+        createdAt: merge.createdAt ?? null,
+    };
+});
+exports.getMergeRequesterFamily = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to view this family.');
+    }
+    const token = String(request.data?.token ?? '').trim();
+    if (!token)
+        throw new https_1.HttpsError('invalid-argument', 'Missing token.');
+    const mergeSnap = await mergeRequestRef(token).get();
+    if (!mergeSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Merge request not found.');
+    const merge = mergeSnap.data();
+    const uid = request.auth.uid;
+    if (String(merge.inviteeUid ?? '') !== uid && String(merge.inviterUid ?? '') !== uid) {
+        throw new https_1.HttpsError('permission-denied', 'You cannot view this family.');
+    }
+    const inviterUid = String(merge.inviterUid ?? '').trim();
+    const inviterProfile = await db().collection('users').doc(inviterUid).get();
+    const requesterName = await displayNameForUid(inviterUid);
+    const membersSnap = await db()
+        .collection('users')
+        .doc(inviterUid)
+        .collection('familyMembers')
+        .get();
+    const members = membersSnap.docs.map((doc) => {
+        const d = doc.data();
+        return {
+            id: doc.id,
+            displayName: String(d.displayName ?? d.firstName ?? 'Family member'),
+            role: String(d.role ?? 'member'),
+            gender: d.gender ? String(d.gender) : null,
+        };
+    });
+    return {
+        requesterName,
+        requesterPhotoURL: inviterProfile.data()?.photoURL ?? null,
+        members,
+    };
+});
 async function offerTreeMergeForInvitation(options) {
     const inviteeEmail = normalizeEmail(options.inviteeEmail);
     if (!inviteeEmail)
@@ -181,14 +318,38 @@ async function offerTreeMergeForInvitation(options) {
         return { offered: false, notice: resolved.notice };
     }
     const inviteeUid = resolved.inviteeUid;
+    const inviteeUserSnap = await db().collection('users').doc(inviteeUid).get();
+    if (String(inviteeUserSnap.data()?.treeMergedIntoUid ?? '').trim() === options.inviterUid) {
+        return { offered: false, notice: null };
+    }
     const existing = await mergeRequestRef(options.invitationToken).get();
-    const alreadyPending = existing.exists && String(existing.data()?.status ?? '') === 'pending';
+    const existingStatus = String(existing.data()?.status ?? '');
+    if (existingStatus === 'accepted') {
+        return { offered: true, notice: resolved.notice };
+    }
+    const alreadyPending = existing.exists && existingStatus === 'pending';
+    const [requesterMemberCount, inviteeMemberCount, inviteeDisplayName] = await Promise.all([
+        options.requesterMemberCount !== undefined
+            ? Promise.resolve(options.requesterMemberCount)
+            : countTreeMembers(options.inviterUid),
+        options.inviteeMemberCount !== undefined
+            ? Promise.resolve(options.inviteeMemberCount)
+            : countTreeMembers(inviteeUid),
+        options.inviteeDisplayName
+            ? Promise.resolve(options.inviteeDisplayName)
+            : displayNameForUid(inviteeUid),
+    ]);
     await mergeRequestRef(options.invitationToken).set({
         invitationToken: options.invitationToken,
         inviterUid: options.inviterUid,
         inviteeUid,
         inviteeEmail,
         status: 'pending',
+        mergeMessage: options.mergeMessage?.trim() || options.personalMessage?.trim() || null,
+        requesterDisplayName: options.inviterName,
+        requesterMemberCount,
+        inviteeMemberCount,
+        inviteeDisplayName,
         createdAt: firestore_1.FieldValue.serverTimestamp(),
         respondedAt: null,
     }, { merge: true });
@@ -450,4 +611,67 @@ exports.declineTreeMerge = (0, https_1.onCall)(async (request) => {
 function mergeReviewUrl(invitationToken) {
     return `${APP_ORIGIN}/join/${invitationToken}`;
 }
+/** Backfill merge offers for family invites that pre-date merge support or missed detection. */
+exports.syncTreeMergeOffers = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to sync tree merge offers.');
+    }
+    const uid = request.auth.uid;
+    const userEmail = await callerEmail(uid, request.auth.token);
+    let created = 0;
+    async function ensureOffer(token, inviterUid, inviterName, inviteeEmail, role, personalMessage) {
+        const mergeSnap = await mergeRequestRef(token).get();
+        const status = String(mergeSnap.data()?.status ?? '');
+        if (status === 'accepted' || status === 'pending')
+            return;
+        const result = await offerTreeMergeForInvitation({
+            invitationToken: token,
+            inviterUid,
+            inviterName,
+            inviteeEmail,
+            roleLabel: mergeRoleLabel(role),
+            joinUrl: `${APP_ORIGIN}/join/${token}`,
+            personalMessage: personalMessage ? String(personalMessage) : null,
+            sendEmail: false,
+        });
+        if (result.offered)
+            created++;
+    }
+    const sentSnap = await db()
+        .collection('invitations')
+        .where('inviterUid', '==', uid)
+        .get();
+    for (const doc of sentSnap.docs) {
+        const data = doc.data();
+        if (data.role === 'member')
+            continue;
+        if (data.memberStatus === 'deceased')
+            continue;
+        const email = normalizeEmail(data.inviteeEmail);
+        if (!email)
+            continue;
+        await ensureOffer(doc.id, uid, String(data.inviterName ?? 'A family member'), email, data.role, data.personalMessage);
+    }
+    if (userEmail) {
+        const receivedSnap = await db()
+            .collection('invitations')
+            .where('inviteeEmail', '==', userEmail)
+            .get();
+        for (const doc of receivedSnap.docs) {
+            const data = doc.data();
+            if (data.role === 'member')
+                continue;
+            if (data.memberStatus === 'deceased')
+                continue;
+            const inviterUid = String(data.inviterUid ?? '').trim();
+            if (!inviterUid || inviterUid === uid)
+                continue;
+            const email = normalizeEmail(data.inviteeEmail);
+            if (!email)
+                continue;
+            await ensureOffer(doc.id, inviterUid, String(data.inviterName ?? 'A family member'), email, data.role, data.personalMessage);
+        }
+    }
+    return { created };
+});
 //# sourceMappingURL=treeMerge.js.map

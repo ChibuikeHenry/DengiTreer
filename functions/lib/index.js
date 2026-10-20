@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.declineTreeMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -181,7 +181,7 @@ async function queueShareInviteEmail(options) {
         },
     });
 }
-async function createInvitationRecord(uid, authToken, data) {
+async function createInvitationRecord(uid, authToken, data, options) {
     const role = data.role;
     if (!role ||
         !['spouse', 'parent', 'grandparent', 'great-grandparent', 'child', 'sibling', 'member'].includes(role)) {
@@ -321,7 +321,7 @@ async function createInvitationRecord(uid, authToken, data) {
     }
     let treeMergeOffered = false;
     let mergeNotice = null;
-    if (memberStatus === 'living' && inviteeEmail) {
+    if (memberStatus === 'living' && inviteeEmail && !options?.skipAutoMerge) {
         const mergeResult = await (0, treeMerge_1.offerTreeMergeForInvitation)({
             invitationToken: token,
             inviterUid: uid,
@@ -351,7 +351,8 @@ exports.createFamilyMemberInvite = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'Sign in to send invitations.');
     }
     const data = (request.data ?? {});
-    return createInvitationRecord(request.auth.uid, request.auth.token, data);
+    const { skipAutoMerge, ...invite } = data;
+    return createInvitationRecord(request.auth.uid, request.auth.token, invite, { skipAutoMerge: skipAutoMerge === true });
 });
 exports.createShareInvite = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -881,10 +882,44 @@ exports.updateFamilyMemberPrivacy = (0, https_1.onCall)(async (request) => {
     });
     return { ok: true };
 });
+exports.submitTreeMergeRequest = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Sign in to send a merge request.');
+    }
+    const data = (request.data ?? {});
+    const mergeMessage = String(data.mergeMessage ?? '').trim();
+    const inviteeEmail = normalizeInviteeEmail(data.inviteeEmail);
+    if (!inviteeEmail) {
+        throw new https_1.HttpsError('invalid-argument', 'Email is required for a merge request.');
+    }
+    const uid = request.auth.uid;
+    const inviterName = (typeof request.auth.token.name === 'string' && request.auth.token.name) ||
+        (typeof request.auth.token.email === 'string' && request.auth.token.email) ||
+        'A family member';
+    const result = await createInvitationRecord(uid, request.auth.token, data, {
+        skipAutoMerge: true,
+    });
+    await (0, treeMerge_1.offerTreeMergeForInvitation)({
+        invitationToken: result.token,
+        inviterUid: uid,
+        inviterName,
+        inviteeEmail,
+        roleLabel: roleLabel(data.role ?? 'member'),
+        joinUrl: result.joinUrl,
+        personalMessage: data.personalMessage,
+        mergeMessage: mergeMessage || null,
+        sendEmail: true,
+    });
+    return { ok: true, token: result.token, joinUrl: result.joinUrl };
+});
 var premiumPayments_1 = require("./premiumPayments");
 Object.defineProperty(exports, "initializePremiumPayment", { enumerable: true, get: function () { return premiumPayments_1.initializePremiumPayment; } });
 Object.defineProperty(exports, "verifyPremiumPayment", { enumerable: true, get: function () { return premiumPayments_1.verifyPremiumPayment; } });
 var treeMerge_2 = require("./treeMerge");
 Object.defineProperty(exports, "acceptTreeMerge", { enumerable: true, get: function () { return treeMerge_2.acceptTreeMerge; } });
+Object.defineProperty(exports, "checkInviteeEmailForMerge", { enumerable: true, get: function () { return treeMerge_2.checkInviteeEmailForMerge; } });
 Object.defineProperty(exports, "declineTreeMerge", { enumerable: true, get: function () { return treeMerge_2.declineTreeMerge; } });
+Object.defineProperty(exports, "getMergeRequesterFamily", { enumerable: true, get: function () { return treeMerge_2.getMergeRequesterFamily; } });
+Object.defineProperty(exports, "getTreeMergeRequest", { enumerable: true, get: function () { return treeMerge_2.getTreeMergeRequest; } });
+Object.defineProperty(exports, "syncTreeMergeOffers", { enumerable: true, get: function () { return treeMerge_2.syncTreeMergeOffers; } });
 //# sourceMappingURL=index.js.map

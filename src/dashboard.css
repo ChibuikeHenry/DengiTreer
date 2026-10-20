@@ -2027,11 +2027,18 @@
   margin-left: auto;
 }
 
+.modal-panel-merge {
+  position: relative;
+}
+
 .ft-explore-banner {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 1rem;
+  justify-content: flex-start;
+  gap: 0.5rem 0.65rem;
+  width: fit-content;
+  max-width: 100%;
   margin: 0 0 1rem;
   padding: 0.65rem 1rem;
   border-radius: 12px;
@@ -2041,10 +2048,15 @@
   color: var(--dash-ink);
 }
 
+.ft-explore-banner-text {
+  line-height: 1.4;
+}
+
 .ft-explore-banner a {
   font-weight: 700;
   color: var(--dash-brand);
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .ft-explore-banner a:hover {
@@ -3436,6 +3448,44 @@
   font-size: 0.78rem;
   padding: 0.45rem 0.65rem;
   white-space: nowrap;
+}
+
+.inv-merge-banner {
+  margin-bottom: 1rem;
+  padding: 1rem 1.15rem;
+  border-radius: 14px;
+  border: 1px solid #b8d4a8;
+  background: #eef8e8;
+  color: var(--dash-ink);
+  font-size: 0.88rem;
+}
+
+.inv-merge-banner strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.95rem;
+}
+
+.inv-merge-banner p {
+  margin: 0;
+  line-height: 1.45;
+  color: var(--dash-muted);
+}
+
+.inv-merge-tab-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--dash-brand);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.inv-badge-merge {
+  background: #dcecd3;
+  color: #2d5a22;
 }
 
 .inv-badge {

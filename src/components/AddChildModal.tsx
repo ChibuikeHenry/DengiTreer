@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import {
@@ -13,6 +13,8 @@ import { normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { resolveChildCoParentMemberId } from '../hooks/useTreeParentPickOptions'
 import { useAuth } from '../context/AuthContext'
+import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
+import MergeFamilyPrompt from './MergeFamilyPrompt'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
@@ -53,14 +55,75 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
 
   const [privacy] = useDefaultMemberPrivacy(open)
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('child', onClose, onAdded)
+  const [mergeDismissed, setMergeDismissed] = useState(false)
+  const { match: mergeMatch } = useMergeEmailCheck(email, open && status === 'living')
+  const [sharedFatherMemberId, setSharedFatherMemberId] = useState<string | undefined>()
+  const [sharedMotherMemberId, setSharedMotherMemberId] = useState<string | undefined>()
+
+  useEffect(() => {
+    if (!open || !user) {
+      setSharedFatherMemberId(undefined)
+      setSharedMotherMemberId(undefined)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const father =
+        (await resolveChildCoParentMemberId(user, fatherId)) ?? undefined
+      const mother =
+        (await resolveChildCoParentMemberId(user, motherId)) ?? undefined
+      if (!cancelled) {
+        setSharedFatherMemberId(father)
+        setSharedMotherMemberId(mother)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, user, fatherId, motherId])
+
+  const mergeInvitePayload = useMemo(
+    () => ({
+      role: 'child' as const,
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email.trim() || undefined,
+      memberStatus: status,
+      gender: gender || undefined,
+      privacy,
+      bio: bio.trim() || undefined,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+      sharedFatherMemberId,
+      sharedMotherMemberId,
+    }),
+    [
+      firstName,
+      middleName,
+      lastName,
+      email,
+      status,
+      gender,
+      privacy,
+      bio,
+      dob,
+      dateOfDeath,
+      sharedFatherMemberId,
+      sharedMotherMemberId,
+    ],
+  )
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!user) return
-    const sharedFatherMemberId =
-      (await resolveChildCoParentMemberId(user, fatherId)) ?? undefined
-    const sharedMotherMemberId =
-      (await resolveChildCoParentMemberId(user, motherId)) ?? undefined
+    if (mergeMatch && !mergeDismissed) return
+    const sharedFather =
+      sharedFatherMemberId ??
+      ((await resolveChildCoParentMemberId(user, fatherId)) ?? undefined)
+    const sharedMother =
+      sharedMotherMemberId ??
+      ((await resolveChildCoParentMemberId(user, motherId)) ?? undefined)
     await submit({
       firstName,
       middleName,
@@ -73,8 +136,8 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
       bio: bio.trim() || undefined,
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
-      sharedFatherMemberId,
-      sharedMotherMemberId,
+      sharedFatherMemberId: sharedFather,
+      sharedMotherMemberId: sharedMother,
     })
   }
 
@@ -93,8 +156,13 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
     setFatherId('')
     setMotherId('')
     setBirthOrder('')
+    setMergeDismissed(false)
     photo.reset()
   }, [open, photo.reset])
+
+  useEffect(() => {
+    setMergeDismissed(false)
+  }, [email])
 
   return (
     <ModalFrame
@@ -183,6 +251,14 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
         <h3>6. About this person (Optional)</h3>
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="child" />
       </section>
+      {mergeMatch && !mergeDismissed ? (
+        <MergeFamilyPrompt
+          match={mergeMatch}
+          invitePayload={mergeInvitePayload}
+          onCloseModal={onClose}
+          onDismiss={() => setMergeDismissed(true)}
+        />
+      ) : null}
     </ModalFrame>
   )
 }

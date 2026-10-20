@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto'
-import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore, type QueryDocumentSnapshot } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { completeInvitationAccept } from './inviteAccept'
@@ -11,6 +11,29 @@ function db() {
 }
 
 export type TreeMergeStatus = 'pending' | 'accepted' | 'declined'
+
+type InviteRole =
+  | 'spouse'
+  | 'parent'
+  | 'grandparent'
+  | 'great-grandparent'
+  | 'child'
+  | 'sibling'
+  | 'member'
+
+function mergeRoleLabel(role: unknown): string {
+  const map: Record<InviteRole, string> = {
+    spouse: 'Spouse',
+    parent: 'Parent',
+    grandparent: 'Grandparent',
+    'great-grandparent': 'Great-grandparent',
+    child: 'Child',
+    sibling: 'Sibling',
+    member: 'Family Member',
+  }
+  const key = String(role ?? 'member') as InviteRole
+  return map[key] ?? 'Family Member'
+}
 
 function newToken(): string {
   return randomBytes(6).toString('hex')
@@ -174,6 +197,137 @@ function mergeRequestRef(invitationToken: string) {
   return db().collection('treeMergeRequests').doc(invitationToken)
 }
 
+export async function countTreeMembers(uid: string): Promise<number> {
+  const snap = await db().collection('users').doc(uid).collection('familyMembers').get()
+  return snap.size
+}
+
+async function displayNameForUid(uid: string): Promise<string> {
+  const snap = await db().collection('users').doc(uid).get()
+  const data = snap.data() ?? {}
+  const name = [data.firstName, data.middleName, data.lastName]
+    .map((p) => String(p ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+  if (name) return name
+  const email = String(data.email ?? '').trim()
+  if (email) return email.split('@')[0] ?? email
+  return 'Family member'
+}
+
+export const checkInviteeEmailForMerge = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to check this email.')
+  }
+  const email = normalizeEmail((request.data as { email?: string })?.email)
+  if (!email) {
+    return { shouldMerge: false as const }
+  }
+  const inviterUid = request.auth.uid
+  const resolved = await resolveMergeInvitee(email, inviterUid)
+  if (!resolved.shouldOffer || !resolved.inviteeUid) {
+    return {
+      shouldMerge: false as const,
+      notice: resolved.notice,
+    }
+  }
+  const [requesterMemberCount, inviteeMemberCount, requesterDisplayName, inviteeDisplayName] =
+    await Promise.all([
+      countTreeMembers(inviterUid),
+      countTreeMembers(resolved.inviteeUid),
+      displayNameForUid(inviterUid),
+      displayNameForUid(resolved.inviteeUid),
+    ])
+  return {
+    shouldMerge: true as const,
+    email,
+    inviteeUid: resolved.inviteeUid,
+    inviteeDisplayName,
+    inviteeMemberCount,
+    requesterDisplayName,
+    requesterMemberCount,
+    notice: resolved.notice,
+  }
+})
+
+export const getTreeMergeRequest = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to view this merge request.')
+  }
+  const token = String((request.data as { token?: string })?.token ?? '').trim()
+  if (!token) throw new HttpsError('invalid-argument', 'Missing token.')
+
+  const mergeSnap = await mergeRequestRef(token).get()
+  if (!mergeSnap.exists) throw new HttpsError('not-found', 'Merge request not found.')
+  const merge = mergeSnap.data()!
+  const uid = request.auth.uid
+  const inviterUid = String(merge.inviterUid ?? '')
+  const inviteeUid = String(merge.inviteeUid ?? '')
+  if (uid !== inviterUid && uid !== inviteeUid) {
+    throw new HttpsError('permission-denied', 'You cannot view this merge request.')
+  }
+
+  const inviteSnap = await db().collection('invitations').doc(token).get()
+  const invite = inviteSnap.data() ?? {}
+
+  return {
+    token,
+    status: String(merge.status ?? 'pending'),
+    inviterUid,
+    inviteeUid,
+    inviteeEmail: normalizeEmail(merge.inviteeEmail),
+    inviterName: String(invite.inviterName ?? merge.requesterDisplayName ?? 'A family member'),
+    inviteeName: String(merge.inviteeDisplayName ?? invite.inviteeName ?? 'Family member'),
+    mergeMessage: String(merge.mergeMessage ?? invite.personalMessage ?? '').trim() || null,
+    requesterMemberCount: Number(merge.requesterMemberCount ?? 0),
+    inviteeMemberCount: Number(merge.inviteeMemberCount ?? 0),
+    roleLabel: mergeRoleLabel(invite.role),
+    createdAt: merge.createdAt ?? null,
+  }
+})
+
+export const getMergeRequesterFamily = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to view this family.')
+  }
+  const token = String((request.data as { token?: string })?.token ?? '').trim()
+  if (!token) throw new HttpsError('invalid-argument', 'Missing token.')
+
+  const mergeSnap = await mergeRequestRef(token).get()
+  if (!mergeSnap.exists) throw new HttpsError('not-found', 'Merge request not found.')
+  const merge = mergeSnap.data()!
+  const uid = request.auth.uid
+  if (String(merge.inviteeUid ?? '') !== uid && String(merge.inviterUid ?? '') !== uid) {
+    throw new HttpsError('permission-denied', 'You cannot view this family.')
+  }
+
+  const inviterUid = String(merge.inviterUid ?? '').trim()
+  const inviterProfile = await db().collection('users').doc(inviterUid).get()
+  const requesterName = await displayNameForUid(inviterUid)
+
+  const membersSnap = await db()
+    .collection('users')
+    .doc(inviterUid)
+    .collection('familyMembers')
+    .get()
+
+  const members = membersSnap.docs.map((doc: QueryDocumentSnapshot) => {
+    const d = doc.data()
+    return {
+      id: doc.id,
+      displayName: String(d.displayName ?? d.firstName ?? 'Family member'),
+      role: String(d.role ?? 'member'),
+      gender: d.gender ? String(d.gender) : null,
+    }
+  })
+
+  return {
+    requesterName,
+    requesterPhotoURL: inviterProfile.data()?.photoURL ?? null,
+    members,
+  }
+})
+
 export async function offerTreeMergeForInvitation(options: {
   invitationToken: string
   inviterUid: string
@@ -182,7 +336,11 @@ export async function offerTreeMergeForInvitation(options: {
   roleLabel: string
   joinUrl: string
   personalMessage?: string | null
+  mergeMessage?: string | null
   sendEmail?: boolean
+  requesterMemberCount?: number
+  inviteeMemberCount?: number
+  inviteeDisplayName?: string | null
 }): Promise<TreeMergeOfferResult> {
   const inviteeEmail = normalizeEmail(options.inviteeEmail)
   if (!inviteeEmail) return { offered: false, notice: null }
@@ -208,9 +366,31 @@ export async function offerTreeMergeForInvitation(options: {
   }
 
   const inviteeUid = resolved.inviteeUid
+  const inviteeUserSnap = await db().collection('users').doc(inviteeUid).get()
+  if (
+    String(inviteeUserSnap.data()?.treeMergedIntoUid ?? '').trim() === options.inviterUid
+  ) {
+    return { offered: false, notice: null }
+  }
+
   const existing = await mergeRequestRef(options.invitationToken).get()
-  const alreadyPending =
-    existing.exists && String(existing.data()?.status ?? '') === 'pending'
+  const existingStatus = String(existing.data()?.status ?? '')
+  if (existingStatus === 'accepted') {
+    return { offered: true, notice: resolved.notice }
+  }
+  const alreadyPending = existing.exists && existingStatus === 'pending'
+
+  const [requesterMemberCount, inviteeMemberCount, inviteeDisplayName] = await Promise.all([
+    options.requesterMemberCount !== undefined
+      ? Promise.resolve(options.requesterMemberCount)
+      : countTreeMembers(options.inviterUid),
+    options.inviteeMemberCount !== undefined
+      ? Promise.resolve(options.inviteeMemberCount)
+      : countTreeMembers(inviteeUid),
+    options.inviteeDisplayName
+      ? Promise.resolve(options.inviteeDisplayName)
+      : displayNameForUid(inviteeUid),
+  ])
 
   await mergeRequestRef(options.invitationToken).set(
     {
@@ -219,6 +399,11 @@ export async function offerTreeMergeForInvitation(options: {
       inviteeUid,
       inviteeEmail,
       status: 'pending' satisfies TreeMergeStatus,
+      mergeMessage: options.mergeMessage?.trim() || options.personalMessage?.trim() || null,
+      requesterDisplayName: options.inviterName,
+      requesterMemberCount,
+      inviteeMemberCount,
+      inviteeDisplayName,
       createdAt: FieldValue.serverTimestamp(),
       respondedAt: null,
     },
@@ -537,3 +722,87 @@ export const declineTreeMerge = onCall(async (request) => {
 export function mergeReviewUrl(invitationToken: string): string {
   return `${APP_ORIGIN}/join/${invitationToken}`
 }
+
+/** Backfill merge offers for family invites that pre-date merge support or missed detection. */
+export const syncTreeMergeOffers = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in to sync tree merge offers.')
+  }
+
+  const uid = request.auth.uid
+  const userEmail = await callerEmail(uid, request.auth.token)
+  let created = 0
+
+  async function ensureOffer(
+    token: string,
+    inviterUid: string,
+    inviterName: string,
+    inviteeEmail: string,
+    role: unknown,
+    personalMessage: unknown,
+  ) {
+    const mergeSnap = await mergeRequestRef(token).get()
+    const status = String(mergeSnap.data()?.status ?? '')
+    if (status === 'accepted' || status === 'pending') return
+
+    const result = await offerTreeMergeForInvitation({
+      invitationToken: token,
+      inviterUid,
+      inviterName,
+      inviteeEmail,
+      roleLabel: mergeRoleLabel(role),
+      joinUrl: `${APP_ORIGIN}/join/${token}`,
+      personalMessage: personalMessage ? String(personalMessage) : null,
+      sendEmail: false,
+    })
+    if (result.offered) created++
+  }
+
+  const sentSnap = await db()
+    .collection('invitations')
+    .where('inviterUid', '==', uid)
+    .get()
+
+  for (const doc of sentSnap.docs) {
+    const data = doc.data()
+    if (data.role === 'member') continue
+    if (data.memberStatus === 'deceased') continue
+    const email = normalizeEmail(data.inviteeEmail)
+    if (!email) continue
+    await ensureOffer(
+      doc.id,
+      uid,
+      String(data.inviterName ?? 'A family member'),
+      email,
+      data.role,
+      data.personalMessage,
+    )
+  }
+
+  if (userEmail) {
+    const receivedSnap = await db()
+      .collection('invitations')
+      .where('inviteeEmail', '==', userEmail)
+      .get()
+
+    for (const doc of receivedSnap.docs) {
+      const data = doc.data()
+      if (data.role === 'member') continue
+      if (data.memberStatus === 'deceased') continue
+      const inviterUid = String(data.inviterUid ?? '').trim()
+      if (!inviterUid || inviterUid === uid) continue
+      const email = normalizeEmail(data.inviteeEmail)
+      if (!email) continue
+      await ensureOffer(
+        doc.id,
+        inviterUid,
+        String(data.inviterName ?? 'A family member'),
+        email,
+        data.role,
+        data.personalMessage,
+      )
+    }
+  }
+
+  return { created }
+})

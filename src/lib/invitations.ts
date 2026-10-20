@@ -59,6 +59,8 @@ export type FamilyMemberInviteInput = {
   dateOfBirth?: string
   dateOfDeath?: string
   gender?: string
+  /** When true, do not auto-offer tree merge (e.g. user chose “add as separate”). */
+  skipAutoMerge?: boolean
 }
 
 export type LineageSide = 'paternal' | 'maternal'

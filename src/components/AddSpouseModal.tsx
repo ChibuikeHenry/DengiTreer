@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import ModalFrame from './ModalFrame'
 import { useDefaultMemberPrivacy } from '../hooks/useDefaultMemberPrivacy'
 import {
@@ -10,6 +10,8 @@ import {
 import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmit'
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
+import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
+import MergeFamilyPrompt from './MergeFamilyPrompt'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
@@ -28,9 +30,40 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
 
   const [privacy] = useDefaultMemberPrivacy(open)
   const { submitting, error, submit } = useFamilyMemberInviteSubmit('spouse', onClose, onAdded)
+  const [mergeDismissed, setMergeDismissed] = useState(false)
+  const { match: mergeMatch } = useMergeEmailCheck(email, open && status === 'living')
+
+  const mergeInvitePayload = useMemo(
+    () => ({
+      role: 'spouse' as const,
+      firstName,
+      middleName,
+      lastName,
+      inviteeEmail: email.trim() || undefined,
+      memberStatus: status,
+      gender: gender || undefined,
+      privacy,
+      bio: bio.trim() || undefined,
+      dateOfBirth: normalizeDateField(dob),
+      dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    }),
+    [
+      firstName,
+      middleName,
+      lastName,
+      email,
+      status,
+      gender,
+      privacy,
+      bio,
+      dob,
+      dateOfDeath,
+    ],
+  )
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (mergeMatch && !mergeDismissed) return
     await submit({
       firstName,
       middleName,
@@ -58,8 +91,13 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
     setPhone('')
     setEmail('')
     setBio('')
+    setMergeDismissed(false)
     photo.reset()
   }, [open, photo.reset])
+
+  useEffect(() => {
+    setMergeDismissed(false)
+  }, [email])
 
   return (
     <ModalFrame
@@ -135,6 +173,14 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
         <h3>5. About this person (Optional)</h3>
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="spouse" />
       </section>
+      {mergeMatch && !mergeDismissed ? (
+        <MergeFamilyPrompt
+          match={mergeMatch}
+          invitePayload={mergeInvitePayload}
+          onCloseModal={onClose}
+          onDismiss={() => setMergeDismissed(true)}
+        />
+      ) : null}
     </ModalFrame>
   )
 }
