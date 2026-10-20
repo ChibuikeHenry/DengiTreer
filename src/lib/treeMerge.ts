@@ -147,3 +147,12 @@ export function isMergePending(
   if (merge?.status === 'pending') return true
   return item.treeMergeOffered
 }
+
+export function isTreesMerged(
+  item: { role: string; treesMerged?: boolean },
+  merge: TreeMergeRequest | null | undefined,
+): boolean {
+  if (item.role === 'member') return false
+  if (merge?.status === 'accepted') return true
+  return item.treesMerged === true
+}

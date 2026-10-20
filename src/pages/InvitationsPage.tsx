@@ -27,6 +27,7 @@ import {
 } from '../lib/profileClaim'
 import {
   isMergePending,
+  isTreesMerged,
   subscribeMergeRequestsForTokens,
   syncTreeMergeOffers,
   unmergeFamilyTrees,
@@ -481,6 +482,7 @@ export default function InvitationsPage() {
             {activeList.map((item) => {
               const merge = mergesByToken.get(item.token) ?? null
               const mergePending = isMergePending(item, merge)
+              const treesMerged = isTreesMerged(item, merge)
               const canAcceptMerge =
                 tab === 'received' && mergePending && item.role !== 'member'
               return (
@@ -496,7 +498,7 @@ export default function InvitationsPage() {
                       ? ' · Platform invite (not on your tree)'
                       : ` · ${inviteRoleLabel(item.role)}`}
                     {mergePending ? ' · Tree merge offered' : null}
-                    {merge?.status === 'accepted' ? ' · Trees merged' : null}
+                    {treesMerged ? ' · Trees merged' : null}
                     {merge?.status === 'undone' ? ' · Merge undone' : null}
                     {merge?.status === 'declined' ? ' · Merge declined' : null}
                   </span>
@@ -515,11 +517,23 @@ export default function InvitationsPage() {
                   {tab === 'sent' && item.treeMergeInviterNotice && !mergePending ? (
                     <p className="inv-merge-note">{item.treeMergeInviterNotice}</p>
                   ) : null}
-                  {merge?.status === 'accepted' && item.role !== 'member' ? (
-                    <p className="inv-merge-note">
-                      Your trees are combined. Unmerge to split copied relatives back onto each
-                      account (for testing or if you merged by mistake).
-                    </p>
+                  {treesMerged ? (
+                    <>
+                      <p className="inv-merge-note">
+                        Your trees are combined. Unmerge splits copied relatives back onto each
+                        account.
+                      </p>
+                      <div className="inv-merge-actions inv-merge-actions-inline">
+                        <button
+                          type="button"
+                          className="inv-send-btn inv-unmerge-btn"
+                          disabled={unmergingToken === item.token}
+                          onClick={() => void handleUnmergeTrees(item)}
+                        >
+                          {unmergingToken === item.token ? 'Unmerging…' : 'Unmerge trees'}
+                        </button>
+                      </div>
+                    </>
                   ) : null}
                   {tab === 'sent' && item.role !== 'member' ? (
                     <label className="inv-privacy">
@@ -576,17 +590,6 @@ export default function InvitationsPage() {
                       Review merge request
                     </Link>
                   </div>
-                ) : null}
-                {merge?.status === 'accepted' && item.role !== 'member' ? (
-                  <button
-                    type="button"
-                    className="people-row-remove"
-                    disabled={unmergingToken === item.token}
-                    onClick={() => void handleUnmergeTrees(item)}
-                    style={{ fontSize: '0.8rem', marginLeft: '0.35rem' }}
-                  >
-                    {unmergingToken === item.token ? 'Unmerging…' : 'Unmerge trees'}
-                  </button>
                 ) : null}
                 {tab === 'sent' && canInviterEditInvitation(item) ? (
                   <button

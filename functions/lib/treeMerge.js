@@ -583,6 +583,13 @@ exports.acceptTreeMerge = (0, https_1.onCall)(async (request) => {
         userEmail,
         forceAnchor: true,
     });
+    await db()
+        .collection('invitations')
+        .doc(token)
+        .set({
+        treesMerged: true,
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
+    }, { merge: true });
     return { ok: true, copiedCount, inviterUid };
 });
 exports.declineTreeMerge = (0, https_1.onCall)(async (request) => {
@@ -750,6 +757,13 @@ exports.unmergeFamilyTrees = (0, https_1.onCall)(async (request) => {
         status: 'undone',
         undoneAt: firestore_1.FieldValue.serverTimestamp(),
         undoneByUid: uid,
+        updatedAt: firestore_1.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    await db()
+        .collection('invitations')
+        .doc(token)
+        .set({
+        treesMerged: firestore_1.FieldValue.delete(),
         updatedAt: firestore_1.FieldValue.serverTimestamp(),
     }, { merge: true });
     return { ok: true, restoredCount, inviterUid, inviteeUid };

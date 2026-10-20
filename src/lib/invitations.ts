@@ -91,6 +91,8 @@ export type InvitationRecord = {
   gender: string | null
   treeMergeOffered: boolean
   treeMergeInviterNotice: string | null
+  /** Set when invitee accepted a tree merge for this invitation. */
+  treesMerged: boolean
   createdAt: Date | null
 }
 
@@ -335,6 +337,7 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
     treeMergeInviterNotice: data.treeMergeInviterNotice
       ? String(data.treeMergeInviterNotice)
       : null,
+    treesMerged: data.treesMerged === true,
     createdAt: timestampToDate(data.createdAt as Timestamp | undefined),
   }
 }

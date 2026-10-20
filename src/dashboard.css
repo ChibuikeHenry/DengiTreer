@@ -3504,6 +3504,21 @@
   flex-shrink: 0;
 }
 
+.inv-merge-actions-inline {
+  margin-top: 0.5rem;
+  max-width: 12rem;
+}
+
+.inv-unmerge-btn {
+  background: #fff;
+  color: #7a2e0e;
+  border: 1px solid #e8a88a;
+}
+
+.inv-unmerge-btn:hover:not(:disabled) {
+  background: #fff5f0;
+}
+
 .inv-merge-accept {
   font-size: 0.78rem;
   padding: 0.45rem 0.65rem;

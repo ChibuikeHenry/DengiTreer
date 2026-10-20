@@ -694,6 +694,17 @@ export const acceptTreeMerge = onCall(async (request) => {
     forceAnchor: true,
   })
 
+  await db()
+    .collection('invitations')
+    .doc(token)
+    .set(
+      {
+        treesMerged: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+
   return { ok: true, copiedCount, inviterUid }
 })
 
@@ -925,6 +936,17 @@ export const unmergeFamilyTrees = onCall(async (request) => {
     },
     { merge: true },
   )
+
+  await db()
+    .collection('invitations')
+    .doc(token)
+    .set(
+      {
+        treesMerged: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
 
   return { ok: true, restoredCount, inviterUid, inviteeUid }
 })
