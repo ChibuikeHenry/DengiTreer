@@ -98,6 +98,9 @@ function householdAnchor(ordered: TreeMember[]): { offset: number; atAvatar: boo
   return { offset: 0, atAvatar: n % 2 === 0 }
 }
 
+/** how many separate bus lanes fit in the normal gap between two rows */
+const MAX_LANES = 3
+
 const mean = (values: number[]) =>
   values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : 0
 
@@ -166,16 +169,290 @@ function childCoupleAnchorX(
   return selfX
 }
 
-export function buildPedigreeLayout({
-  members,
-  allowAdds,
-  centerSelfMemberIds = [],
-}: {
+/* ------------------------------------------------------------------------------------
+   Parent families
+
+   The centre person's parents row used to be derived from "whoever is the first father /
+   mother on the list", so changing a father or mother (or who a sibling belongs to) made
+   couples pair up with the wrong person and lines hang off the wrong place.
+
+   It is now derived from the links that are actually stored:
+     - the centre person's own father / mother (their profile links), and
+     - each sibling's shared father / mother.
+   Every distinct father+mother pair becomes a "family"; families are then ordered so each
+   couple stands side by side, and every sibling is drawn under the family it belongs to.
+   ------------------------------------------------------------------------------------ */
+
+export type ParentFamily = {
+  key: string
+  /** one or two parents, in the order they were linked (father first) */
+  parents: TreeMember[]
+  /** siblings who belong to this family (the centre person joins the `isSelf` family) */
+  kids: TreeMember[]
+  isSelf: boolean
+}
+
+const present = <T>(value: T | null | undefined): value is T => value != null
+
+/** A stored father/mother link may be an invite token or the claimed account's uid. */
+function findLinkedParent(candidates: TreeMember[], link: string | null | undefined) {
+  const id = link?.trim()
+  if (!id) return null
+  return candidates.find((p) => p.id === id || (p.joinedUid && p.joinedUid === id)) ?? null
+}
+
+const uniqueById = (list: TreeMember[]) =>
+  list.filter((m, i) => list.findIndex((o) => o.id === m.id) === i)
+
+const familyKey = (parents: TreeMember[]) =>
+  parents
+    .map((p) => p.id)
+    .sort()
+    .join('|')
+
+/**
+ * Who the centre person's father and mother are. The profile's explicit links win; only a
+ * tree without any (resolvable) link falls back to guessing from each parent's role.
+ */
+function resolveSelfParents(
+  parents: TreeMember[],
+  fatherLink: string | null | undefined,
+  motherLink: string | null | undefined,
+): { father: TreeMember | null; mother: TreeMember | null; all: TreeMember[] } {
+  let father = findLinkedParent(parents, fatherLink)
+  let mother = findLinkedParent(parents, motherLink)
+  if (!father && !mother) {
+    const guess = primaryCouple(parents)
+    father = guess.father ?? null
+    mother = guess.mother ?? null
+  }
+  if (father && mother && father.id === mother.id) mother = null
+  let all = [father, mother].filter(present)
+  if (!all.length && parents[0]) all = [parents[0]]
+  return { father, mother, all }
+}
+
+function buildParentFamilies(
+  parents: TreeMember[],
+  siblings: TreeMember[],
+  selfParents: TreeMember[],
+) {
+  const selfFamily: ParentFamily = {
+    key: familyKey(selfParents),
+    parents: selfParents,
+    kids: [],
+    isSelf: true,
+  }
+  const families: ParentFamily[] = [selfFamily]
+  const byKey = new Map<string, ParentFamily>([[selfFamily.key, selfFamily]])
+
+  for (const sibling of siblings) {
+    const linked = uniqueById(
+      [
+        findLinkedParent(parents, sibling.sharedFatherMemberId),
+        findLinkedParent(parents, sibling.sharedMotherMemberId),
+      ].filter(present),
+    )
+    // no (resolvable) parent recorded: they belong with the centre person
+    if (!linked.length) {
+      selfFamily.kids.push(sibling)
+      continue
+    }
+    const key = familyKey(linked)
+    let family = byKey.get(key)
+    if (!family) {
+      family = { key, parents: linked, kids: [], isSelf: false }
+      byKey.set(key, family)
+      families.push(family)
+    }
+    family.kids.push(sibling)
+  }
+  return { families, selfFamily }
+}
+
+/** father–mother links between parents (couples with children, and step-marriages). */
+function buildParentLinks(
+  parents: TreeMember[],
+  families: ParentFamily[],
+  selfFamily: ParentFamily,
+) {
+  const adj = new Map<string, Set<string>>(parents.map((p) => [p.id, new Set<string>()]))
+  const link = (a: string, b: string) => {
+    if (a === b) return
+    adj.get(a)?.add(b)
+    adj.get(b)?.add(a)
+  }
+  for (const family of families) {
+    if (family.parents.length === 2) link(family.parents[0].id, family.parents[1].id)
+  }
+  // a step-parent with no partner yet is married to the centre person's other parent
+  for (const p of parents) {
+    if (p.parentKind !== 'step' || adj.get(p.id)?.size) continue
+    const partner = selfFamily.parents.find(
+      (o) =>
+        o.id !== p.id &&
+        o.parentKind !== 'step' &&
+        (p.parentSlot === 'unknown' || p.parentSlot == null || o.parentSlot !== p.parentSlot),
+    )
+    if (partner) link(p.id, partner.id)
+  }
+  return adj
+}
+
+/** Lay one connected group of parents out in a line, so linked parents stand side by side. */
+function linearizeParentGroup(
+  group: TreeMember[],
+  adj: Map<string, Set<string>>,
+  preferId: string | undefined,
+): TreeMember[] {
+  if (group.length < 2) return group
+  const byId = new Map(group.map((p) => [p.id, p]))
+  const visited = new Set<string>()
+  const degree = (id: string) => adj.get(id)?.size ?? 0
+
+  /** walk outward from `start`, always stepping to a not-yet-placed partner */
+  const walk = (start: string) => {
+    const chain: TreeMember[] = []
+    let current: string | undefined = start
+    while (current && !visited.has(current)) {
+      visited.add(current)
+      chain.push(byId.get(current) as TreeMember)
+      current = [...(adj.get(current) ?? [])].find((id) => !visited.has(id) && byId.has(id))
+    }
+    return chain
+  }
+
+  const hub = group.reduce((best, p) => (degree(p.id) > degree(best.id) ? p : best), group[0])
+  if (degree(hub.id) <= 2) {
+    // a simple line (or loop): start from one end
+    const end = group.find((p) => degree(p.id) === 1) ?? group[0]
+    const line = walk(end.id)
+    return [...line, ...group.filter((p) => !visited.has(p.id))]
+  }
+
+  // one person with several partners sits in the middle, partners alternate left/right
+  visited.add(hub.id)
+  const partners = [...(adj.get(hub.id) ?? [])]
+    .filter((id) => byId.has(id))
+    .sort((a, b) => Number(b === preferId) - Number(a === preferId))
+  const left: TreeMember[][] = []
+  const right: TreeMember[][] = []
+  partners.forEach((id, i) => (i % 2 === 0 ? right : left).push(walk(id)))
+  const rest = group.filter((p) => !visited.has(p.id) && p.id !== hub.id)
+  return [
+    ...[...left].reverse().flatMap((chain) => [...chain].reverse()),
+    hub,
+    ...right.flat(),
+    ...rest,
+  ]
+}
+
+/**
+ * Orders the whole parents row. The centre person's own couple goes to the right-hand end
+ * (their siblings and they share that side of the row below), other couples sit to its left
+ * in the order their children are drawn, and parents with no link at all go furthest left.
+ */
+function orderParentRow(
+  parents: TreeMember[],
+  families: ParentFamily[],
+  selfFamily: ParentFamily,
+) {
+  const adj = buildParentLinks(parents, families, selfFamily)
+  const seen = new Set<string>()
+  const groups: TreeMember[][] = []
+  for (const seed of [...selfFamily.parents, ...parents]) {
+    if (seen.has(seed.id)) continue
+    const group: TreeMember[] = []
+    const queue = [seed.id]
+    seen.add(seed.id)
+    while (queue.length) {
+      const id = queue.shift() as string
+      const member = parents.find((p) => p.id === id)
+      if (member) group.push(member)
+      for (const next of adj.get(id) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    groups.push(group)
+  }
+
+  const selfGroupIndex = selfFamily.parents.length
+    ? groups.findIndex((g) => g.some((p) => p.id === selfFamily.parents[0].id))
+    : -1
+  const selfGroup = selfGroupIndex >= 0 ? groups[selfGroupIndex] : null
+  const others = groups.filter((_, i) => i !== selfGroupIndex)
+
+  const fatherBeforeMother = (line: TreeMember[]) =>
+    line.length === 2 && line[0].parentSlot === 'mother' && line[1].parentSlot === 'father'
+      ? [...line].reverse()
+      : line
+
+  // single, unlinked parents are merged into one block so they don't each get a gap
+  const loners = others.filter((g) => g.length === 1)
+  const couples = others
+    .filter((g) => g.length > 1)
+    .map((g) => fatherBeforeMother(linearizeParentGroup(g, adj, undefined)))
+
+  let selfLine: TreeMember[] = []
+  if (selfGroup) {
+    selfLine = linearizeParentGroup(selfGroup, adj, selfFamily.parents.find((p) => p.id !== selfFamily.parents[0].id)?.id)
+    const at = selfFamily.parents.map((p) => selfLine.findIndex((o) => o.id === p.id))
+    const centre = at.reduce((sum, v) => sum + v, 0) / at.length
+    const middle = (selfLine.length - 1) / 2
+    const reverse =
+      Math.abs(centre - middle) > 0.01
+        ? centre < middle
+        : at.length === 2 && at[0] > at[1]
+    if (reverse) selfLine = [...selfLine].reverse()
+  }
+
+  const blocks = [...(loners.length ? [loners.flat()] : []), ...couples, ...(selfLine.length ? [selfLine] : [])]
+  return { blocks, adj }
+}
+
+type LayoutInput = {
   members: TreeMember[]
   allowAdds: boolean
   /** Invite tokens for the centered person — matches stored co-parent ids for "You". */
   centerSelfMemberIds?: string[]
-}): PedigreeLayout {
+  /** The centre person's own father / mother (their profile links to a parent on the tree). */
+  selfFatherMemberId?: string | null
+  selfMotherMemberId?: string | null
+}
+
+/**
+ * Lays the tree out. Buses that would have to share a line get their own lane; when a gap
+ * between two rows has too little room for the lanes it needs, that gap is widened and the
+ * tree is laid out again (lines never get squeezed onto each other or through name labels).
+ */
+export function buildPedigreeLayout(input: LayoutInput): PedigreeLayout {
+  let extraBefore: number[] = []
+  let result = layoutPass(input, extraBefore)
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const next = result.laneDemand.map((lanes, row) =>
+      Math.max(extraBefore[row] ?? 0, Math.max(0, lanes - MAX_LANES) * PED.laneGap),
+    )
+    if (next.every((v, i) => v === (extraBefore[i] ?? 0))) break
+    extraBefore = next
+    result = layoutPass(input, extraBefore)
+  }
+  return result.layout
+}
+
+function layoutPass(
+  {
+    members,
+    allowAdds,
+    centerSelfMemberIds = [],
+    selfFatherMemberId = null,
+    selfMotherMemberId = null,
+  }: LayoutInput,
+  /** extra vertical space (px) to add above each row, indexed by row */
+  extraBefore: number[],
+): { layout: PedigreeLayout; laneDemand: number[] } {
   const selfMemberIds = new Set(
     centerSelfMemberIds.map((id) => id.trim()).filter(Boolean),
   )
@@ -185,7 +462,7 @@ export function buildPedigreeLayout({
 
   const gg = orderHousehold(members.filter((m) => m.role === 'great-grandparent'))
   const gpAll = members.filter((m) => m.role === 'grandparent')
-  const parents = orderHousehold(members.filter((m) => m.role === 'parent'))
+  const parents = members.filter((m) => m.role === 'parent')
   const siblings = members.filter((m) => m.role === 'sibling')
   const spousesRaw = members.filter((m) => m.role === 'spouse')
   const children = members.filter((m) => m.role === 'child')
@@ -202,7 +479,11 @@ export function buildPedigreeLayout({
   const parentsRow = showParents ? rowCount++ : -1
   const selfRow = rowCount++
   const kidsRow = showKids ? rowCount++ : -1
-  const rowTop = (row: number) => pad + row * (nodeH + rowGap)
+  const extraAbove = (row: number) =>
+    extraBefore.slice(0, row + 1).reduce((sum, v) => sum + v, 0)
+  const rowTop = (row: number) => pad + row * (nodeH + rowGap) + extraAbove(row)
+  /** most lanes any bus feeding a row has needed (row index -> lanes) */
+  const laneDemand: number[] = []
 
   const nodes: PedNode[] = []
   const segs: PedSeg[] = []
@@ -232,6 +513,11 @@ export function buildPedigreeLayout({
     let lane = 0
     while (clash(lanes[lane])) lane += 1
     ;(lanes[lane] ??= []).push({ x1, x2 })
+    for (let row = 0; row < rowCount; row += 1) {
+      if (rowTop(row) - busOffset === baseY) {
+        laneDemand[row] = Math.max(laneDemand[row] ?? 0, lane + 1)
+      }
+    }
     return baseY - lane * laneGap
   }
   /** from a family unit, drop to its own bus, then to each target */
@@ -255,57 +541,66 @@ export function buildPedigreeLayout({
   }
 
   /* ---------------------------------------------------------------- parents */
-  const { father: primaryFather, mother: primaryMother } = primaryCouple(parents)
-  let aNodes = [primaryFather, primaryMother].filter((m): m is TreeMember => Boolean(m))
-  if (!aNodes.length && parents[0]) aNodes = [parents[0]]
-  const parentIdx = (m: TreeMember) => parents.findIndex((p) => p.id === m.id)
-  const aCenterIdx = aNodes.length ? mean(aNodes.map(parentIdx)) : 0
-
-  // a step (or additional) parent forms its own couple with the adjacent primary parent
-  const bUnits = parents
-    .filter((p) => !aNodes.some((a) => a.id === p.id))
-    .flatMap((p) => {
-      const partner = aNodes.find((a) => Math.abs(parentIdx(a) - parentIdx(p)) === 1)
-      if (!partner) return []
-      return [
-        {
-          key: p.id,
-          nodes: [p, partner] as TreeMember[],
-          centerIdx: (parentIdx(p) + parentIdx(partner)) / 2,
-        },
-      ]
+  const selfParentLinks = resolveSelfParents(parents, selfFatherMemberId, selfMotherMemberId)
+  const { families, selfFamily } = buildParentFamilies(parents, siblings, selfParentLinks.all)
+  const { blocks: parentBlocks, adj: parentLinks } = orderParentRow(parents, families, selfFamily)
+  const parentRowOrder = parentBlocks.flat()
+  // each parent's place along the row, measured from its left end (blocks get a small gap)
+  const parentRel = new Map<string, number>()
+  const parentSlotIdx = new Map<string, number>()
+  parentBlocks.forEach((block, blockIdx) => {
+    block.forEach((p) => {
+      const slot = parentSlotIdx.size
+      parentSlotIdx.set(p.id, slot)
+      parentRel.set(p.id, slot * pitch + blockIdx * unitGap)
     })
+  })
+  const standNextToEachOther = (a: TreeMember, b: TreeMember) =>
+    Math.abs((parentSlotIdx.get(a.id) ?? -9) - (parentSlotIdx.get(b.id) ?? 9)) === 1
+  const familyRel = (family: ParentFamily) =>
+    family.parents.length ? mean(family.parents.map((p) => parentRel.get(p.id) as number)) : 0
 
-  const siblingUnit = (s: TreeMember) => {
-    const ids = [s.sharedFatherMemberId, s.sharedMotherMemberId].filter(Boolean)
-    return bUnits.find((u) => ids.includes(u.key))?.key ?? 'A'
-  }
-  const unitCenterIdx = (key: string) =>
-    key === 'A' ? aCenterIdx : (bUnits.find((u) => u.key === key)?.centerIdx ?? aCenterIdx)
-  // siblings are grouped under the couple they belong to, left to right
-  const orderedSiblings = siblings
-    .map((s, i) => ({ s, i, idx: unitCenterIdx(siblingUnit(s)) }))
-    .sort((a, b) => a.idx - b.idx || a.i - b.i)
-    .map((entry) => entry.s)
+  // siblings sit under the family they belong to: other families left to right (matching
+  // their parents' order), then the centre person's own siblings right next to them
+  const siblingFamilyKey = new Map<string, string>()
+  for (const family of families) for (const kid of family.kids) siblingFamilyKey.set(kid.id, family.key)
+  const sideFamilies = families
+    .map((family, i) => ({ family, i }))
+    .filter(({ family }) => !family.isSelf)
+    .sort((a, b) => familyRel(a.family) - familyRel(b.family) || a.i - b.i)
+    .map(({ family }) => family)
+  const orderedSiblings = [...sideFamilies.flatMap((f) => f.kids), ...selfFamily.kids]
 
   /* ------------------------------------------------- self row: sibs / you / spouse */
-  type Slot =
+  type Slot = (
     | { kind: 'add'; modal: MemberModalKind; label: string }
     | { kind: 'member'; member: TreeMember }
     | { kind: 'self' }
+  ) & { gapBefore?: boolean }
   const slots: Slot[] = []
   if (allowAdds) slots.push({ kind: 'add', modal: 'sibling', label: 'Add Sibling' })
-  orderedSiblings.forEach((member) => slots.push({ kind: 'member', member }))
+  // a little extra room between one family's children and the next family's
+  let previousGroup: string | null = null
+  orderedSiblings.forEach((member) => {
+    const group = siblingFamilyKey.get(member.id) ?? selfFamily.key
+    slots.push({ kind: 'member', member, gapBefore: previousGroup !== null && previousGroup !== group })
+    previousGroup = group
+  })
+  const selfGap = previousGroup !== null && previousGroup !== selfFamily.key
   // Spouses sit on both sides of You so every couple is a neighbouring pair and its drop
   // line never has to cross a third person: [… siblings, 2nd spouse, YOU, 1st spouse, 3rd …]
   const leftSpouse = spouses.length > 1 ? spouses[1] : null
   const rightSpouses = spouses.filter((_, i) => i !== 1)
-  if (leftSpouse) slots.push({ kind: 'member', member: leftSpouse })
-  slots.push({ kind: 'self' })
+  if (leftSpouse) slots.push({ kind: 'member', member: leftSpouse, gapBefore: selfGap })
+  slots.push({ kind: 'self', gapBefore: selfGap && !leftSpouse })
   rightSpouses.forEach((member) => slots.push({ kind: 'member', member }))
   if (allowAdds) slots.push({ kind: 'add', modal: 'spouse', label: 'Add Spouse' })
 
-  const slotX = slots.map((_, i) => i * pitch)
+  let slotCursor = 0
+  const slotX = slots.map((slot, i) => {
+    if (i > 0) slotCursor += pitch + (slot.gapBefore ? unitGap : 0)
+    return slotCursor
+  })
   const selfIdx = slots.findIndex((s) => s.kind === 'self')
   const selfX = slotX[selfIdx]
   const selfTop = rowTop(selfRow)
@@ -357,38 +652,38 @@ export function buildPedigreeLayout({
   }
 
   /* --------------------------------------------------------------- parents row */
-  const aSiblingXs = orderedSiblings
-    .filter((s) => siblingUnit(s) === 'A')
-    .map((s) => memberX.get(s.id) as number)
-  const aKidXs = [...aSiblingXs, selfX]
-  const aimX = (Math.min(...aKidXs) + Math.max(...aKidXs)) / 2
+  const aimX = (() => {
+    const kidXs = [...selfFamily.kids.map((s) => memberX.get(s.id) as number), selfX]
+    return (Math.min(...kidXs) + Math.max(...kidXs)) / 2
+  })()
 
   const parentsTop = showParents ? rowTop(parentsRow) : 0
   const parentX = new Map<string, number>()
   if (showParents) {
-    parents.forEach((p, i) => {
-      const x = aimX + (i - aCenterIdx) * pitch
+    // the centre person's couple sits right above their own children
+    const anchor = selfFamily.parents.length ? familyRel(selfFamily) : 0
+    for (const p of parentRowOrder) {
+      const x = aimX + (parentRel.get(p.id) as number) - anchor
       parentX.set(p.id, x)
       nodes.push({ key: `m:${p.id}`, kind: 'member', member: p, x, y: parentsTop })
-    })
-    const parentLinkUnits: TreeMember[][] = []
-    if (aNodes.length) parentLinkUnits.push(aNodes)
-    for (const unit of bUnits) parentLinkUnits.push(unit.nodes)
-    const linkedParentIds = new Set(parentLinkUnits.flat().map((m) => m.id))
-    for (const p of parents) {
-      if (!linkedParentIds.has(p.id)) parentLinkUnits.push([p])
     }
-    for (const unit of parentLinkUnits) {
-      if (unit.length < 2) continue
-      const xs = unit
-        .map((m) => parentX.get(m.id) as number)
-        .sort((a, b) => a - b)
-      for (let i = 0; i < xs.length - 1; i += 1) {
-        hJoin(xs[i], xs[i + 1], parentsTop)
+    // father–mother (and step-marriage) links between neighbours
+    const joinedPairs = new Set<string>()
+    for (const [id, partners] of parentLinks) {
+      for (const other of partners) {
+        const pair = [id, other].sort().join('|')
+        if (joinedPairs.has(pair)) continue
+        joinedPairs.add(pair)
+        const a = parentX.get(id)
+        const b = parentX.get(other)
+        const adjacent = Math.abs((parentSlotIdx.get(id) ?? -9) - (parentSlotIdx.get(other) ?? 9)) === 1
+        if (a != null && b != null && adjacent) hJoin(a, b, parentsTop)
       }
     }
     if (allowAdds) {
-      const x = aimX + (parents.length - aCenterIdx) * pitch
+      const last = parentRowOrder[parentRowOrder.length - 1]
+      const lastX = last ? (parentX.get(last.id) as number) : null
+      const x = lastX != null ? lastX + pitch : aimX
       nodes.push({
         key: 'add:parent',
         kind: 'add',
@@ -397,37 +692,34 @@ export function buildPedigreeLayout({
         x,
         y: parentsTop,
       })
-      if (parents.length) {
-        hJoin(parentX.get(parents[parents.length - 1].id) as number, x, parentsTop, true)
-      }
+      if (lastX != null) hJoin(lastX, x, parentsTop, true)
     }
 
-    // parents → siblings & you
+    // parents → their children, one bracket per family so lines never share a bus
     const busToSelf = selfTop - busOffset
-    const aFromY =
-      aNodes.length >= 2
-        ? parentsTop + av / 2
-        : aNodes.length === 1
-          ? parentsTop + nodeH - 4
-          : parentsTop + addH
-    bracket(
-      aimX,
-      aFromY,
-      [...aSiblingXs, selfX].map((x) => ({ x, y: selfTop })),
-      busToSelf,
-      aNodes.length === 0,
-    )
-    for (const unit of bUnits) {
-      const xs = unit.nodes.map((m) => parentX.get(m.id) as number)
-      const kidXs = orderedSiblings
-        .filter((s) => siblingUnit(s) === unit.key)
-        .map((s) => memberX.get(s.id) as number)
-      bracket(
-        mean(xs),
-        parentsTop + av / 2,
-        kidXs.map((x) => ({ x, y: selfTop })),
-        busToSelf,
-      )
+    const underLabel = parentsTop + nodeH - 4
+    const dropOrder = [selfFamily, ...families.filter((f) => !f.isSelf && f.kids.length)]
+    for (const family of dropOrder) {
+      const kidXs = family.kids.map((s) => memberX.get(s.id) as number)
+      if (family.isSelf) kidXs.push(selfX)
+      const targets: Target[] = kidXs.map((x) => ({ x, y: selfTop }))
+      const xs = family.parents.map((p) => parentX.get(p.id) as number)
+      if (xs.length === 0) {
+        // no parents on the tree yet: dashed line up to the "Add Parent" circle
+        bracket(aimX, parentsTop + addH, targets, busToSelf, true)
+      } else if (xs.length === 1) {
+        bracket(xs[0], underLabel, targets, busToSelf)
+      } else if (standNextToEachOther(family.parents[0], family.parents[1])) {
+        // leave from the middle of the father–mother link
+        bracket(mean(xs), parentsTop + av / 2, targets, busToSelf)
+      } else {
+        // a couple that is not side by side: both drop onto one shared bus
+        const all = [...xs, ...kidXs]
+        const busY = takeLane(busToSelf, Math.min(...all), Math.max(...all))
+        for (const x of xs) vLine(x, underLabel, busY)
+        hLine(Math.min(...all), Math.max(...all), busY)
+        for (const t of targets) vLine(t.x, busY, t.y)
+      }
     }
   } else if (orderedSiblings.length) {
     // no parents on the tree: link the siblings and you with a plain line
@@ -443,27 +735,26 @@ export function buildPedigreeLayout({
   const gpTop = showGP ? rowTop(gpRow) : 0
   const parentTargetsFor = (key: 'paternal' | 'unsided' | 'maternal'): Target[] => {
     if (!showParents) return []
-    if (!parents.length) return [{ x: aimX, y: parentsTop, dashed: true }]
+    const { father: selfFather, mother: selfMother, all: selfParents } = selfParentLinks
+    if (!selfParents.length) return [{ x: aimX, y: parentsTop, dashed: true }]
+    const px = (m: TreeMember) => parentX.get(m.id) as number
     if (key === 'unsided') {
-      // One drop to the bio father–mother join — never a bus across the whole parent row.
-      const { father: pf, mother: pm } = primaryCouple(parents)
-      if (pf && pm) {
-        const fx = parentX.get(pf.id) as number
-        const mx = parentX.get(pm.id) as number
-        return [{ x: (fx + mx) / 2, y: parentsTop + av / 2 }]
+      // One drop to the father–mother join — never a bus across the whole parent row.
+      if (selfFather && selfMother) {
+        if (standNextToEachOther(selfFather, selfMother)) {
+          return [{ x: (px(selfFather) + px(selfMother)) / 2, y: parentsTop + av / 2 }]
+        }
+        return [
+          { x: px(selfFather), y: parentsTop },
+          { x: px(selfMother), y: parentsTop },
+        ]
       }
-      const one = pf ?? pm ?? aNodes[0]
-      if (one) return [{ x: parentX.get(one.id) as number, y: parentsTop }]
-      return [{ x: aimX, y: parentsTop, dashed: true }]
+      return [{ x: px(selfFather ?? selfMother ?? selfParents[0]), y: parentsTop }]
     }
-    const preferred = key === 'paternal' ? primaryFather : primaryMother
-    if (preferred) {
-      return [{ x: parentX.get(preferred.id) as number, y: parentsTop }]
-    }
-    const fallback = key === 'paternal' ? primaryMother : primaryFather
-    const node = fallback ?? aNodes[0]
-    if (!node) return [{ x: aimX, y: parentsTop, dashed: true }]
-    return [{ x: parentX.get(node.id) as number, y: parentsTop, dashed: true }]
+    const preferred = key === 'paternal' ? selfFather : selfMother
+    if (preferred) return [{ x: px(preferred), y: parentsTop }]
+    const fallback = key === 'paternal' ? selfMother : selfFather
+    return [{ x: px(fallback ?? selfParents[0]), y: parentsTop, dashed: true }]
   }
   // a lone person (or an odd household with no clear couple) leaves from under their label
   const underLabelY = (top: number) => top + nodeH - 4
@@ -769,9 +1060,12 @@ export function buildPedigreeLayout({
   const dx = pad - minX
 
   return {
-    nodes: nodes.map((n) => ({ ...n, x: n.x + dx })),
-    segs: segs.map((s) => ({ ...s, x1: s.x1 + dx, x2: s.x2 + dx })),
-    width: maxX - minX + pad * 2,
-    height: pad * 2 + rowCount * nodeH + (rowCount - 1) * rowGap,
+    laneDemand,
+    layout: {
+      nodes: nodes.map((n) => ({ ...n, x: n.x + dx })),
+      segs: segs.map((s) => ({ ...s, x1: s.x1 + dx, x2: s.x2 + dx })),
+      width: maxX - minX + pad * 2,
+      height: pad * 2 + rowCount * nodeH + (rowCount - 1) * rowGap + extraAbove(rowCount - 1),
+    },
   }
 }

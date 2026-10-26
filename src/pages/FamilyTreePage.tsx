@@ -60,6 +60,8 @@ function StarterDiagram({
   exploreHint,
   allowMemberEdit,
   centerSelfMemberIds,
+  centerFatherMemberId,
+  centerMotherMemberId,
   fullTreeView,
   treeRef,
 }: {
@@ -81,6 +83,8 @@ function StarterDiagram({
   exploreHint?: boolean
   allowMemberEdit?: boolean
   centerSelfMemberIds?: string[]
+  centerFatherMemberId?: string | null
+  centerMotherMemberId?: string | null
   fullTreeView?: boolean
   treeRef?: Ref<PedigreeTreeHandle>
 }) {
@@ -109,6 +113,8 @@ function StarterDiagram({
         exploreHint={exploreHint}
         allowMemberEdit={allowMemberEdit}
         centerSelfMemberIds={centerSelfMemberIds}
+        centerFatherMemberId={centerFatherMemberId}
+        centerMotherMemberId={centerMotherMemberId}
       />
     </div>
   )
@@ -142,6 +148,8 @@ export default function FamilyTreePage() {
   const [joinedFamily, setJoinedFamily] = useState(false)
   const [claimedInviteToken, setClaimedInviteToken] = useState<string | null>(null)
   const [centerSelfMemberIds, setCenterSelfMemberIds] = useState<string[]>([])
+  const [centerFatherId, setCenterFatherId] = useState<string | null>(null)
+  const [centerMotherId, setCenterMotherId] = useState<string | null>(null)
   const [profileReady, setProfileReady] = useState(false)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
   const [fullTreeView, setFullTreeView] = useState(false)
@@ -246,6 +254,8 @@ export default function FamilyTreePage() {
 
       const centerUid = exploreRootUid ?? user.uid
       if (centerUid === user.uid) {
+        setCenterFatherId(viewerProfile.treeFatherMemberId?.trim() || null)
+        setCenterMotherId(viewerProfile.treeMotherMemberId?.trim() || null)
         setCenterName(viewerDisplayName)
         setCenterHasProfileName(hasSavedProfileName(viewerProfile))
         setCenterPhotoURL(user.photoURL ?? viewerProfile.photoURL ?? null)
@@ -263,6 +273,18 @@ export default function FamilyTreePage() {
       } else {
         const rootProfile = await fetchUserProfile(centerUid)
         if (cancelled) return
+        // the explored person's own links decide who their parents are
+        setCenterFatherId(rootProfile?.treeFatherMemberId?.trim() || null)
+        setCenterMotherId(rootProfile?.treeMotherMemberId?.trim() || null)
+        setCenterSelfMemberIds(
+          [
+            ...new Set(
+              [rootProfile?.claimedInviteToken?.trim(), rootProfile?.inviteToken?.trim()].filter(
+                (id): id is string => Boolean(id),
+              ),
+            ),
+          ],
+        )
         if (rootProfile) {
           const rootName = profileFullName(rootProfile) || 'Family member'
           setCenterName(rootName)
@@ -535,6 +557,8 @@ export default function FamilyTreePage() {
               exploreHint
               allowMemberEdit={!isExploreView}
               centerSelfMemberIds={centerSelfMemberIds}
+              centerFatherMemberId={centerFatherId}
+              centerMotherMemberId={centerMotherId}
               fullTreeView={fullTreeView}
               treeRef={treeRef}
             />

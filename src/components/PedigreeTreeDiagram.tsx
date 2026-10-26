@@ -134,6 +134,8 @@ export default function PedigreeTreeDiagram({
   exploreHint = false,
   allowMemberEdit = true,
   centerSelfMemberIds = [],
+  centerFatherMemberId = null,
+  centerMotherMemberId = null,
   maxScale = 1,
   handleRef,
 }: {
@@ -155,13 +157,23 @@ export default function PedigreeTreeDiagram({
   exploreHint?: boolean
   allowMemberEdit?: boolean
   centerSelfMemberIds?: string[]
+  /** the centre person's own father / mother (profile links to a parent on the tree) */
+  centerFatherMemberId?: string | null
+  centerMotherMemberId?: string | null
   /** how far the diagram may be enlarged when there is spare room (full view uses > 1) */
   maxScale?: number
   handleRef?: Ref<PedigreeTreeHandle>
 }) {
   const layout = useMemo(
-    () => buildPedigreeLayout({ members, allowAdds, centerSelfMemberIds }),
-    [members, allowAdds, centerSelfMemberIds],
+    () =>
+      buildPedigreeLayout({
+        members,
+        allowAdds,
+        centerSelfMemberIds,
+        selfFatherMemberId: centerFatherMemberId,
+        selfMotherMemberId: centerMotherMemberId,
+      }),
+    [members, allowAdds, centerSelfMemberIds, centerFatherMemberId, centerMotherMemberId],
   )
 
   // scale the whole canvas down (or up in full view) so it fits the available width
