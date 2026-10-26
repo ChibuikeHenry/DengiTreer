@@ -1,5 +1,4 @@
 import { Link, NavLink } from 'react-router-dom'
-import BrandLogo from './BrandLogo'
 
 const navItems = [
   { label: 'Features', to: '/#features' },
@@ -10,7 +9,12 @@ const navItems = [
 ] as const
 
 export function MarketingLogo() {
-  return <BrandLogo variant="marketing" to="/" className="mkt-logo" />
+  return (
+    <Link className="mkt-logo" to="/">
+      <span className="mkt-logo-name">DengiTree</span>
+      <span className="mkt-logo-tag">Your Family. Your Story. Connected.</span>
+    </Link>
+  )
 }
 
 export default function MarketingHeader() {

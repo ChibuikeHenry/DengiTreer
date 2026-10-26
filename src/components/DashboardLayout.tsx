@@ -3,7 +3,6 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
 import ProfileAvatar from './ProfileAvatar'
-import BrandLogo from './BrandLogo'
 
 type IconProps = SVGProps<SVGSVGElement>
 
@@ -226,7 +225,10 @@ export default function DashboardLayout({
       />
 
       <aside className="dash-sidebar" aria-label="Dashboard">
-        <BrandLogo variant="dashboard" to="/home" />
+        <div className="dash-brand">
+          <span className="dash-brand-name">DengiTree</span>
+          <span className="dash-brand-tag">Your Family. Your Story. Connected.</span>
+        </div>
 
         <nav className="dash-nav">
           {navItems.map((item) => (

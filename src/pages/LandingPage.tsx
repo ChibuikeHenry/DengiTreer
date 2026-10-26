@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import BrandLogo from '../components/BrandLogo'
 import './LandingPage.css'
 
 const navLinks = [
@@ -210,7 +209,12 @@ function Icon({ name }: { name: IconName }) {
 }
 
 function Logo() {
-  return <BrandLogo variant="marketing" to="/" className="logo" />
+  return (
+    <Link className="logo" to="/">
+      <span className="logo-name">DengiTree</span>
+      <span className="logo-tagline">Your Family. Your Story. Connected.</span>
+    </Link>
+  )
 }
 
 export default function LandingPage() {

@@ -1,8 +1,13 @@
+import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import BrandLogo from './BrandLogo'
 
 export function AuthBrand() {
-  return <BrandLogo variant="auth" to="/" />
+  return (
+    <Link to="/" className="auth-brand">
+      <span className="auth-brand-name">DengiTree</span>
+      <span className="auth-brand-tagline">Your Family. Your Story. Connected.</span>
+    </Link>
+  )
 }
 
 export function GoogleIcon() {
