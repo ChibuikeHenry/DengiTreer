@@ -11,7 +11,12 @@ import { useAuth } from '../context/AuthContext'
 import { positionLabel } from '../lib/familyTreeMembers'
 import { acceptPersistedInvitationIfAny } from '../lib/invitations'
 import { setSelfOnTree } from '../lib/treeStorage'
-import { fetchUserProfile } from '../lib/userProfile'
+import {
+  fetchUserProfile,
+  greetingFirstNameFromUser,
+  personalizedHomeGreeting,
+  signedInHomeTagline,
+} from '../lib/userProfile'
 import '../dashboard.css'
 import '../merge-flow.css'
 
@@ -136,22 +141,22 @@ export default function HomePage() {
   const { user } = useAuth()
   const [joinedFamily, setJoinedFamily] = useState(false)
   const [position, setPosition] = useState<string | null>(null)
-  const firstName =
-    user?.displayName?.trim().split(/\s+/)[0] ||
-    user?.email?.split('@')[0] ||
-    'there'
+  const [greetingName, setGreetingName] = useState('there')
 
   useEffect(() => {
     if (!user) {
       setJoinedFamily(false)
       setPosition(null)
+      setGreetingName('there')
       return
     }
+    setGreetingName(greetingFirstNameFromUser(null, user))
     let cancelled = false
     void fetchUserProfile(user.uid).then((profile) => {
       if (cancelled) return
       setJoinedFamily(Boolean(profile?.invitedByUid))
       setPosition(positionLabel(profile?.familyRole))
+      setGreetingName(greetingFirstNameFromUser(profile, user))
     })
     return () => {
       cancelled = true
@@ -179,9 +184,10 @@ export default function HomePage() {
     <div className="home">
       <header className="home-welcome">
         <h1>
-          Welcome to DengiTree, {firstName}! <span aria-hidden="true">👋</span>
+          {personalizedHomeGreeting(greetingName)}{' '}
+          <span aria-hidden="true">👋</span>
         </h1>
-        <p>Let&apos;s start building your family legacy.</p>
+        <p>{signedInHomeTagline()}</p>
       </header>
 
       <div className="home-top-grid">
@@ -295,7 +301,7 @@ export default function HomePage() {
             </p>
           </li>
           <li>
-            <div className="step-icon-wrap step-icon-empty" />
+            <div className="step-icon-wrap">{DashIcons.trendingUp()}</div>
             <p>
               <strong>
                 <span className="step-num">4</span> Grow your Tree

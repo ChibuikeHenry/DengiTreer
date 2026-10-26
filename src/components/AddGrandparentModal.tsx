@@ -16,7 +16,8 @@ import { subscribeTreeMembers, type TreeMember } from '../lib/familyTreeMembers'
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import type { ParentSlot } from '../lib/siblingRelationship'
 import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
-import MergeFamilyPrompt from './MergeFamilyPrompt'
+import { useMergeModalSubmit } from '../hooks/useMergeModalSubmit'
+import MergeFamilyEmailNotice from './MergeFamilyEmailNotice'
 
 const relationships = ['Grandfather', 'Grandmother'] as const
 
@@ -95,6 +96,15 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
       dateOfDeath,
     ],
   )
+
+  const { offerMerge, submitLabel, submittingText, interceptSubmit } = useMergeModalSubmit({
+    mergeMatch,
+    mergeDismissed,
+    invitePayload: mergeInvitePayload,
+    onClose,
+    defaultSubmitLabel: 'Add Grandparent',
+    defaultSubmittingText: email.trim() ? 'Sending invite…' : 'Adding grandparent…',
+  })
 
   useEffect(() => {
     if (!open || !user?.uid) {
@@ -181,9 +191,8 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
   }
 
   async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+    interceptSubmit(event, async () => {
     if (!placement || !relationship) return
-    if (mergeMatch && !mergeDismissed) return
 
     const resolvedFirst = firstName.trim()
     const resolvedLast = lastName.trim()
@@ -211,6 +220,7 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
       lineageSide: placement.startsWith('fathers') ? 'paternal' : 'maternal',
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    })
     })
   }
 
@@ -451,6 +461,12 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
               onPhotoSelect={photo.selectFile}
               photoError={photo.error}
             />
+            {offerMerge ? (
+              <MergeFamilyEmailNotice
+                onAddWithoutMerge={() => setMergeDismissed(true)}
+                addWithoutMergeLabel="Add grandparent without merging"
+              />
+            ) : null}
           </section>
 
           <section className="modal-section">
@@ -470,25 +486,12 @@ export default function AddGrandparentModal({ open, onClose, onAdded }: Props) {
             </p>
           ) : null}
 
-          {mergeMatch && !mergeDismissed ? (
-            <MergeFamilyPrompt
-              match={mergeMatch}
-              invitePayload={mergeInvitePayload}
-              onCloseModal={onClose}
-              onDismiss={() => setMergeDismissed(true)}
-            />
-          ) : null}
-
           <footer className="modal-actions">
             <button type="button" className="btn-modal-outline" onClick={handleClose}>
               Cancel
             </button>
             <button type="submit" className="btn-modal-primary" disabled={submitting}>
-              {submitting
-                ? email.trim()
-                  ? 'Sending invite…'
-                  : 'Adding grandparent…'
-                : 'Add Grandparent'}
+              {submitting ? submittingText : submitLabel}
             </button>
           </footer>
         </form>

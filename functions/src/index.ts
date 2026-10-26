@@ -295,14 +295,22 @@ async function createInvitationRecord(
     role === 'grandparent' || role === 'great-grandparent'
       ? parseLineageSide(data.lineageSide)
       : null
-  const sharedFatherMemberId =
+  let sharedFatherMemberId =
     role === 'sibling' || role === 'child'
       ? String(data.sharedFatherMemberId ?? '').trim() || null
       : null
-  const sharedMotherMemberId =
+  let sharedMotherMemberId =
     role === 'sibling' || role === 'child'
       ? String(data.sharedMotherMemberId ?? '').trim() || null
       : null
+  if (role === 'sibling' && !sharedFatherMemberId && !sharedMotherMemberId) {
+    const inviterSnap = await db.collection('users').doc(uid).get()
+    const inviterData = inviterSnap.data() ?? {}
+    sharedFatherMemberId =
+      String(inviterData.treeFatherMemberId ?? '').trim() || null
+    sharedMotherMemberId =
+      String(inviterData.treeMotherMemberId ?? '').trim() || null
+  }
   const siblingRelationship =
     role === 'sibling' && data.siblingRelationship
       ? (String(data.siblingRelationship).trim() as SiblingRelationship)

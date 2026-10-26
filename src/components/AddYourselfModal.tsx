@@ -32,7 +32,7 @@ export default function AddYourselfModal({ open, onClose, onSuccess }: Props) {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [bio, setBio] = useState('')
-  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open)
+  const [privacy, setPrivacy] = useDefaultMemberPrivacy(open, 'self')
   const photo = usePhotoPicker()
   const [prefillLoading, setPrefillLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)

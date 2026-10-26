@@ -11,13 +11,8 @@ import {
   sendShareInviteEmail,
   subscribeReceivedInvitations,
   subscribeSentInvitations,
-  updateFamilyMemberPrivacy,
   type InvitationRecord,
 } from '../lib/invitations'
-import {
-  MEMBER_PRIVACY_OPTIONS,
-  type MemberPrivacy,
-} from '../lib/memberPrivacy'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
 import type { TreeMember } from '../lib/familyTreeMembers'
 import {
@@ -36,17 +31,28 @@ import {
 
 type Tab = 'sent' | 'received'
 
-function initialsFor(record: InvitationRecord): string {
-  const source = record.inviteeName || record.inviteeEmail || '?'
-  const parts = source.trim().split(/\s+/)
+function initialsFromLabel(label: string): string {
+  const source = label.trim() || '?'
+  const parts = source.split(/\s+/).filter(Boolean)
   if (parts.length >= 2) {
     return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
   }
   return source.slice(0, 2).toUpperCase()
 }
 
-function displayName(record: InvitationRecord): string {
+function invitationCardTitle(record: InvitationRecord, tab: Tab): string {
+  if (tab === 'received') {
+    return record.inviterName?.trim() || record.inviterEmail?.split('@')[0] || 'Family member'
+  }
   return record.inviteeName || record.inviteeEmail || 'Invite link'
+}
+
+function invitationCardSubtitle(record: InvitationRecord, tab: Tab): string | null {
+  if (tab === 'received') {
+    if (record.role === 'member') return null
+    return `Invited you as ${inviteRoleLabel(record.role).toLowerCase()}`
+  }
+  return record.inviteeEmail
 }
 
 function inviterDisplayName(user: { displayName?: string | null; email?: string | null }) {
@@ -78,7 +84,6 @@ export default function InvitationsPage() {
   const [listError, setListError] = useState('')
   const [composeError, setComposeError] = useState('')
   const [creatingLink, setCreatingLink] = useState(false)
-  const [privacyUpdatingId, setPrivacyUpdatingId] = useState<string | null>(null)
   const [editingMember, setEditingMember] = useState<TreeMember | null>(null)
   const [removingToken, setRemovingToken] = useState<string | null>(null)
   const [removeError, setRemoveError] = useState('')
@@ -253,18 +258,6 @@ export default function InvitationsPage() {
       setComposeError(getCallableErrorMessage(err))
     } finally {
       setSendingEmail(false)
-    }
-  }
-
-  async function handlePrivacyChange(item: InvitationRecord, privacy: MemberPrivacy) {
-    setPrivacyUpdatingId(item.id)
-    setListError('')
-    try {
-      await updateFamilyMemberPrivacy(item.token, privacy)
-    } catch (err) {
-      setListError(getCallableErrorMessage(err))
-    } finally {
-      setPrivacyUpdatingId(null)
     }
   }
 
@@ -487,10 +480,14 @@ export default function InvitationsPage() {
                 tab === 'received' && mergePending && item.role !== 'member'
               return (
               <li key={item.id} className="inv-card">
-                <span className="inv-avatar">{initialsFor(item)}</span>
+                <span className="inv-avatar">
+                  {initialsFromLabel(invitationCardTitle(item, tab))}
+                </span>
                 <div className="inv-card-body">
-                  <strong>{displayName(item)}</strong>
-                  {item.inviteeEmail ? <span>{item.inviteeEmail}</span> : null}
+                  <strong>{invitationCardTitle(item, tab)}</strong>
+                  {invitationCardSubtitle(item, tab) ? (
+                    <span>{invitationCardSubtitle(item, tab)}</span>
+                  ) : null}
                   <span className="inv-date">
                     {tab === 'sent' ? 'Sent' : 'Received'} on{' '}
                     {formatInviteDate(item.createdAt) || '—'}
@@ -534,27 +531,6 @@ export default function InvitationsPage() {
                         </button>
                       </div>
                     </>
-                  ) : null}
-                  {tab === 'sent' && item.role !== 'member' ? (
-                    <label className="inv-privacy">
-                      <span className="sr-only">Who can view {displayName(item)}</span>
-                      <select
-                        value={item.privacy}
-                        disabled={privacyUpdatingId === item.id}
-                        onChange={(e) =>
-                          void handlePrivacyChange(
-                            item,
-                            e.target.value as MemberPrivacy,
-                          )
-                        }
-                      >
-                        {MEMBER_PRIVACY_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                   ) : null}
                 </div>
                 {tab === 'sent' && mergePending ? (

@@ -11,7 +11,8 @@ import { useFamilyMemberInviteSubmit } from '../hooks/useFamilyMemberInviteSubmi
 import { getTodayString, normalizeDateField } from '../lib/lifeDates'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
-import MergeFamilyPrompt from './MergeFamilyPrompt'
+import { useMergeModalSubmit } from '../hooks/useMergeModalSubmit'
+import MergeFamilyEmailNotice from './MergeFamilyEmailNotice'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
@@ -61,9 +62,17 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
     ],
   )
 
+  const { offerMerge, submitLabel, submittingText, interceptSubmit } = useMergeModalSubmit({
+    mergeMatch,
+    mergeDismissed,
+    invitePayload: mergeInvitePayload,
+    onClose,
+    defaultSubmitLabel: 'Add Spouse',
+    defaultSubmittingText: email.trim() ? 'Sending invite…' : 'Adding spouse…',
+  })
+
   async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
-    if (mergeMatch && !mergeDismissed) return
+    interceptSubmit(event, async () => {
     await submit({
       firstName,
       middleName,
@@ -76,6 +85,7 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
       bio: bio.trim() || undefined,
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    })
     })
   }
 
@@ -105,8 +115,8 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
       onClose={onClose}
       title="Add a Spouse"
       description="Add a new relative to your family tree. Living spouses with an email address receive an email invite to join."
-      submitLabel="Add Spouse"
-      submittingText={email.trim() ? 'Sending invite…' : 'Adding spouse…'}
+      submitLabel={submitLabel}
+      submittingText={submittingText}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}
@@ -162,6 +172,12 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
           onPhotoSelect={photo.selectFile}
           photoError={photo.error}
         />
+        {offerMerge ? (
+          <MergeFamilyEmailNotice
+            onAddWithoutMerge={() => setMergeDismissed(true)}
+            addWithoutMergeLabel="Add spouse without merging"
+          />
+        ) : null}
       </section>
 
       <section className="modal-section">
@@ -173,14 +189,6 @@ export default function AddSpouseModal({ open, onClose, onAdded }: Props) {
         <h3>5. About this person (Optional)</h3>
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="spouse" />
       </section>
-      {mergeMatch && !mergeDismissed ? (
-        <MergeFamilyPrompt
-          match={mergeMatch}
-          invitePayload={mergeInvitePayload}
-          onCloseModal={onClose}
-          onDismiss={() => setMergeDismissed(true)}
-        />
-      ) : null}
     </ModalFrame>
   )
 }

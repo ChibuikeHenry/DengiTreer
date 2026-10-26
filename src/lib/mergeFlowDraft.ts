@@ -1,3 +1,4 @@
+import type { NavigateFunction } from 'react-router-dom'
 import type { FamilyMemberInviteInput, InviteRole } from './invitations'
 
 export type MergeFlowDraft = {
@@ -80,4 +81,15 @@ export function startMergeFlowFromCheck(
       memberCount: check.requesterMemberCount,
     },
   })
+}
+
+export function beginMergeFlowFromModal(
+  navigate: NavigateFunction,
+  onCloseModal: () => void,
+  invitePayload: FamilyMemberInviteInput & { role: InviteRole },
+  match: MergeCheckResult,
+) {
+  startMergeFlowFromCheck(invitePayload, match)
+  onCloseModal()
+  navigate('/home/merge/exists')
 }

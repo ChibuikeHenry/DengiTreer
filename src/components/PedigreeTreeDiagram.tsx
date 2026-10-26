@@ -277,7 +277,8 @@ export default function PedigreeTreeDiagram({
                 x2={seg.x2}
                 y2={seg.y2}
                 strokeDasharray={seg.dashed ? '5 5' : undefined}
-                strokeLinecap={seg.dashed ? 'butt' : 'square'}
+                strokeLinejoin="round"
+                strokeLinecap={seg.dashed ? 'butt' : 'round'}
                 style={{ strokeWidth: PED.line }}
               />
             ))}

@@ -361,6 +361,38 @@
   background: #dcecd3;
 }
 
+.mf-email-notice {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid #b8d4a8;
+  background: #eef8e8;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--dash-ink, #1a1f16);
+}
+
+.mf-email-notice p {
+  margin: 0;
+}
+
+.mf-email-notice-link {
+  margin-top: 0.45rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--dash-brand, #3d5c2e);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.mf-email-notice-link:hover {
+  color: #2d4522;
+}
+
 .mf-modal-toast {
   position: absolute;
   right: 0.85rem;

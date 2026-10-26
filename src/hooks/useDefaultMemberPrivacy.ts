@@ -7,13 +7,14 @@ import {
 } from '../lib/memberPrivacy'
 import { resolveUserProfileForForm } from '../lib/userProfile'
 
-export function useDefaultMemberPrivacy(open: boolean) {
+/** @param scope `self` loads your profile privacy; `invite` uses app default (inviters do not set others' visibility). */
+export function useDefaultMemberPrivacy(open: boolean, scope: 'self' | 'invite' = 'invite') {
   const { user } = useAuth()
   const [privacy, setPrivacy] = useState<MemberPrivacy>(DEFAULT_MEMBER_PRIVACY)
 
   useEffect(() => {
     if (!open) return
-    if (!user) {
+    if (scope === 'invite' || !user) {
       setPrivacy(DEFAULT_MEMBER_PRIVACY)
       return
     }
@@ -22,13 +23,15 @@ export function useDefaultMemberPrivacy(open: boolean) {
     ;(async () => {
       const profile = await resolveUserProfileForForm(user)
       if (cancelled) return
-      setPrivacy(parseMemberPrivacy(profile.defaultMemberPrivacy))
+      setPrivacy(
+        parseMemberPrivacy(profile.profilePrivacy ?? profile.defaultMemberPrivacy),
+      )
     })()
 
     return () => {
       cancelled = true
     }
-  }, [open, user])
+  }, [open, scope, user])
 
   return [privacy, setPrivacy] as const
 }

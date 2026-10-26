@@ -30,7 +30,7 @@
   overflow: visible;
   pointer-events: none;
   stroke: var(--ped-line);
-  stroke-width: 3;
+  stroke-width: 2;
   fill: none;
 }
 

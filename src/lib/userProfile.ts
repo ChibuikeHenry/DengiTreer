@@ -66,6 +66,36 @@ export function profileFirstName(displayName: string, fallback = 'You') {
   return trimmed.split(/\s+/)[0] ?? fallback
 }
 
+export function timeOfDayGreeting(now: Date = new Date()): string {
+  const hour = now.getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+export function personalizedHomeGreeting(firstName: string, now?: Date): string {
+  const name = firstName.trim() || 'there'
+  return `${timeOfDayGreeting(now)}, ${name}!`
+}
+
+/** Subtitle under the signed-in home dashboard greeting (matches product UI). */
+export function signedInHomeTagline(): string {
+  return 'Continue building your family legacy.'
+}
+
+export function greetingFirstNameFromUser(
+  profile: Pick<UserProfile, 'firstName'> | null | undefined,
+  user: { displayName: string | null; email: string | null },
+): string {
+  const fromProfile = profile?.firstName?.trim()
+  if (fromProfile) return fromProfile
+  const fromDisplay = user.displayName?.trim()
+  if (fromDisplay) return profileFirstName(fromDisplay, 'there')
+  const fromEmail = user.email?.split('@')[0]?.trim()
+  if (fromEmail) return fromEmail
+  return 'there'
+}
+
 export function profileFromAuthUser(user: {
   displayName: string | null
   email: string | null

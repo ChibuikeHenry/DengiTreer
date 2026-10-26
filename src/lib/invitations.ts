@@ -68,6 +68,8 @@ export type LineageSide = 'paternal' | 'maternal'
 export type InvitationRecord = {
   id: string
   token: string
+  inviterName: string | null
+  inviterEmail: string | null
   inviteeName: string | null
   inviteeFirstName: string | null
   inviteeLastName: string | null
@@ -307,6 +309,8 @@ function mapInvitationDoc(docSnap: { id: string; data: () => Record<string, unkn
   return {
     id: docSnap.id,
     token: String(data.token ?? docSnap.id),
+    inviterName: (data.inviterName as string | null) ?? null,
+    inviterEmail: (data.inviterEmail as string | null) ?? null,
     inviteeName: (data.inviteeName as string | null) ?? null,
     inviteeFirstName: (data.inviteeFirstName as string | null) ?? null,
     inviteeLastName: (data.inviteeLastName as string | null) ?? null,

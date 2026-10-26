@@ -51,6 +51,52 @@ export type TreeMember = {
   gender: string | null
 }
 
+export function findMemberForParentLink(
+  members: TreeMember[],
+  linkId: string | null | undefined,
+): TreeMember | null {
+  const id = linkId?.trim()
+  if (!id) return null
+  return members.find((m) => m.id === id || m.joinedUid === id) ?? null
+}
+
+/** Resolve father/mother member ids for siblings (and stored links for others). */
+export function resolveSharedParentLinkIds(
+  member: Pick<TreeMember, 'role' | 'sharedFatherMemberId' | 'sharedMotherMemberId'>,
+  treeOwnerProfile: { treeFatherMemberId?: string; treeMotherMemberId?: string } | null,
+): { fatherId: string | null; motherId: string | null } {
+  let fatherId = member.sharedFatherMemberId?.trim() || null
+  let motherId = member.sharedMotherMemberId?.trim() || null
+
+  if (member.role === 'sibling' && treeOwnerProfile && !fatherId && !motherId) {
+    fatherId = treeOwnerProfile.treeFatherMemberId?.trim() || null
+    motherId = treeOwnerProfile.treeMotherMemberId?.trim() || null
+  }
+
+  return { fatherId, motherId }
+}
+
+export function resolveSharedParentMembers(
+  member: TreeMember,
+  members: TreeMember[],
+  treeOwnerProfile: { treeFatherMemberId?: string; treeMotherMemberId?: string } | null,
+): { father: TreeMember | null; mother: TreeMember | null } {
+  const { fatherId, motherId } = resolveSharedParentLinkIds(member, treeOwnerProfile)
+  let father = findMemberForParentLink(members, fatherId)
+  let mother = findMemberForParentLink(members, motherId)
+
+  if (member.role === 'sibling' && treeOwnerProfile) {
+    if (!father && treeOwnerProfile.treeFatherMemberId?.trim()) {
+      father = findMemberForParentLink(members, treeOwnerProfile.treeFatherMemberId)
+    }
+    if (!mother && treeOwnerProfile.treeMotherMemberId?.trim()) {
+      mother = findMemberForParentLink(members, treeOwnerProfile.treeMotherMemberId)
+    }
+  }
+
+  return { father, mother }
+}
+
 const treeRoles = new Set<InviteRole>([
   'spouse',
   'parent',

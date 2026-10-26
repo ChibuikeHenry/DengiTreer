@@ -3173,6 +3173,17 @@
   margin-bottom: 1rem;
 }
 
+.profile-head-with-back {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.profile-head-with-back > div {
+  flex: 1;
+  min-width: 0;
+}
+
 .profile-head h1 {
   margin: 0 0 0.35rem;
   font-size: 1.45rem;

@@ -14,7 +14,8 @@ import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import { resolveChildCoParentMemberId } from '../hooks/useTreeParentPickOptions'
 import { useAuth } from '../context/AuthContext'
 import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
-import MergeFamilyPrompt from './MergeFamilyPrompt'
+import { useMergeModalSubmit } from '../hooks/useMergeModalSubmit'
+import MergeFamilyEmailNotice from './MergeFamilyEmailNotice'
 
 type Props = { open: boolean; onClose: () => void; onAdded?: () => void }
 
@@ -114,10 +115,18 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
     ],
   )
 
+  const { offerMerge, submitLabel, submittingText, interceptSubmit } = useMergeModalSubmit({
+    mergeMatch,
+    mergeDismissed,
+    invitePayload: mergeInvitePayload,
+    onClose,
+    defaultSubmitLabel: 'Add Child',
+    defaultSubmittingText: email.trim() ? 'Sending invite…' : 'Adding child…',
+  })
+
   async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+    interceptSubmit(event, async () => {
     if (!user) return
-    if (mergeMatch && !mergeDismissed) return
     const sharedFather =
       sharedFatherMemberId ??
       ((await resolveChildCoParentMemberId(user, fatherId)) ?? undefined)
@@ -138,6 +147,7 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
       sharedFatherMemberId: sharedFather,
       sharedMotherMemberId: sharedMother,
+    })
     })
   }
 
@@ -170,8 +180,8 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
       onClose={onClose}
       title="Add a Child"
       description="Add your child to your family tree. Living children with an email address will be invited to join."
-      submitLabel="Add Child"
-      submittingText={email.trim() ? 'Sending invite…' : 'Adding child…'}
+      submitLabel={submitLabel}
+      submittingText={submittingText}
       onSubmit={handleSubmit}
       formError={error}
       submitting={submitting}
@@ -240,6 +250,12 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
           onPhotoSelect={photo.selectFile}
           photoError={photo.error}
         />
+        {offerMerge ? (
+          <MergeFamilyEmailNotice
+            onAddWithoutMerge={() => setMergeDismissed(true)}
+            addWithoutMergeLabel="Add child without merging"
+          />
+        ) : null}
       </section>
 
       <section className="modal-section">
@@ -251,14 +267,6 @@ export default function AddChildModal({ open, onClose, onAdded }: Props) {
         <h3>6. About this person (Optional)</h3>
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="child" />
       </section>
-      {mergeMatch && !mergeDismissed ? (
-        <MergeFamilyPrompt
-          match={mergeMatch}
-          invitePayload={mergeInvitePayload}
-          onCloseModal={onClose}
-          onDismiss={() => setMergeDismissed(true)}
-        />
-      ) : null}
     </ModalFrame>
   )
 }

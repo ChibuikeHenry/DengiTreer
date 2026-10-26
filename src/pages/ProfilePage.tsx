@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { updateProfile } from 'firebase/auth'
 import LoadingSpinner from '../components/LoadingSpinner'
 import ProfileAvatar from '../components/ProfileAvatar'
@@ -22,6 +22,7 @@ import { uploadProfilePhoto } from '../lib/profilePhoto'
 import { resolveUserProfileForForm, saveUserProfile } from '../lib/userProfile'
 
 export default function ProfilePage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const photo = usePhotoPicker()
   const [loading, setLoading] = useState(true)
@@ -138,7 +139,15 @@ export default function ProfilePage() {
 
   return (
     <div className="home profile-page">
-      <header className="profile-head">
+      <header className="profile-head profile-head-with-back">
+        <button
+          type="button"
+          className="ft-back"
+          aria-label="Go back"
+          onClick={() => navigate(-1)}
+        >
+          ←
+        </button>
         <div>
           <h1>Profile</h1>
           <p>Update your name, photo, and contact details. This is your account on DengiTree.</p>

@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
 import ProfileAvatar from './ProfileAvatar'
+import BrandLogo from './BrandLogo'
 
 type IconProps = SVGProps<SVGSVGElement>
 
@@ -118,6 +119,12 @@ export const DashIcons = {
       <line x1="22" y1="11" x2="16" y2="11" />
     </svg>
   ),
+  trendingUp: (p: IconProps = {}) => (
+    <svg {...iconProps(p)}>
+      <path d="M3 17l6-6 4 4 8-8" />
+      <path d="M14 7h7v7" />
+    </svg>
+  ),
   close: (p: IconProps = {}) => (
     <svg {...iconProps(p)}>
       <path d="M18 6 6 18" />
@@ -219,10 +226,7 @@ export default function DashboardLayout({
       />
 
       <aside className="dash-sidebar" aria-label="Dashboard">
-        <div className="dash-brand">
-          <span className="dash-brand-name">DengiTree</span>
-          <span className="dash-brand-tag">Your Family. Your Story. Connected.</span>
-        </div>
+        <BrandLogo variant="dashboard" to="/home" />
 
         <nav className="dash-nav">
           {navItems.map((item) => (

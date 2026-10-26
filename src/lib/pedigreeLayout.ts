@@ -12,12 +12,17 @@ export const PED = {
   /** distance between the centres of two neighbouring people on the same row */
   pitch: 144,
   /** vertical space between one row's boxes and the next row's */
-  rowGap: 64,
+  rowGap: 84,
   /** extra breathing room between two separate family units on a row */
   unitGap: 24,
   pad: 28,
-  /** how far above the next row the horizontal "bus" line sits */
-  busOffset: 30,
+  /** how far above the next row the lowest horizontal "bus" line sits */
+  busOffset: 42,
+  /**
+   * Two families whose buses would overlap get separate lanes this far apart, so each
+   * family's line stays visibly its own instead of merging into one long bar.
+   */
+  laneGap: 20,
   /** thickness of the connector lines (the Figma uses thin hairlines) */
   line: 2,
 } as const
@@ -174,7 +179,7 @@ export function buildPedigreeLayout({
   const selfMemberIds = new Set(
     centerSelfMemberIds.map((id) => id.trim()).filter(Boolean),
   )
-  const { nodeW, nodeH, av, pitch, rowGap, unitGap, pad, busOffset } = PED
+  const { nodeW, nodeH, av, pitch, rowGap, unitGap, pad, busOffset, laneGap } = PED
   /** visual height of an "add" circle including its label */
   const addH = av + 26
 
@@ -212,12 +217,29 @@ export function buildPedigreeLayout({
     const right = Math.max(xa, xb) - av / 2
     if (right > left) hLine(left, right, top + av / 2, dashed)
   }
-  /** from a family unit, drop to a shared bus, then to each target */
+  /**
+   * Horizontal "bus" lanes. Every family gets its own bus; if it would overlap another
+   * family's bus on the same row it moves up a lane (further from the children) instead of
+   * sharing the line. The first family to ask gets the lowest lane, which keeps verticals of
+   * the later (upper-lane) families from ever crossing it.
+   */
+  const lanesUsed = new Map<number, { x1: number; x2: number }[][]>()
+  const takeLane = (baseY: number, x1: number, x2: number) => {
+    const lanes = lanesUsed.get(baseY) ?? []
+    lanesUsed.set(baseY, lanes)
+    const clash = (lane: { x1: number; x2: number }[] | undefined) =>
+      Boolean(lane?.some((s) => x1 <= s.x2 + 20 && x2 >= s.x1 - 20))
+    let lane = 0
+    while (clash(lanes[lane])) lane += 1
+    ;(lanes[lane] ??= []).push({ x1, x2 })
+    return baseY - lane * laneGap
+  }
+  /** from a family unit, drop to its own bus, then to each target */
   const bracket = (
     fromX: number,
     fromY: number,
     targets: Target[],
-    busY: number,
+    busBaseY: number,
     dashed = false,
   ) => {
     if (!targets.length) return
@@ -225,8 +247,9 @@ export function buildPedigreeLayout({
       vLine(fromX, fromY, targets[0].y, dashed || Boolean(targets[0].dashed))
       return
     }
-    vLine(fromX, fromY, busY, dashed)
     const xs = [fromX, ...targets.map((t) => t.x)]
+    const busY = takeLane(busBaseY, Math.min(...xs), Math.max(...xs))
+    vLine(fromX, fromY, busY, dashed)
     hLine(Math.min(...xs), Math.max(...xs), busY, dashed)
     for (const t of targets) vLine(t.x, busY, t.y, dashed || Boolean(t.dashed))
   }
@@ -273,8 +296,13 @@ export function buildPedigreeLayout({
   const slots: Slot[] = []
   if (allowAdds) slots.push({ kind: 'add', modal: 'sibling', label: 'Add Sibling' })
   orderedSiblings.forEach((member) => slots.push({ kind: 'member', member }))
+  // Spouses sit on both sides of You so every couple is a neighbouring pair and its drop
+  // line never has to cross a third person: [… siblings, 2nd spouse, YOU, 1st spouse, 3rd …]
+  const leftSpouse = spouses.length > 1 ? spouses[1] : null
+  const rightSpouses = spouses.filter((_, i) => i !== 1)
+  if (leftSpouse) slots.push({ kind: 'member', member: leftSpouse })
   slots.push({ kind: 'self' })
-  spouses.forEach((member) => slots.push({ kind: 'member', member }))
+  rightSpouses.forEach((member) => slots.push({ kind: 'member', member }))
   if (allowAdds) slots.push({ kind: 'add', modal: 'spouse', label: 'Add Spouse' })
 
   const slotX = slots.map((_, i) => i * pitch)
@@ -311,14 +339,20 @@ export function buildPedigreeLayout({
 
   // you – spouse(s)
   const spouseXs = spouses.map((s) => memberX.get(s.id) as number)
+  const rightSpouseXs = rightSpouses.map((s) => memberX.get(s.id) as number)
+  if (leftSpouse) hJoin(memberX.get(leftSpouse.id) as number, selfX, selfTop)
   let prevX = selfX
-  for (const x of spouseXs) {
+  for (const x of rightSpouseXs) {
     hJoin(prevX, x, selfTop)
     prevX = x
   }
   if (allowAdds) {
     // dashed links to the add circles at each end of the row
-    hJoin(slotX[0], slotX[1], selfTop, true)
+    const afterAddSibling = slots[1]
+    if (afterAddSibling && (afterAddSibling.kind === 'self' ||
+        (afterAddSibling.kind === 'member' && afterAddSibling.member.role === 'sibling'))) {
+      hJoin(slotX[0], slotX[1], selfTop, true)
+    }
     hJoin(prevX, slotX[slots.length - 1], selfTop, true)
   }
 
@@ -337,11 +371,22 @@ export function buildPedigreeLayout({
       parentX.set(p.id, x)
       nodes.push({ key: `m:${p.id}`, kind: 'member', member: p, x, y: parentsTop })
     })
-    parents.forEach((p, i) => {
-      if (i < parents.length - 1) {
-        hJoin(parentX.get(p.id) as number, parentX.get(parents[i + 1].id) as number, parentsTop)
+    const parentLinkUnits: TreeMember[][] = []
+    if (aNodes.length) parentLinkUnits.push(aNodes)
+    for (const unit of bUnits) parentLinkUnits.push(unit.nodes)
+    const linkedParentIds = new Set(parentLinkUnits.flat().map((m) => m.id))
+    for (const p of parents) {
+      if (!linkedParentIds.has(p.id)) parentLinkUnits.push([p])
+    }
+    for (const unit of parentLinkUnits) {
+      if (unit.length < 2) continue
+      const xs = unit
+        .map((m) => parentX.get(m.id) as number)
+        .sort((a, b) => a - b)
+      for (let i = 0; i < xs.length - 1; i += 1) {
+        hJoin(xs[i], xs[i + 1], parentsTop)
       }
-    })
+    }
     if (allowAdds) {
       const x = aimX + (parents.length - aCenterIdx) * pitch
       nodes.push({
@@ -387,7 +432,11 @@ export function buildPedigreeLayout({
   } else if (orderedSiblings.length) {
     // no parents on the tree: link the siblings and you with a plain line
     const xs = [...orderedSiblings.map((s) => memberX.get(s.id) as number), selfX]
-    for (let i = 0; i < xs.length - 1; i += 1) hJoin(xs[i], xs[i + 1], selfTop)
+    for (let i = 0; i < xs.length - 1; i += 1) {
+      const blocked = leftSpouse && (memberX.get(leftSpouse.id) as number) > xs[i] &&
+        (memberX.get(leftSpouse.id) as number) < xs[i + 1]
+      if (!blocked) hJoin(xs[i], xs[i + 1], selfTop)
+    }
   }
 
   /* ----------------------------------------------------------------- grandparents */
@@ -600,8 +649,23 @@ export function buildPedigreeLayout({
   /* ----------------------------------------------------------------- children */
   if (showKids) {
     const kidsTop = rowTop(kidsRow)
-    const fromY = spouseXs.length ? selfTop + av / 2 : selfTop + nodeH - 4
     const legacySpouseX = spouseXs[0] ?? null
+    /**
+     * Where a child group's line really leaves the self row: the middle of the link between
+     * You and the co-parent when they stand side by side, otherwise straight down from the
+     * lone parent. (Kids may be nudged sideways to avoid overlap; the line must not follow.)
+     */
+    const sourceFor = (child: TreeMember): { x: number; y: number } => {
+      const fatherX = coParentX(child.sharedFatherMemberId, selfX, selfMemberIds, memberX)
+      const motherX = coParentX(child.sharedMotherMemberId, selfX, selfMemberIds, memberX)
+      const partners = [fatherX, motherX].filter((x): x is number => x != null)
+      let others = partners.filter((x) => x !== selfX)
+      if (!partners.length && legacySpouseX != null) others = [legacySpouseX]
+      if (!others.length) return { x: selfX, y: underLabelY(selfTop) }
+      const adjacent = others.every((x) => Math.abs(x - selfX) <= pitch * 1.01)
+      if (!adjacent) return { x: others[0], y: underLabelY(selfTop) }
+      return { x: (selfX + mean(others)) / 2, y: selfTop + av / 2 }
+    }
 
     const coupleGroups = new Map<string, TreeMember[]>()
     for (const child of children) {
@@ -631,8 +695,10 @@ export function buildPedigreeLayout({
 
     /** Right edge (px) of the rightmost placed child node box on this row. */
     let lastGroupRightEdge = -Infinity
+    let lastSource: { x: number; y: number } | null = null
     const halfW = nodeW / 2
     sortedGroups.forEach(([, kids]) => {
+      const source = sourceFor(kids[0])
       let anchorX = childCoupleAnchorX(
         kids[0],
         selfX,
@@ -659,12 +725,18 @@ export function buildPedigreeLayout({
         })
         groupTargets.push({ x, y: kidsTop })
       })
-      bracket(anchorX, fromY, groupTargets, kidsTop - busOffset)
+      bracket(source.x, source.y, groupTargets, kidsTop - busOffset)
+      lastSource = source
     })
 
     if (allowAdds) {
-      const addAnchorX =
-        legacySpouseX != null ? (selfX + legacySpouseX) / 2 : selfX
+      // "Add Child" hangs off the right-most family so its line never crosses another family's
+      const fallbackSource = {
+        x: legacySpouseX != null ? (selfX + legacySpouseX) / 2 : selfX,
+        y: spouseXs.length ? selfTop + av / 2 : underLabelY(selfTop),
+      }
+      const addSource: { x: number; y: number } = lastSource ?? fallbackSource
+      const addAnchorX = addSource.x
       let addX = addAnchorX
       const addLeft = addX - halfW
       if (addLeft < lastGroupRightEdge + unitGap) {
@@ -680,7 +752,7 @@ export function buildPedigreeLayout({
       })
       bracket(
         addAnchorX,
-        fromY,
+        addSource.y,
         [{ x: addX, y: kidsTop, dashed: true }],
         kidsTop - busOffset,
       )

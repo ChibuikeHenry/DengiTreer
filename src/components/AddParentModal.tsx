@@ -19,7 +19,8 @@ import {
   type ParentSlot,
 } from '../lib/siblingRelationship'
 import { useMergeEmailCheck } from '../hooks/useMergeEmailCheck'
-import MergeFamilyPrompt from './MergeFamilyPrompt'
+import { useMergeModalSubmit } from '../hooks/useMergeModalSubmit'
+import MergeFamilyEmailNotice from './MergeFamilyEmailNotice'
 
 const parentTypes = [
   {
@@ -120,6 +121,15 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
     dateOfDeath,
   ])
 
+  const { offerMerge, submitLabel, submittingText, interceptSubmit } = useMergeModalSubmit({
+    mergeMatch,
+    mergeDismissed,
+    invitePayload: mergeInvitePayload,
+    onClose,
+    defaultSubmitLabel: 'Add Family Member',
+    defaultSubmittingText: email.trim() ? 'Sending invite…' : 'Adding family member…',
+  })
+
   useEffect(() => {
     if (!open || !user?.uid) {
       setTreeMembers([])
@@ -177,9 +187,8 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
   }
 
   async function handleSubmit(event: FormEvent) {
-    event.preventDefault()
+    interceptSubmit(event, async () => {
     if (!relationship) return
-    if (mergeMatch && !mergeDismissed) return
 
     const resolvedFirst = firstName.trim() || (isUnknownParent ? 'Unknown' : '')
     const resolvedLast = lastName.trim() || (isUnknownParent ? 'Parent' : '')
@@ -215,6 +224,7 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
       parentKind,
       dateOfBirth: normalizeDateField(dob),
       dateOfDeath: status === 'deceased' ? normalizeDateField(dateOfDeath) : undefined,
+    })
     })
   }
 
@@ -443,6 +453,12 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
                 their information later when you learn more.
               </p>
             ) : null}
+            {offerMerge ? (
+              <MergeFamilyEmailNotice
+                onAddWithoutMerge={() => setMergeDismissed(true)}
+                addWithoutMergeLabel="Add parent without merging"
+              />
+            ) : null}
           </section>
 
           <section className="modal-section">
@@ -456,21 +472,12 @@ export default function AddParentModal({ open, onClose, onAdded }: AddParentModa
             </p>
           ) : null}
 
-          {mergeMatch && !mergeDismissed ? (
-            <MergeFamilyPrompt
-              match={mergeMatch}
-              invitePayload={mergeInvitePayload}
-              onCloseModal={onClose}
-              onDismiss={() => setMergeDismissed(true)}
-            />
-          ) : null}
-
           <footer className="modal-actions">
             <button type="button" className="btn-modal-outline" onClick={handleClose}>
               Cancel
             </button>
             <button type="submit" className="btn-modal-primary" disabled={submitting}>
-              {submitting ? (email.trim() ? 'Sending invite…' : 'Adding family member…') : 'Add Family Member'}
+              {submitting ? submittingText : submitLabel}
             </button>
           </footer>
         </form>

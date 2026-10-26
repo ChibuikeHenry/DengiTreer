@@ -12,7 +12,6 @@ import {
   resolveChildCoParentMemberId,
   selfCoParentMemberIds,
 } from '../hooks/useTreeParentPickOptions'
-import MemberPrivacyFields from './MemberPrivacyFields'
 import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import {
@@ -20,7 +19,6 @@ import {
   removeFamilyMemberFromTree,
   updatePendingFamilyMemberProfile,
 } from '../lib/invitations'
-import { parseMemberPrivacy, type MemberPrivacy } from '../lib/memberPrivacy'
 import { uploadFamilyMemberPhoto } from '../lib/profilePhoto'
 import { resolveTreeMemberGender, type TreeMember } from '../lib/familyTreeMembers'
 import {
@@ -60,7 +58,6 @@ export default function EditFamilyMemberModal({
   const [dod, setDod] = useState('')
   const [status, setStatus] = useState<'living' | 'deceased'>('living')
   const [bio, setBio] = useState('')
-  const [privacy, setPrivacy] = useState<MemberPrivacy>('family_members')
 
   const isParent = member?.role === 'parent'
   const usesSharedParents = member?.role === 'child' || member?.role === 'sibling'
@@ -97,7 +94,6 @@ export default function EditFamilyMemberModal({
     setDod(member.dateOfDeath ?? '')
     setStatus(member.memberStatus)
     setBio(member.bio)
-    setPrivacy(parseMemberPrivacy(member.privacy))
     setParentKind(member.parentKind ?? 'biological')
     setParentSlot(slot)
     setFatherId(member.sharedFatherMemberId ?? '')
@@ -178,7 +174,6 @@ export default function EditFamilyMemberModal({
         dateOfBirth: dob.trim() || null,
         dateOfDeath: status === 'deceased' ? dod.trim() || null : null,
         memberStatus: status,
-        privacy,
         gender: genderSave,
         ...(isParent ? { parentKind, parentSlot } : {}),
         ...(member.role === 'child' || member.role === 'sibling'
@@ -331,8 +326,6 @@ export default function EditFamilyMemberModal({
         <h3>3. Bio &amp; Notes</h3>
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="edit-member" />
       </section>
-
-      <MemberPrivacyFields privacy={privacy} onPrivacyChange={setPrivacy} sectionNumber={4} />
 
       <section className="modal-section modal-section-danger">
         <h3>Remove from tree</h3>

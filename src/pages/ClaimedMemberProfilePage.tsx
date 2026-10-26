@@ -7,6 +7,7 @@ import {
   avatarGenderToneForMember,
   buildTreeAvatarViewer,
   memberRelationshipLabel,
+  resolveSharedParentMembers,
   subscribeTreeMembers,
   treeMemberRoleLabel,
   type TreeMember,
@@ -19,7 +20,12 @@ import {
 } from '../lib/invitations'
 import { isClaimedTreeMember } from '../lib/profileClaim'
 import { resolveExploreAccess } from '../lib/treeExplore'
-import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
+import {
+  fetchUserProfile,
+  profileFullName,
+  resolveUserProfileForForm,
+  type UserProfile,
+} from '../lib/userProfile'
 
 function FieldIcon({ children }: { children: ReactNode }) {
   return <span className="claimed-field-icon" aria-hidden="true">{children}</span>
@@ -46,6 +52,7 @@ export default function ClaimedMemberProfilePage() {
   const [viewerPosition, setViewerPosition] = useState<string | null>(null)
   const [canExplore, setCanExplore] = useState(false)
   const [exploreRootUid, setExploreRootUid] = useState<string | null>(null)
+  const [treeOwnerProfile, setTreeOwnerProfile] = useState<UserProfile | null>(null)
 
   useEffect(() => {
     if (!treeOwnerUid) {
@@ -66,6 +73,20 @@ export default function ClaimedMemberProfilePage() {
         setMembersReady(true)
       },
     )
+  }, [treeOwnerUid])
+
+  useEffect(() => {
+    if (!treeOwnerUid) {
+      setTreeOwnerProfile(null)
+      return
+    }
+    let cancelled = false
+    void fetchUserProfile(treeOwnerUid).then((profile) => {
+      if (!cancelled) setTreeOwnerProfile(profile)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [treeOwnerUid])
 
   useEffect(() => {
@@ -148,8 +169,7 @@ export default function ClaimedMemberProfilePage() {
 
   const roleLabel =
     memberRelationshipLabel(member) ?? treeMemberRoleLabel(member)
-  const father = members.find((m) => m.id === member.sharedFatherMemberId) ?? null
-  const mother = members.find((m) => m.id === member.sharedMotherMemberId) ?? null
+  const { father, mother } = resolveSharedParentMembers(member, members, treeOwnerProfile)
   const dob = formatDisplayDate(member.dateOfBirth)
   const bio = formatBioForDisplay(member.bio)
   const genderTone = avatarGenderToneForMember(member, avatarViewer)
