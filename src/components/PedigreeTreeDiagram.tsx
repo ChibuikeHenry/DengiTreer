@@ -164,6 +164,9 @@ export default function PedigreeTreeDiagram({
   maxScale?: number
   handleRef?: Ref<PedigreeTreeHandle>
 }) {
+  // Lines that leave from under a person must start right below their real text, so the
+  // rendered height of every person (avatar + labels) is measured and fed back to the layout.
+  const [labelHeights, setLabelHeights] = useState<Record<string, number>>({})
   const layout = useMemo(
     () =>
       buildPedigreeLayout({
@@ -172,8 +175,9 @@ export default function PedigreeTreeDiagram({
         centerSelfMemberIds,
         selfFatherMemberId: centerFatherMemberId,
         selfMotherMemberId: centerMotherMemberId,
+        labelHeights,
       }),
-    [members, allowAdds, centerSelfMemberIds, centerFatherMemberId, centerMotherMemberId],
+    [members, allowAdds, centerSelfMemberIds, centerFatherMemberId, centerMotherMemberId, labelHeights],
   )
 
   // scale the whole canvas down (or up in full view) so it fits the available width
@@ -192,6 +196,26 @@ export default function PedigreeTreeDiagram({
   const scale = Math.max(MIN_SCALE, Math.min(maxScale, fit))
 
   const canvasRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const measure = () => {
+      const next: Record<string, number> = {}
+      canvas.querySelectorAll<HTMLElement>('[data-ped-person]').forEach((el) => {
+        const person = el.firstElementChild as HTMLElement | null
+        if (person) next[el.dataset.pedPerson as string] = Math.ceil(person.offsetHeight)
+      })
+      setLabelHeights((prev) => {
+        const keys = Object.keys(next)
+        const same =
+          keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === next[k])
+        return same ? prev : next
+      })
+    }
+    measure()
+    // web fonts finishing loading change how tall the text is
+    void document.fonts?.ready.then(measure)
+  }, [layout, selfName, selfDateOfBirth, selfHasProfileName, centerRoleLabel])
   useImperativeHandle(
     handleRef,
     () => ({
@@ -300,6 +324,7 @@ export default function PedigreeTreeDiagram({
             <div
               key={node.key}
               className="ped-node"
+              data-ped-person={node.kind === 'member' ? node.member.id : node.kind === 'self' ? 'self' : undefined}
               style={{ left: node.x - PED.nodeW / 2, top: node.y, width: PED.nodeW }}
             >
               {node.kind === 'member' ? (

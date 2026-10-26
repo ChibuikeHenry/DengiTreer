@@ -236,6 +236,8 @@ function buildParentFamilies(
   parents: TreeMember[],
   siblings: TreeMember[],
   selfParents: TreeMember[],
+  selfFather: TreeMember | null,
+  selfMother: TreeMember | null,
 ) {
   const selfFamily: ParentFamily = {
     key: familyKey(selfParents),
@@ -247,10 +249,12 @@ function buildParentFamilies(
   const byKey = new Map<string, ParentFamily>([[selfFamily.key, selfFamily]])
 
   for (const sibling of siblings) {
+    // A sibling shares your parents unless told otherwise: a father or mother that was not
+    // recorded for them is yours (the same rule their profile page uses to show their parents).
     const linked = uniqueById(
       [
-        findLinkedParent(parents, sibling.sharedFatherMemberId),
-        findLinkedParent(parents, sibling.sharedMotherMemberId),
+        findLinkedParent(parents, sibling.sharedFatherMemberId) ?? selfFather,
+        findLinkedParent(parents, sibling.sharedMotherMemberId) ?? selfMother,
       ].filter(present),
     )
     // no (resolvable) parent recorded: they belong with the centre person
@@ -421,6 +425,12 @@ type LayoutInput = {
   /** The centre person's own father / mother (their profile links to a parent on the tree). */
   selfFatherMemberId?: string | null
   selfMotherMemberId?: string | null
+  /**
+   * Measured height (px) of each person's avatar + labels, by member id (`self` for the centre
+   * person). Lines that leave from under a person start right below their real text instead
+   * of a guessed spot; until measured, a generous default is used.
+   */
+  labelHeights?: Record<string, number>
 }
 
 /**
@@ -449,6 +459,7 @@ function layoutPass(
     centerSelfMemberIds = [],
     selfFatherMemberId = null,
     selfMotherMemberId = null,
+    labelHeights = {},
   }: LayoutInput,
   /** extra vertical space (px) to add above each row, indexed by row */
   extraBefore: number[],
@@ -487,6 +498,12 @@ function layoutPass(
 
   const nodes: PedNode[] = []
   const segs: PedSeg[] = []
+
+  // a lone person (or an odd household with no clear couple) leaves from under their label
+  const underLabelY = (top: number, id?: string) => {
+    const measured = id != null ? labelHeights[id] : undefined
+    return top + (measured != null ? measured + 4 : nodeH - 4)
+  }
 
   const vLine = (x: number, y1: number, y2: number, dashed = false) =>
     segs.push({ x1: x, y1: Math.min(y1, y2), x2: x, y2: Math.max(y1, y2), dashed })
@@ -542,7 +559,13 @@ function layoutPass(
 
   /* ---------------------------------------------------------------- parents */
   const selfParentLinks = resolveSelfParents(parents, selfFatherMemberId, selfMotherMemberId)
-  const { families, selfFamily } = buildParentFamilies(parents, siblings, selfParentLinks.all)
+  const { families, selfFamily } = buildParentFamilies(
+    parents,
+    siblings,
+    selfParentLinks.all,
+    selfParentLinks.father,
+    selfParentLinks.mother,
+  )
   const { blocks: parentBlocks, adj: parentLinks } = orderParentRow(parents, families, selfFamily)
   const parentRowOrder = parentBlocks.flat()
   // each parent's place along the row, measured from its left end (blocks get a small gap)
@@ -562,45 +585,31 @@ function layoutPass(
 
   // siblings sit under the family they belong to: other families left to right (matching
   // their parents' order), then the centre person's own siblings right next to them
-  const siblingFamilyKey = new Map<string, string>()
-  for (const family of families) for (const kid of family.kids) siblingFamilyKey.set(kid.id, family.key)
   const sideFamilies = families
     .map((family, i) => ({ family, i }))
     .filter(({ family }) => !family.isSelf)
     .sort((a, b) => familyRel(a.family) - familyRel(b.family) || a.i - b.i)
     .map(({ family }) => family)
-  const orderedSiblings = [...sideFamilies.flatMap((f) => f.kids), ...selfFamily.kids]
 
   /* ------------------------------------------------- self row: sibs / you / spouse */
-  type Slot = (
+  type Slot =
     | { kind: 'add'; modal: MemberModalKind; label: string }
     | { kind: 'member'; member: TreeMember }
     | { kind: 'self' }
-  ) & { gapBefore?: boolean }
-  const slots: Slot[] = []
-  if (allowAdds) slots.push({ kind: 'add', modal: 'sibling', label: 'Add Sibling' })
-  // a little extra room between one family's children and the next family's
-  let previousGroup: string | null = null
-  orderedSiblings.forEach((member) => {
-    const group = siblingFamilyKey.get(member.id) ?? selfFamily.key
-    slots.push({ kind: 'member', member, gapBefore: previousGroup !== null && previousGroup !== group })
-    previousGroup = group
-  })
-  const selfGap = previousGroup !== null && previousGroup !== selfFamily.key
+  // The centre person's own row is laid out first: [… siblings, 2nd spouse, YOU, 1st spouse, 3rd …].
   // Spouses sit on both sides of You so every couple is a neighbouring pair and its drop
-  // line never has to cross a third person: [… siblings, 2nd spouse, YOU, 1st spouse, 3rd …]
+  // line never has to cross a third person. Siblings from other families are placed later,
+  // once the parents row is known, so each can stand straight under their own parents.
+  const slots: Slot[] = []
+  selfFamily.kids.forEach((member) => slots.push({ kind: 'member', member }))
   const leftSpouse = spouses.length > 1 ? spouses[1] : null
   const rightSpouses = spouses.filter((_, i) => i !== 1)
-  if (leftSpouse) slots.push({ kind: 'member', member: leftSpouse, gapBefore: selfGap })
-  slots.push({ kind: 'self', gapBefore: selfGap && !leftSpouse })
+  if (leftSpouse) slots.push({ kind: 'member', member: leftSpouse })
+  slots.push({ kind: 'self' })
   rightSpouses.forEach((member) => slots.push({ kind: 'member', member }))
   if (allowAdds) slots.push({ kind: 'add', modal: 'spouse', label: 'Add Spouse' })
 
-  let slotCursor = 0
-  const slotX = slots.map((slot, i) => {
-    if (i > 0) slotCursor += pitch + (slot.gapBefore ? unitGap : 0)
-    return slotCursor
-  })
+  const slotX = slots.map((_, i) => i * pitch)
   const selfIdx = slots.findIndex((s) => s.kind === 'self')
   const selfX = slotX[selfIdx]
   const selfTop = rowTop(selfRow)
@@ -608,29 +617,23 @@ function layoutPass(
   slots.forEach((slot, i) => {
     if (slot.kind === 'member') memberX.set(slot.member.id, slotX[i])
   })
-
-  slots.forEach((slot, i) => {
+  const pushSelfRowNode = (slot: Slot, x: number) => {
     if (slot.kind === 'self') {
-      nodes.push({ key: 'self', kind: 'self', x: slotX[i], y: selfTop })
+      nodes.push({ key: 'self', kind: 'self', x, y: selfTop })
     } else if (slot.kind === 'member') {
-      nodes.push({
-        key: `m:${slot.member.id}`,
-        kind: 'member',
-        member: slot.member,
-        x: slotX[i],
-        y: selfTop,
-      })
+      nodes.push({ key: `m:${slot.member.id}`, kind: 'member', member: slot.member, x, y: selfTop })
     } else {
       nodes.push({
         key: `add:${slot.modal}`,
         kind: 'add',
         modal: slot.modal,
         label: slot.label,
-        x: slotX[i],
+        x,
         y: selfTop,
       })
     }
-  })
+  }
+  slots.forEach((slot, i) => pushSelfRowNode(slot, slotX[i]))
 
   // you – spouse(s)
   const spouseXs = spouses.map((s) => memberX.get(s.id) as number)
@@ -642,13 +645,24 @@ function layoutPass(
     prevX = x
   }
   if (allowAdds) {
-    // dashed links to the add circles at each end of the row
-    const afterAddSibling = slots[1]
-    if (afterAddSibling && (afterAddSibling.kind === 'self' ||
-        (afterAddSibling.kind === 'member' && afterAddSibling.member.role === 'sibling'))) {
-      hJoin(slotX[0], slotX[1], selfTop, true)
-    }
+    // dashed link to the add circle at the right-hand end of the row
     hJoin(prevX, slotX[slots.length - 1], selfTop, true)
+  }
+
+  /** Puts a sibling on the self row (outside the core slots) and remembers where. */
+  const placeSibling = (member: TreeMember, x: number) => {
+    memberX.set(member.id, x)
+    pushSelfRowNode({ kind: 'member', member }, x)
+  }
+  /** "Add Sibling" sits at the left-hand end, dashed-linked to whoever is next to it. */
+  const placeAddSibling = (leftmostSiblingX: number | null) => {
+    if (!allowAdds) return
+    const leftEdge = Math.min(leftmostSiblingX ?? Infinity, slotX[0])
+    const x = leftEdge - pitch
+    pushSelfRowNode({ kind: 'add', modal: 'sibling', label: 'Add Sibling' }, x)
+    // the next person along is a sibling, or You when nobody stands between
+    const next = leftmostSiblingX ?? (leftSpouse ? null : selfX)
+    if (next != null) hJoin(x, next, selfTop, true)
   }
 
   /* --------------------------------------------------------------- parents row */
@@ -666,6 +680,17 @@ function layoutPass(
       const x = aimX + (parentRel.get(p.id) as number) - anchor
       parentX.set(p.id, x)
       nodes.push({ key: `m:${p.id}`, kind: 'member', member: p, x, y: parentsTop })
+    }
+    // Children of other families stand straight under their own parents where there is room;
+    // when two groups would collide the left one is nudged further left.
+    let rightBound = slotX[0]
+    for (const family of [...sideFamilies].reverse()) {
+      if (!family.kids.length) continue
+      const span = (family.kids.length - 1) * pitch
+      const ideal = mean(family.parents.map((p) => parentX.get(p.id) as number))
+      const center = Math.min(ideal, rightBound - pitch - unitGap - span / 2)
+      family.kids.forEach((kid, j) => placeSibling(kid, center + (j - (family.kids.length - 1) / 2) * pitch))
+      rightBound = center - span / 2
     }
     // father–mother (and step-marriage) links between neighbours
     const joinedPairs = new Set<string>()
@@ -697,7 +722,6 @@ function layoutPass(
 
     // parents → their children, one bracket per family so lines never share a bus
     const busToSelf = selfTop - busOffset
-    const underLabel = parentsTop + nodeH - 4
     const dropOrder = [selfFamily, ...families.filter((f) => !f.isSelf && f.kids.length)]
     for (const family of dropOrder) {
       const kidXs = family.kids.map((s) => memberX.get(s.id) as number)
@@ -708,7 +732,7 @@ function layoutPass(
         // no parents on the tree yet: dashed line up to the "Add Parent" circle
         bracket(aimX, parentsTop + addH, targets, busToSelf, true)
       } else if (xs.length === 1) {
-        bracket(xs[0], underLabel, targets, busToSelf)
+        bracket(xs[0], underLabelY(parentsTop, family.parents[0].id), targets, busToSelf)
       } else if (standNextToEachOther(family.parents[0], family.parents[1])) {
         // leave from the middle of the father–mother link
         bracket(mean(xs), parentsTop + av / 2, targets, busToSelf)
@@ -716,20 +740,24 @@ function layoutPass(
         // a couple that is not side by side: both drop onto one shared bus
         const all = [...xs, ...kidXs]
         const busY = takeLane(busToSelf, Math.min(...all), Math.max(...all))
-        for (const x of xs) vLine(x, underLabel, busY)
+        family.parents.forEach((p, i) => vLine(xs[i], underLabelY(parentsTop, p.id), busY))
         hLine(Math.min(...all), Math.max(...all), busY)
         for (const t of targets) vLine(t.x, busY, t.y)
       }
     }
-  } else if (orderedSiblings.length) {
+  } else if (selfFamily.kids.length) {
     // no parents on the tree: link the siblings and you with a plain line
-    const xs = [...orderedSiblings.map((s) => memberX.get(s.id) as number), selfX]
+    const xs = [...selfFamily.kids.map((s) => memberX.get(s.id) as number), selfX]
     for (let i = 0; i < xs.length - 1; i += 1) {
       const blocked = leftSpouse && (memberX.get(leftSpouse.id) as number) > xs[i] &&
         (memberX.get(leftSpouse.id) as number) < xs[i + 1]
       if (!blocked) hJoin(xs[i], xs[i + 1], selfTop)
     }
   }
+
+  placeAddSibling(
+    siblings.length ? Math.min(...siblings.map((s) => memberX.get(s.id) as number)) : null,
+  )
 
   /* ----------------------------------------------------------------- grandparents */
   const gpTop = showGP ? rowTop(gpRow) : 0
@@ -756,8 +784,6 @@ function layoutPass(
     const fallback = key === 'paternal' ? selfMother : selfFather
     return [{ x: px(fallback ?? selfParents[0]), y: parentsTop, dashed: true }]
   }
-  // a lone person (or an odd household with no clear couple) leaves from under their label
-  const underLabelY = (top: number) => top + nodeH - 4
 
   /** Group grandparents for drawing; legacy rows without lineageSide join a side when unambiguous. */
   const bucketGrandparents = (all: TreeMember[]) => {
@@ -821,7 +847,9 @@ function layoutPass(
       if (target.length) {
         bracket(
           dropX,
-          unit.anchor.atAvatar ? gpTop + av / 2 : underLabelY(gpTop),
+          unit.anchor.atAvatar
+            ? gpTop + av / 2
+            : underLabelY(gpTop, unit.nodes[Math.floor(n / 2)]?.id),
           target,
           busToParents,
         )
@@ -929,7 +957,9 @@ function layoutPass(
       if (targets.length) {
         bracket(
           dropX,
-          unit.anchor.atAvatar ? ggTop + av / 2 : underLabelY(ggTop),
+          unit.anchor.atAvatar
+            ? ggTop + av / 2
+            : underLabelY(ggTop, unit.nodes[Math.floor(n / 2)]?.id),
           targets,
           busToGP,
         )
@@ -952,9 +982,12 @@ function layoutPass(
       const partners = [fatherX, motherX].filter((x): x is number => x != null)
       let others = partners.filter((x) => x !== selfX)
       if (!partners.length && legacySpouseX != null) others = [legacySpouseX]
-      if (!others.length) return { x: selfX, y: underLabelY(selfTop) }
+      if (!others.length) return { x: selfX, y: underLabelY(selfTop, 'self') }
       const adjacent = others.every((x) => Math.abs(x - selfX) <= pitch * 1.01)
-      if (!adjacent) return { x: others[0], y: underLabelY(selfTop) }
+      if (!adjacent) {
+        const partnerId = [...memberX].find(([, mx]) => mx === others[0])?.[0]
+        return { x: others[0], y: underLabelY(selfTop, partnerId) }
+      }
       return { x: (selfX + mean(others)) / 2, y: selfTop + av / 2 }
     }
 
@@ -1024,7 +1057,7 @@ function layoutPass(
       // "Add Child" hangs off the right-most family so its line never crosses another family's
       const fallbackSource = {
         x: legacySpouseX != null ? (selfX + legacySpouseX) / 2 : selfX,
-        y: spouseXs.length ? selfTop + av / 2 : underLabelY(selfTop),
+        y: spouseXs.length ? selfTop + av / 2 : underLabelY(selfTop, 'self'),
       }
       const addSource: { x: number; y: number } = lastSource ?? fallbackSource
       const addAnchorX = addSource.x
