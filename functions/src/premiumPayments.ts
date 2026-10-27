@@ -18,7 +18,7 @@ const PLANS: Record<PremiumPlanId, PremiumPlanDef> = {
   monthly: { id: 'monthly', amountKobo: 1_000_00, accessDays: 30, label: 'Premium — 1 month' },
   quarterly: {
     id: 'quarterly',
-    amountKobo: 5_000_00,
+    amountKobo: 2_500_00,
     accessDays: 90,
     label: 'Premium — 3 months',
   },

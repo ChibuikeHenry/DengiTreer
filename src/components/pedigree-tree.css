@@ -29,8 +29,8 @@
   z-index: 0;
   overflow: visible;
   pointer-events: none;
-  stroke: var(--ped-line);
-  stroke-width: 2;
+  stroke: var(--ped-link, #a9b4a1);
+  stroke-width: var(--ped-link-w, 1.75px);
   fill: none;
 }
 

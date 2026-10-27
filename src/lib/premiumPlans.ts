@@ -34,7 +34,7 @@ export const PREMIUM_PLANS: Record<PremiumPlanId, PremiumPlan> = {
   },
   quarterly: {
     id: 'quarterly',
-    amountNaira: 5_000,
+    amountNaira: 2_500,
     priceSuffix: '/ quarter',
     pickerLabel: '/ quarterly',
     accessDays: 90,

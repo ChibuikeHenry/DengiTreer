@@ -23,9 +23,14 @@ export const PED = {
    * family's line stays visibly its own instead of merging into one long bar.
    */
   laneGap: 20,
-  /** thickness of the connector lines (the Figma uses thin hairlines) */
-  line: 2,
+  /** thickness of the connector lines (thin, light hairlines) */
+  line: 1.75,
+  /** radius of the rounded elbows where a bus line turns down towards a person */
+  corner: 12,
 } as const
+
+/** colour of the connector lines */
+export const PED_LINE_COLOR = '#a9b4a1'
 
 export type PedNode =
   | { key: string; kind: 'member'; member: TreeMember; x: number; y: number }
@@ -40,6 +45,81 @@ export type PedNode =
     }
 
 export type PedSeg = { x1: number; y1: number; x2: number; y2: number; dashed: boolean }
+
+/**
+ * Turns the straight line pieces into smooth SVG paths: where two pieces meet end to end in
+ * an "L" (a bus line turning down towards a person) the corner is rounded; T-junctions and
+ * crossings stay sharp. Dashed and solid pieces come back as separate paths.
+ */
+export function buildLinePaths(
+  segs: PedSeg[],
+  radius: number = PED.corner,
+): { solid: string; dashed: string } {
+  type Piece = { x1: number; y1: number; x2: number; y2: number; dashed: boolean }
+  const pieces: Piece[] = segs
+    .filter((g) => g.x1 !== g.x2 || g.y1 !== g.y2)
+    .map((g) => ({ ...g }))
+  const isH = (g: Piece) => g.y1 === g.y2
+  const len = (g: Piece) => Math.abs(g.x2 - g.x1) + Math.abs(g.y2 - g.y1)
+  const keyOf = (x: number, y: number) => `${Math.round(x * 10)}:${Math.round(y * 10)}`
+
+  const ends = new Map<string, { piece: number; end: 1 | 2 }[]>()
+  pieces.forEach((g, i) => {
+    for (const end of [1, 2] as const) {
+      const key = keyOf(end === 1 ? g.x1 : g.x2, end === 1 ? g.y1 : g.y2)
+      const list = ends.get(key) ?? []
+      list.push({ piece: i, end })
+      ends.set(key, list)
+    }
+  })
+  const passesThrough = (x: number, y: number) =>
+    pieces.some((g) =>
+      isH(g)
+        ? y === g.y1 && x > Math.min(g.x1, g.x2) && x < Math.max(g.x1, g.x2)
+        : x === g.x1 && y > Math.min(g.y1, g.y2) && y < Math.max(g.y1, g.y2),
+    )
+
+  /** how far each end of each piece is pulled back to make room for a corner */
+  const trim = pieces.map(() => ({ 1: 0, 2: 0 }))
+  const corners: { a: number; aEnd: 1 | 2; b: number; bEnd: 1 | 2; r: number }[] = []
+  for (const [key, list] of ends) {
+    if (list.length !== 2 || list[0].piece === list[1].piece) continue
+    const [a, b] = list
+    const ga = pieces[a.piece]
+    const gb = pieces[b.piece]
+    if (isH(ga) === isH(gb) || ga.dashed !== gb.dashed) continue
+    const [x, y] = key.split(':').map((v) => Number(v) / 10)
+    if (passesThrough(x, y)) continue
+    const r = Math.min(radius, len(ga) / 2, len(gb) / 2)
+    if (r < 2) continue
+    trim[a.piece][a.end] = Math.max(trim[a.piece][a.end], r)
+    trim[b.piece][b.end] = Math.max(trim[b.piece][b.end], r)
+    corners.push({ a: a.piece, aEnd: a.end, b: b.piece, bEnd: b.end, r })
+  }
+
+  const pointAlong = (g: Piece, end: 1 | 2, by: number) => {
+    const [fx, fy, tx, ty] = end === 1 ? [g.x1, g.y1, g.x2, g.y2] : [g.x2, g.y2, g.x1, g.y1]
+    const d = Math.abs(tx - fx) + Math.abs(ty - fy)
+    return { x: fx + ((tx - fx) / d) * by, y: fy + ((ty - fy) / d) * by }
+  }
+  const num = (v: number) => Number(v.toFixed(2))
+  const out = { solid: '', dashed: '' }
+  pieces.forEach((g, i) => {
+    const a = pointAlong(g, 1, trim[i][1])
+    const b = pointAlong(g, 2, trim[i][2])
+    out[g.dashed ? 'dashed' : 'solid'] += `M${num(a.x)} ${num(a.y)}L${num(b.x)} ${num(b.y)}`
+  })
+  for (const c of corners) {
+    const ga = pieces[c.a]
+    const gb = pieces[c.b]
+    const from = pointAlong(ga, c.aEnd, c.r)
+    const to = pointAlong(gb, c.bEnd, c.r)
+    const corner = c.aEnd === 1 ? { x: ga.x1, y: ga.y1 } : { x: ga.x2, y: ga.y2 }
+    out[ga.dashed ? 'dashed' : 'solid'] +=
+      `M${num(from.x)} ${num(from.y)}Q${num(corner.x)} ${num(corner.y)} ${num(to.x)} ${num(to.y)}`
+  }
+  return out
+}
 
 export type PedigreeLayout = {
   nodes: PedNode[]

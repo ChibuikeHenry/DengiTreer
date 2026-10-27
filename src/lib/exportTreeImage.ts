@@ -1,9 +1,9 @@
-import { PED, type PedigreeLayout } from './pedigreeLayout'
+import { PED, PED_LINE_COLOR, buildLinePaths, type PedigreeLayout } from './pedigreeLayout'
 
 const SCALE = 2
 const MARGIN = 40
 const BACKGROUND = '#eef6e8'
-const LINE_COLOR = '#3f5f2a'
+const LINE_COLOR = PED_LINE_COLOR
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -136,13 +136,9 @@ export async function renderTreePng(
   // lines
   ctx.strokeStyle = LINE_COLOR
   ctx.lineWidth = PED.line
-  ctx.lineCap = 'square'
-  for (const s of segs) {
-    ctx.beginPath()
-    ctx.moveTo(s.x1, s.y1)
-    ctx.lineTo(s.x2, s.y2)
-    ctx.stroke()
-  }
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.stroke(new Path2D(buildLinePaths(segs).solid))
 
   // people
   const photos = await Promise.all(people.map((p) => (p.photo ? loadImage(p.photo) : null)))

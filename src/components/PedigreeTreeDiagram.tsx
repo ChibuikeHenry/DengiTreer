@@ -23,7 +23,7 @@ import type { AvatarGenderTone } from './ProfileAvatar'
 import { formatLifeYearsLine } from '../lib/lifeDates'
 import type { MemberPrivacy } from '../lib/memberPrivacy'
 import { isClaimedTreeMember } from '../lib/profileClaim'
-import { PED, buildPedigreeLayout } from '../lib/pedigreeLayout'
+import { PED, PED_LINE_COLOR, buildLinePaths, buildPedigreeLayout } from '../lib/pedigreeLayout'
 import { renderTreePng } from '../lib/exportTreeImage'
 import type { DashboardContext } from '../pages/HomePage'
 import './pedigree-tree.css'
@@ -180,6 +180,8 @@ export default function PedigreeTreeDiagram({
     [members, allowAdds, centerSelfMemberIds, centerFatherMemberId, centerMotherMemberId, labelHeights],
   )
 
+  const linePaths = useMemo(() => buildLinePaths(layout.segs), [layout])
+
   // scale the whole canvas down (or up in full view) so it fits the available width
   const wrapRef = useRef<HTMLDivElement>(null)
   const [wrapWidth, setWrapWidth] = useState(0)
@@ -280,6 +282,8 @@ export default function PedigreeTreeDiagram({
     height: layout.height * scale,
     '--ped-av': `${PED.av}px`,
     '--ped-node-h': `${PED.nodeH}px`,
+    '--ped-link': PED_LINE_COLOR,
+    '--ped-link-w': `${PED.line}px`,
   }
 
   return (
@@ -305,19 +309,12 @@ export default function PedigreeTreeDiagram({
             height={layout.height}
             aria-hidden="true"
           >
-            {layout.segs.map((seg, i) => (
-              <line
-                key={i}
-                x1={seg.x1}
-                y1={seg.y1}
-                x2={seg.x2}
-                y2={seg.y2}
-                strokeDasharray={seg.dashed ? '5 5' : undefined}
-                strokeLinejoin="round"
-                strokeLinecap={seg.dashed ? 'butt' : 'round'}
-                style={{ strokeWidth: PED.line }}
-              />
-            ))}
+            {linePaths.solid ? (
+              <path d={linePaths.solid} strokeLinecap="round" strokeLinejoin="round" />
+            ) : null}
+            {linePaths.dashed ? (
+              <path d={linePaths.dashed} strokeDasharray="5 5" strokeLinecap="butt" />
+            ) : null}
           </svg>
 
           {layout.nodes.map((node) => (

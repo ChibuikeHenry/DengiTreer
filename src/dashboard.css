@@ -3723,6 +3723,74 @@
   cursor: not-allowed;
 }
 
+.share-tree-panel {
+  max-width: 32rem;
+}
+
+.share-tree-body {
+  padding: 0 1.5rem 1.5rem;
+}
+
+.share-tree-body .modal-section h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.share-tree-preview {
+  margin-top: 0.75rem;
+  border: 1px solid var(--dash-border, #e2e8df);
+  border-radius: 12px;
+  background: #f1f7ec;
+  padding: 0.75rem;
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.share-tree-preview-loading {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--dash-muted);
+}
+
+.share-tree-preview-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.share-tree-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.share-tree-actions .modal-submit {
+  flex: 1 1 auto;
+  min-width: 10rem;
+}
+
+.share-tree-secondary {
+  flex: 1 1 auto;
+  min-width: 10rem;
+  border: 1px solid var(--dash-brand);
+  border-radius: 999px;
+  padding: 0.65rem 1.25rem;
+  font: inherit;
+  font-weight: 700;
+  background: #fff;
+  color: var(--dash-brand);
+  cursor: pointer;
+}
+
+.share-tree-secondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .inv-form-fields {
   display: grid;
   gap: 1rem;

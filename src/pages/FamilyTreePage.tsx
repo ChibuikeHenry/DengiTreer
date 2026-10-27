@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { DashIcons } from '../components/DashboardLayout'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
+import ShareTreeModal from '../components/ShareTreeModal'
 import ProfileAvatar from '../components/ProfileAvatar'
 import PedigreeTreeDiagram, { type PedigreeTreeHandle } from '../components/PedigreeTreeDiagram'
 import { useAuth } from '../context/AuthContext'
@@ -132,6 +133,8 @@ export default function FamilyTreePage() {
   const treeRef = useRef<PedigreeTreeHandle>(null)
   const [downloading, setDownloading] = useState(false)
   const [downloadPending, setDownloadPending] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [sharePending, setSharePending] = useState(false)
   const [members, setMembers] = useState<TreeMember[]>([])
   const [centerPhotoURL, setCenterPhotoURL] = useState<string | null>(null)
   const [centerName, setCenterName] = useState('')
@@ -352,6 +355,13 @@ export default function FamilyTreePage() {
     })
   }
 
+  const exportTreePng = useCallback((caption?: string) => {
+    if (!treeRef.current) {
+      return Promise.reject(new Error('Tree is not ready yet.'))
+    }
+    return treeRef.current.exportPng(caption)
+  }, [])
+
   async function runDownload() {
     if (!treeRef.current || downloading) return
     setDownloading(true)
@@ -386,6 +396,20 @@ export default function FamilyTreePage() {
     void runDownload()
   }
 
+  function handleShareTree() {
+    if (isExploreView) return
+    if (!selfAdded) {
+      openModal('yourself')
+      return
+    }
+    if (view !== 'tree') {
+      setView('tree')
+      setSharePending(true)
+      return
+    }
+    setShareOpen(true)
+  }
+
   useEffect(() => {
     if (!downloadPending || view !== 'tree') return
     const id = window.setTimeout(() => {
@@ -395,6 +419,15 @@ export default function FamilyTreePage() {
     return () => window.clearTimeout(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadPending, view])
+
+  useEffect(() => {
+    if (!sharePending || view !== 'tree') return
+    const id = window.setTimeout(() => {
+      setSharePending(false)
+      setShareOpen(true)
+    }, 150)
+    return () => window.clearTimeout(id)
+  }, [sharePending, view])
 
   function toggleFullTreeView() {
     setView('tree')
@@ -428,7 +461,7 @@ export default function FamilyTreePage() {
     {
       label: 'Share Tree',
       icon: DashIcons.mail,
-      action: () => navigate('/home/invitations'),
+      action: handleShareTree,
     },
   ] as const
 
@@ -675,6 +708,14 @@ export default function FamilyTreePage() {
         member={editingMember}
         onClose={() => setEditingMember(null)}
         onUpdated={() => {}}
+      />
+
+      <ShareTreeModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        ownerUid={!isExploreView ? (user?.uid ?? null) : null}
+        ownerDisplayName={centerName || viewerName || 'My'}
+        exportPng={exportTreePng}
       />
 
       {!fullTreeView ? (
