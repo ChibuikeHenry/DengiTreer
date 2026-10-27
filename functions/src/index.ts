@@ -1259,6 +1259,10 @@ export const submitTreeMergeRequest = onCall(async (request) => {
 
 export { initializePremiumPayment, verifyPremiumPayment } from './premiumPayments'
 export {
+  initializeTreeBuildPayment,
+  verifyTreeBuildPayment,
+} from './treeBuildService'
+export {
   acceptTreeMerge,
   checkInviteeEmailForMerge,
   declineTreeMerge,

@@ -18,6 +18,7 @@ import PeoplePage from './pages/PeoplePage'
 import PhotosPage from './pages/PhotosPage'
 import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
+import BuildMyTreePage from './pages/BuildMyTreePage'
 import {
   MergeExistsPage,
   MergeIncomingPage,
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="discoveries" element={<DiscoveriesPage />} />
             <Route path="manage" element={<ManageTreesPage />} />
             <Route path="photos" element={<PhotosPage />} />
+            <Route path="build-my-tree" element={<BuildMyTreePage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="premium" element={<PricingPage embedded />} />

@@ -1,0 +1,3 @@
+first_name,last_name,relationship_to_you,gender,date_of_birth,parent_of_you,father_name,mother_name,notes
+Example,Person,parent,female,1970-01-15,yes,,
+Sibling,Example,sibling,male,1995-06-20,no,Example Person,Other Parent,

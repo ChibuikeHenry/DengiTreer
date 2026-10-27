@@ -90,6 +90,23 @@
   flex-shrink: 0;
 }
 
+.dash-nav-item span:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+
+.dash-nav-badge {
+  margin-left: auto;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: rgba(61, 95, 42, 0.12);
+  color: var(--dash-brand);
+}
+
 .dash-premium {
   margin-top: auto;
   padding: 1rem;
@@ -3956,4 +3973,131 @@
 
 .disc-steps {
   margin-top: 0.5rem;
+}
+
+/* ---------- Build my tree (paid service) ---------- */
+
+.build-tree-page {
+  max-width: 42rem;
+}
+
+.build-tree-card {
+  padding: 1.5rem 1.75rem 1.75rem;
+}
+
+.build-tree-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+}
+
+.build-tree-head-icon {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 14px;
+  background: #e8f2e0;
+  color: var(--dash-brand);
+}
+
+.build-tree-head h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.45rem;
+}
+
+.build-tree-head p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--dash-muted);
+  line-height: 1.45;
+  max-width: 36rem;
+}
+
+.build-tree-price-badge {
+  margin-left: auto;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: var(--dash-brand);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.build-tree-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--dash-ink);
+}
+
+.build-tree-steps li + li {
+  margin-top: 0.35rem;
+}
+
+.build-tree-template-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.build-tree-template-link {
+  font-weight: 700;
+  color: var(--dash-brand);
+}
+
+.build-tree-checkout-note {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: #fff8e6;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.build-tree-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.build-tree-file-field input[type='file'] {
+  font-size: 0.88rem;
+}
+
+.build-tree-submit {
+  justify-self: start;
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.5rem;
+  font: inherit;
+  font-weight: 700;
+  background: var(--dash-brand);
+  color: #fff;
+  cursor: pointer;
+}
+
+.build-tree-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.build-tree-success h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+.build-tree-success p {
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.build-tree-success-link {
+  font-weight: 700;
+  color: var(--dash-brand);
 }

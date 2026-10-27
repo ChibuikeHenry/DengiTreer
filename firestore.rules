@@ -105,5 +105,23 @@ service cloud.firestore {
         );
       allow read, update, delete: if false;
     }
+
+    match /treeBuildRequests/{docId} {
+      allow create: if isAuthed()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email is string
+        && request.resource.data.fullName is string
+        && request.resource.data.fileStoragePath is string
+        && request.resource.data.fileDownloadUrl is string
+        && request.resource.data.paymentStatus == 'pending'
+        && request.resource.data.status in ['awaiting_payment', 'queued'];
+      allow read: if isAuthed() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /treeBuildPayments/{reference} {
+      allow read: if isAuthed() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
   }
 }

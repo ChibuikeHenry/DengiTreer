@@ -162,9 +162,15 @@ const navItems = [
   { to: '/home/discoveries', label: 'Discoveries', icon: DashIcons.leaf },
   { to: '/home/manage', label: 'Manage Trees', icon: DashIcons.folders },
   { to: '/home/photos', label: 'Photos', icon: DashIcons.image },
+  {
+    to: '/home/build-my-tree',
+    label: 'Build my tree',
+    icon: DashIcons.upload,
+    badge: 'Paid',
+  },
   { to: '/home/profile', label: 'Profile', icon: DashIcons.user },
   { to: '/home/settings', label: 'Settings', icon: DashIcons.settings },
-]
+] as const
 
 type DashboardLayoutProps = {
   children: ReactNode
@@ -243,6 +249,9 @@ export default function DashboardLayout({
             >
               {item.icon()}
               <span>{item.label}</span>
+              {'badge' in item && item.badge ? (
+                <span className="dash-nav-badge">{item.badge}</span>
+              ) : null}
             </NavLink>
           ))}
         </nav>
