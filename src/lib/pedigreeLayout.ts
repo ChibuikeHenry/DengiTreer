@@ -46,6 +46,50 @@ export type PedNode =
 
 export type PedSeg = { x1: number; y1: number; x2: number; y2: number; dashed: boolean }
 
+function normalizePedSeg(seg: PedSeg): PedSeg {
+  if (seg.x1 === seg.x2) {
+    return { ...seg, y1: Math.min(seg.y1, seg.y2), y2: Math.max(seg.y1, seg.y2) }
+  }
+  if (seg.y1 === seg.y2) {
+    return { ...seg, x1: Math.min(seg.x1, seg.x2), x2: Math.max(seg.x1, seg.x2) }
+  }
+  return seg
+}
+
+/** Merge identical or overlapping axis-aligned segments so strokes are not drawn twice. */
+export function dedupePedSegs(segs: PedSeg[]): PedSeg[] {
+  const vertical = new Map<string, PedSeg>()
+  const horizontal = new Map<string, PedSeg>()
+  const other: PedSeg[] = []
+
+  for (const raw of segs) {
+    if (raw.x1 === raw.x2 && raw.y1 === raw.y2) continue
+    const seg = normalizePedSeg(raw)
+    const dash = seg.dashed ? 'd' : 's'
+    if (seg.x1 === seg.x2) {
+      const key = `${dash}:v:${Math.round(seg.x1 * 10) / 10}`
+      const prev = vertical.get(key)
+      if (!prev) vertical.set(key, { ...seg })
+      else {
+        prev.y1 = Math.min(prev.y1, seg.y1)
+        prev.y2 = Math.max(prev.y2, seg.y2)
+      }
+    } else if (seg.y1 === seg.y2) {
+      const key = `${dash}:h:${Math.round(seg.y1 * 10) / 10}`
+      const prev = horizontal.get(key)
+      if (!prev) horizontal.set(key, { ...seg })
+      else {
+        prev.x1 = Math.min(prev.x1, seg.x1)
+        prev.x2 = Math.max(prev.x2, seg.x2)
+      }
+    } else {
+      other.push(seg)
+    }
+  }
+
+  return [...vertical.values(), ...horizontal.values(), ...other]
+}
+
 /**
  * Turns the straight line pieces into smooth SVG paths: where two pieces meet end to end in
  * an "L" (a bus line turning down towards a person) the corner is rounded; T-junctions and
@@ -56,7 +100,7 @@ export function buildLinePaths(
   radius: number = PED.corner,
 ): { solid: string; dashed: string } {
   type Piece = { x1: number; y1: number; x2: number; y2: number; dashed: boolean }
-  const pieces: Piece[] = segs
+  const pieces: Piece[] = dedupePedSegs(segs)
     .filter((g) => g.x1 !== g.x2 || g.y1 !== g.y2)
     .map((g) => ({ ...g }))
   const isH = (g: Piece) => g.y1 === g.y2

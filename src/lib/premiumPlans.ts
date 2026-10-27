@@ -4,6 +4,9 @@ export const PREMIUM_CHECKOUT_ENABLED = false
 /** One-time (non-recurring) premium access plans. Amounts in Nigerian Naira. */
 export type PremiumPlanId = '7day' | 'monthly' | 'quarterly' | 'yearly'
 
+/** Pre-selected plan on Premium / checkout (₦1,000 monthly). */
+export const DEFAULT_PREMIUM_PLAN_ID: PremiumPlanId = 'monthly'
+
 export type PremiumPlan = {
   id: PremiumPlanId
   amountNaira: number
@@ -51,11 +54,17 @@ export const PREMIUM_PLANS: Record<PremiumPlanId, PremiumPlan> = {
 }
 
 export const PREMIUM_PLAN_ORDER: PremiumPlanId[] = [
-  '7day',
   'monthly',
+  '7day',
   'quarterly',
   'yearly',
 ]
+
+export function parsePremiumPlanId(raw: string | null | undefined): PremiumPlanId {
+  const id = raw?.trim()
+  if (id && id in PREMIUM_PLANS) return id as PremiumPlanId
+  return DEFAULT_PREMIUM_PLAN_ID
+}
 
 export function formatNaira(amount: number): string {
   return `₦${amount.toLocaleString('en-NG')}`

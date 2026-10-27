@@ -1,14 +1,7 @@
 import { Link } from 'react-router-dom'
+import MarketingHeader, { MarketingLogo } from '../components/MarketingHeader'
+import './FeaturesPage.css'
 import './LandingPage.css'
-
-const navLinks = [
-  { label: 'Features', href: '#features', external: false },
-  { label: 'How It Works', href: '#how-it-works', external: false },
-  { label: 'Explore', href: '#explore', external: false },
-  { label: 'Pricing', href: '/pricing', external: true },
-  { label: 'About US', href: '/about', external: true },
-  { label: 'Blog', href: '#blog', external: false },
-]
 
 const heroHighlights = [
   { label: 'Collaborative', icon: 'users' },
@@ -208,42 +201,10 @@ function Icon({ name }: { name: IconName }) {
   }
 }
 
-function Logo() {
-  return (
-    <Link className="logo" to="/">
-      <span className="logo-name">DengiTree</span>
-      <span className="logo-tagline">Your Family. Your Story. Connected.</span>
-    </Link>
-  )
-}
-
 export default function LandingPage() {
   return (
     <div className="site" id="top">
-      <header className="header animate-rise">
-        <Logo />
-        <nav className="nav" aria-label="Primary">
-          {navLinks.map((link) =>
-            link.external ? (
-              <Link key={link.href} to={link.href}>
-                {link.label}
-              </Link>
-            ) : (
-              <a key={link.href} href={link.href}>
-                {link.label}
-              </a>
-            ),
-          )}
-        </nav>
-        <div className="header-actions">
-          <Link className="btn-outline" to="/login">
-            Log in
-          </Link>
-          <Link className="btn-primary" to="/signup">
-            Get Started
-          </Link>
-        </div>
-      </header>
+      <MarketingHeader />
 
       <main>
         <section className="hero">
@@ -358,7 +319,7 @@ export default function LandingPage() {
       <footer className="footer" id="about">
         <div className="footer-grid">
           <div className="footer-brand">
-            <Logo />
+            <MarketingLogo />
             <p>
               DengiTree is a living family network where relatives collaborate,
               verify relationships, and preserve the stories that make a legacy.

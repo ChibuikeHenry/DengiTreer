@@ -1,12 +1,15 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import MarketingHeader from '../components/MarketingHeader'
 import { useAuth } from '../context/AuthContext'
 import {
+  DEFAULT_PREMIUM_PLAN_ID,
   formatNaira,
+  parsePremiumPlanId,
   PREMIUM_CHECKOUT_ENABLED,
   PREMIUM_PLAN_ORDER,
   PREMIUM_PLANS,
+  type PremiumPlan,
   type PremiumPlanId,
 } from '../lib/premiumPlans'
 import './PricingPage.css'
@@ -16,14 +19,35 @@ type PricingPageProps = {
   embedded?: boolean
 }
 
+function premiumPayButtonLabel(plan: PremiumPlan, paying: boolean): string {
+  if (paying) return 'Opening checkout…'
+  const price = `${formatNaira(plan.amountNaira)}${plan.priceSuffix}`
+  if (PREMIUM_CHECKOUT_ENABLED) return `Pay ${price} — get Premium`
+  return `Upgrade to Premium — ${price}`
+}
+
 export default function PricingPage({ embedded = false }: PricingPageProps) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
-  const [billingCycle, setBillingCycle] = useState<PremiumPlanId>('monthly')
+  const [billingCycle, setBillingCycle] = useState<PremiumPlanId>(() =>
+    parsePremiumPlanId(searchParams.get('billing')),
+  )
   const [checkoutNotice, setCheckoutNotice] = useState('')
   const [paying, setPaying] = useState(false)
 
   const activePlan = PREMIUM_PLANS[billingCycle]
+
+  /** Every visit starts on monthly unless the URL explicitly sets another plan. */
+  useEffect(() => {
+    if (searchParams.get('paid') === '1') return
+    const fromUrl = searchParams.get('billing')?.trim()
+    if (!fromUrl) {
+      setBillingCycle(DEFAULT_PREMIUM_PLAN_ID)
+      return
+    }
+    setBillingCycle(parsePremiumPlanId(fromUrl))
+  }, [searchParams])
   const concessionTo = embedded ? '/home/concession' : '/concession'
 
   async function handleUpgrade() {
@@ -201,11 +225,7 @@ export default function PricingPage({ embedded = false }: PricingPageProps) {
                       disabled={paying}
                       onClick={() => void handleUpgrade()}
                     >
-                      {paying
-                        ? 'Opening checkout…'
-                        : PREMIUM_CHECKOUT_ENABLED
-                          ? 'Pay once — get Premium'
-                          : 'Upgrade to Premium'}
+                      {premiumPayButtonLabel(activePlan, paying)}
                     </button>
                   </div>
 

@@ -1,18 +1,134 @@
-import { PED, PED_LINE_COLOR, buildLinePaths, type PedigreeLayout } from './pedigreeLayout'
+import {
+  PED,
+  PED_LINE_COLOR,
+  buildLinePaths,
+  dedupePedSegs,
+  type PedigreeLayout,
+} from './pedigreeLayout'
 
 const SCALE = 2
 const MARGIN = 40
 const BACKGROUND = '#eef6e8'
 const LINE_COLOR = PED_LINE_COLOR
 
-function loadImage(src: string): Promise<HTMLImageElement | null> {
+function loadImageFromUrl(src: string, crossOrigin: boolean): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
     const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => resolve(img)
+    if (crossOrigin) img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img.naturalWidth > 0 ? img : null)
     img.onerror = () => resolve(null)
     img.src = src
   })
+}
+
+async function loadImageViaFetch(src: string): Promise<HTMLImageElement | null> {
+  try {
+    const res = await fetch(src, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    try {
+      return await loadImageFromUrl(objectUrl, false)
+    } finally {
+      URL.revokeObjectURL(objectUrl)
+    }
+  } catch {
+    return null
+  }
+}
+
+async function rasterizeSvg(svg: SVGSVGElement, size: number): Promise<HTMLImageElement | null> {
+  const clone = svg.cloneNode(true) as SVGSVGElement
+  clone.setAttribute('width', String(size))
+  clone.setAttribute('height', String(size))
+  const serialized = new XMLSerializer().serializeToString(clone)
+  const url = URL.createObjectURL(new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' }))
+  try {
+    return await loadImageFromUrl(url, false)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+async function loadAvatarForExport(
+  photoUrl: string | null,
+  domImg: HTMLImageElement | null,
+  svg: SVGSVGElement | null,
+): Promise<HTMLImageElement | null> {
+  if (domImg) {
+    if (!domImg.complete) {
+      await new Promise<void>((resolve) => {
+        domImg.onload = () => resolve()
+        domImg.onerror = () => resolve()
+      })
+    }
+    if (domImg.decode) {
+      try {
+        await domImg.decode()
+      } catch {
+        /* use whatever loaded */
+      }
+    }
+  }
+
+  const src = (domImg?.currentSrc || domImg?.src || photoUrl || '').trim()
+  if (src) {
+    const fetched = await loadImageViaFetch(src)
+    if (fetched) return fetched
+    const cors = await loadImageFromUrl(src, true)
+    if (cors) return cors
+    if (domImg?.complete && domImg.naturalWidth > 0) {
+      try {
+        const bitmap = await createImageBitmap(domImg)
+        const canvas = document.createElement('canvas')
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          ctx.drawImage(bitmap, 0, 0)
+          bitmap.close()
+          const blob = await new Promise<Blob | null>((resolve) =>
+            canvas.toBlob((b) => resolve(b), 'image/png'),
+          )
+          if (blob) {
+            const objectUrl = URL.createObjectURL(blob)
+            try {
+              const fromDom = await loadImageFromUrl(objectUrl, false)
+              if (fromDom) return fromDom
+            } finally {
+              URL.revokeObjectURL(objectUrl)
+            }
+          }
+        } else {
+          bitmap.close()
+        }
+      } catch {
+        /* canvas tainted or unsupported */
+      }
+    }
+    const plain = await loadImageFromUrl(src, false)
+    if (plain) return plain
+  }
+
+  if (svg) return rasterizeSvg(svg, PED.av)
+  return null
+}
+
+async function waitForTreeImages(canvasEl: HTMLElement): Promise<void> {
+  const imgs = [...canvasEl.querySelectorAll('img')]
+  await Promise.all(
+    imgs.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete) {
+            void (img.decode?.() ?? Promise.resolve()).finally(() => resolve())
+            return
+          }
+          img.onload = () => resolve()
+          img.onerror = () => resolve()
+        }),
+    ),
+  )
 }
 
 /** shorten text with an ellipsis so it fits `maxWidth` */
@@ -43,6 +159,8 @@ type PersonDraw = {
   ringColor: string
   fill: string
   photo: string | null
+  domImg: HTMLImageElement | null
+  svg: SVGSVGElement | null
   initials: string | null
   name: string
   role: string
@@ -67,6 +185,7 @@ function readPerson(nodeEl: HTMLElement, cx: number, top: number): PersonDraw | 
   const yearsStyle = yearsEl ? getComputedStyle(yearsEl) : null
   const family = nameStyle?.fontFamily ?? 'sans-serif'
   const img = avatar.querySelector('img')
+  const svg = avatar.querySelector<SVGSVGElement>('svg.profile-avatar-svg')
   const initialsEl = avatar.querySelector<HTMLElement>('.profile-avatar-initials')
   const badgeText = avatar.classList.contains('pedigree-you-badge') ? avatar.textContent?.trim() : null
   return {
@@ -74,7 +193,9 @@ function readPerson(nodeEl: HTMLElement, cx: number, top: number): PersonDraw | 
     top,
     ringColor: avatarStyle.borderTopColor,
     fill: avatarStyle.backgroundColor,
-    photo: img?.src ?? null,
+    photo: img?.currentSrc || img?.src || null,
+    domImg: img ?? null,
+    svg: svg ?? null,
     initials: initialsEl?.textContent?.trim() || badgeText || null,
     name: nameEl?.textContent?.trim() ?? '',
     role: roleEl?.textContent?.trim() ?? '',
@@ -97,6 +218,7 @@ export async function renderTreePng(
   caption?: string,
 ): Promise<Blob> {
   if ('fonts' in document) await document.fonts.ready
+  await waitForTreeImages(canvasEl)
 
   const people: PersonDraw[] = []
   canvasEl.querySelectorAll<HTMLElement>('.ped-node').forEach((el) => {
@@ -107,7 +229,7 @@ export async function renderTreePng(
     if (person) people.push(person)
   })
 
-  const segs = layout.segs.filter((s) => !s.dashed)
+  const segs = dedupePedSegs(layout.segs.filter((s) => !s.dashed))
 
   // crop to what is actually drawn
   const xs = [
@@ -141,7 +263,9 @@ export async function renderTreePng(
   ctx.stroke(new Path2D(buildLinePaths(segs).solid))
 
   // people
-  const photos = await Promise.all(people.map((p) => (p.photo ? loadImage(p.photo) : null)))
+  const photos = await Promise.all(
+    people.map((p) => loadAvatarForExport(p.photo, p.domImg, p.svg)),
+  )
   const r = PED.av / 2
   people.forEach((p, i) => {
     const cy = p.top + r
