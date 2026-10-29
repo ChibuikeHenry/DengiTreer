@@ -429,6 +429,20 @@ export default function FamilyTreePage() {
     return () => window.clearTimeout(id)
   }, [sharePending, view])
 
+  useEffect(() => {
+    if (isExploreView || searchParams.get('share') !== '1') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('share')
+    const qs = next.toString()
+    navigate({ pathname: '/home/tree', search: qs ? `?${qs}` : '' }, { replace: true })
+    if (!selfAdded) {
+      openModal('yourself')
+      return
+    }
+    setView('tree')
+    setSharePending(true)
+  }, [isExploreView, navigate, openModal, searchParams, selfAdded])
+
   function toggleFullTreeView() {
     setView('tree')
     setFullTreeView((active) => !active)

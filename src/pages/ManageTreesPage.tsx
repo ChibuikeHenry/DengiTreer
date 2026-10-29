@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom'
 import UpcomingBadge from '../components/UpcomingBadge'
 import { DashIcons } from '../components/DashboardLayout'
+import { formatBuildMyTreePrice } from '../lib/buildMyTreeService'
+import { formatCleanUpMyTreePrice } from '../lib/cleanUpMyTreeService'
 
 const plannedTrees = [
   {
     title: 'Primary family tree',
     subtitle: 'The tree you are building today',
     status: 'Active',
-    members: '—',
   },
 ]
 
@@ -49,11 +50,27 @@ export default function ManageTreesPage() {
           <ul className="upcoming-action-list">
             <li>
               <span>Download PDF / image</span>
-              <UpcomingBadge />
+              <Link to="/home/tree" className="manage-tree-link">
+                On Family Tree
+              </Link>
             </li>
             <li>
               <span>Share read-only link</span>
-              <UpcomingBadge />
+              <Link to="/home/tree?share=1" className="manage-tree-link">
+                Share tree
+              </Link>
+            </li>
+            <li>
+              <span>Clean up my tree</span>
+              <Link to="/home/clean-up-my-tree" className="manage-tree-link manage-tree-link-paid">
+                {formatCleanUpMyTreePrice()} · Paid
+              </Link>
+            </li>
+            <li>
+              <span>Build my tree (from spreadsheet)</span>
+              <Link to="/home/build-my-tree" className="manage-tree-link manage-tree-link-paid">
+                {formatBuildMyTreePrice()} · Paid
+              </Link>
             </li>
             <li>
               <span>Merge two trees</span>

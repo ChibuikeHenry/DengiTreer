@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode, type SVGProps } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
+import DashboardTreeSearch from './DashboardTreeSearch'
 import ProfileAvatar from './ProfileAvatar'
 
 type IconProps = SVGProps<SVGSVGElement>
@@ -161,11 +162,17 @@ const navItems = [
   { to: '/home/invitations', label: 'Invitations', icon: DashIcons.mail },
   { to: '/home/discoveries', label: 'Discoveries', icon: DashIcons.leaf },
   { to: '/home/manage', label: 'Manage Trees', icon: DashIcons.folders },
-  { to: '/home/photos', label: 'Photos', icon: DashIcons.image },
+  { to: '/home/photos', label: 'Family Library', icon: DashIcons.image },
   {
     to: '/home/build-my-tree',
     label: 'Build my tree',
     icon: DashIcons.upload,
+    badge: 'Paid',
+  },
+  {
+    to: '/home/clean-up-my-tree',
+    label: 'Clean up my tree',
+    icon: DashIcons.tree,
     badge: 'Paid',
   },
   { to: '/home/profile', label: 'Profile', icon: DashIcons.user },
@@ -178,6 +185,7 @@ type DashboardLayoutProps = {
   onToggleSidebar: () => void
   onCloseSidebar: () => void
   treeImmersive?: boolean
+  treeVersion?: number
 }
 
 export default function DashboardLayout({
@@ -186,6 +194,7 @@ export default function DashboardLayout({
   onToggleSidebar,
   onCloseSidebar,
   treeImmersive = false,
+  treeVersion = 0,
 }: DashboardLayoutProps) {
   const navigate = useNavigate()
   const { user, logout } = useAuth()
@@ -283,14 +292,7 @@ export default function DashboardLayout({
             {DashIcons.menu()}
           </button>
 
-          <label className="dash-search">
-            <span className="sr-only">Search</span>
-            {DashIcons.search()}
-            <input
-              type="search"
-              placeholder="Search for people, relationships, or families..."
-            />
-          </label>
+          <DashboardTreeSearch treeVersion={treeVersion} />
 
           <div className="dash-top-actions">
             <button type="button" className="dash-icon-btn" aria-label="Notifications">

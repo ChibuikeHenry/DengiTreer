@@ -18,6 +18,8 @@ import {
 } from '../lib/memberPrivacy'
 import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
+import FamilyLibraryTaggedPhotos from '../components/FamilyLibraryTaggedPhotos'
+import { FAMILY_LIBRARY_SELF_TAG } from '../lib/familyLibrary'
 import { uploadProfilePhoto } from '../lib/profilePhoto'
 import { resolveUserProfileForForm, saveUserProfile } from '../lib/userProfile'
 
@@ -306,6 +308,16 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {user?.uid ? (
+        <FamilyLibraryTaggedPhotos
+          ownerUid={user.uid}
+          memberId={FAMILY_LIBRARY_SELF_TAG}
+          memberFirstName={firstName.trim() || displayName.split(/\s+/)[0]}
+          heading="Family Library"
+          emptyHint="Photos tagged with you appear here. Upload and tag them from Family Library."
+        />
+      ) : null}
     </div>
   )
 }

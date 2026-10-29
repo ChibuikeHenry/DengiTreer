@@ -70,6 +70,7 @@ export function HomeDashboard() {
       onToggleSidebar={() => setSidebarOpen((v) => !v)}
       onCloseSidebar={closeSidebar}
       treeImmersive={treeImmersive}
+      treeVersion={treeVersion}
     >
       <Outlet
         context={{ openModal, treeVersion, setTreeImmersive } satisfies DashboardContext}

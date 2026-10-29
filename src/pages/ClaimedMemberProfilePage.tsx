@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import FamilyLibraryTaggedPhotos from '../components/FamilyLibraryTaggedPhotos'
 import ProfileAvatar from '../components/ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
 import { formatBioForDisplay } from '../lib/bio'
@@ -354,6 +355,15 @@ export default function ClaimedMemberProfilePage() {
           </div>
         </div>
       </section>
+
+      {treeOwnerUid && member ? (
+        <FamilyLibraryTaggedPhotos
+          ownerUid={treeOwnerUid}
+          memberId={member.id}
+          memberFirstName={member.displayName.split(/\s+/)[0] ?? member.displayName}
+          emptyHint="No photos tagged with this person yet. Add some from Family Library."
+        />
+      ) : null}
 
       {member.inviterCanRemove ? (
         <section className="claimed-card claimed-card-remove">

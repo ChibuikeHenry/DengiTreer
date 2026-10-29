@@ -203,10 +203,12 @@ export default function AboutUsPage() {
               {team.map((member) => (
                 <li key={member.name}>
                   <article className={`about-team-card about-team-card--${member.theme}`}>
-                    <div className="about-team-avatar" aria-hidden="true" />
-                    <span className={`about-role-pill about-role-pill--${member.theme}`}>
-                      {member.role}
-                    </span>
+                    <div className="about-team-media">
+                      <div className="about-team-avatar" aria-hidden="true" />
+                      <span className={`about-role-pill about-role-pill--${member.theme}`}>
+                        {member.role}
+                      </span>
+                    </div>
                     <h3>{member.name}</h3>
                     <p className="about-team-job">{member.jobTitle}</p>
                     <p className="about-team-bio">{member.bio}</p>
