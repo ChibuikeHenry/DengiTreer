@@ -289,14 +289,31 @@
   color: #2a3028;
 }
 
-.about-social {
-  display: flex;
-  gap: 0.65rem;
+.about-team-card .about-social {
   margin-top: auto;
+  width: max-content;
+  max-width: 100%;
 }
 
-.about-social a {
+.about-social-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.about-social-list li {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.about-team-card .about-social a {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   width: 2.15rem;
