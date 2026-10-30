@@ -8,7 +8,11 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "deploy": "npm run build && firebase deploy --only hosting --project dengitree",
+    "build:admin": "npm --prefix admin run build",
+    "deploy": "npm run build && firebase deploy --only hosting:dengitree --project dengitree",
+    "deploy:admin": "npm run build:admin && firebase deploy --only hosting:dengitree-admin --project dengitree",
+    "admin:grant": "node functions/scripts/set-admin-claim.mjs",
+    "admin:provision": "node functions/scripts/provision-admin-user.mjs",
     "deploy:backend": "npm --prefix functions run build && firebase deploy --only firestore,functions --project dengitree",
     "deploy:all": "npm run deploy:backend && npm run deploy"
   },
