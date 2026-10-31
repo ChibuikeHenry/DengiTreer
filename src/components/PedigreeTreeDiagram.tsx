@@ -313,7 +313,7 @@ export default function PedigreeTreeDiagram({
               <path d={linePaths.solid} strokeLinecap="round" strokeLinejoin="round" />
             ) : null}
             {linePaths.dashed ? (
-              <path d={linePaths.dashed} strokeDasharray="5 5" strokeLinecap="butt" />
+              <path d={linePaths.dashed} strokeLinecap="round" strokeLinejoin="round" />
             ) : null}
           </svg>
 

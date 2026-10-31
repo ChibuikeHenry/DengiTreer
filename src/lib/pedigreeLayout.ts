@@ -770,7 +770,7 @@ function layoutPass(
   }
   if (allowAdds) {
     // dashed link to the add circle at the right-hand end of the row
-    hJoin(prevX, slotX[slots.length - 1], selfTop, true)
+    hJoin(prevX, slotX[slots.length - 1], selfTop)
   }
 
   /** Puts a sibling on the self row (outside the core slots) and remembers where. */
@@ -786,7 +786,7 @@ function layoutPass(
     pushSelfRowNode({ kind: 'add', modal: 'sibling', label: 'Add Sibling' }, x)
     // the next person along is a sibling, or You when nobody stands between
     const next = leftmostSiblingX ?? (leftSpouse ? null : selfX)
-    if (next != null) hJoin(x, next, selfTop, true)
+    if (next != null) hJoin(x, next, selfTop)
   }
 
   /* --------------------------------------------------------------- parents row */
@@ -841,7 +841,7 @@ function layoutPass(
         x,
         y: parentsTop,
       })
-      if (lastX != null) hJoin(lastX, x, parentsTop, true)
+      if (lastX != null) hJoin(lastX, x, parentsTop)
     }
 
     // parents → their children, one bracket per family so lines never share a bus
@@ -854,7 +854,7 @@ function layoutPass(
       const xs = family.parents.map((p) => parentX.get(p.id) as number)
       if (xs.length === 0) {
         // no parents on the tree yet: dashed line up to the "Add Parent" circle
-        bracket(aimX, parentsTop + addH, targets, busToSelf, true)
+        bracket(aimX, parentsTop + addH, targets, busToSelf)
       } else if (xs.length === 1) {
         bracket(xs[0], underLabelY(parentsTop, family.parents[0].id), targets, busToSelf)
       } else if (standNextToEachOther(family.parents[0], family.parents[1])) {
@@ -888,7 +888,7 @@ function layoutPass(
   const parentTargetsFor = (key: 'paternal' | 'unsided' | 'maternal'): Target[] => {
     if (!showParents) return []
     const { father: selfFather, mother: selfMother, all: selfParents } = selfParentLinks
-    if (!selfParents.length) return [{ x: aimX, y: parentsTop, dashed: true }]
+    if (!selfParents.length) return [{ x: aimX, y: parentsTop }]
     const px = (m: TreeMember) => parentX.get(m.id) as number
     if (key === 'unsided') {
       // One drop to the father–mother join — never a bus across the whole parent row.
@@ -906,7 +906,7 @@ function layoutPass(
     const preferred = key === 'paternal' ? selfFather : selfMother
     if (preferred) return [{ x: px(preferred), y: parentsTop }]
     const fallback = key === 'paternal' ? selfMother : selfFather
-    return [{ x: px(fallback ?? selfParents[0]), y: parentsTop, dashed: true }]
+    return [{ x: px(fallback ?? selfParents[0]), y: parentsTop }]
   }
 
   /** Group grandparents for drawing; legacy rows without lineageSide join a side when unambiguous. */
@@ -992,7 +992,7 @@ function layoutPass(
           x,
           y: gpTop,
         })
-        hJoin(Math.max(...gpNodeXs), x, gpTop, true)
+        hJoin(Math.max(...gpNodeXs), x, gpTop)
       } else {
         nodes.push({
           key: 'add:grandparent',
@@ -1004,7 +1004,7 @@ function layoutPass(
         })
         const target = parentTargetsFor('unsided')
         if (target.length) {
-          bracket(aimX, gpTop + addH, target, parentsTop - busOffset, true)
+          bracket(aimX, gpTop + addH, target, parentsTop - busOffset)
         }
       }
     }
@@ -1052,7 +1052,7 @@ function layoutPass(
       if (list.length) {
         return list.map((p) => ({ x: p.x, y: gpTop }))
       }
-      return [{ x: aimX, y: gpTop, dashed: true }]
+      return [{ x: aimX, y: gpTop }]
     })
 
     const wanted = targetsByUnit.map((t) => (t.length ? mean(t.map((x) => x.x)) : aimX))
@@ -1201,7 +1201,7 @@ function layoutPass(
       bracket(
         addAnchorX,
         addSource.y,
-        [{ x: addX, y: kidsTop, dashed: true }],
+        [{ x: addX, y: kidsTop }],
         kidsTop - busOffset,
       )
     }

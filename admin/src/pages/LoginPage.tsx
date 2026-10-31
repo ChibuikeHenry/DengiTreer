@@ -2,6 +2,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth'
 import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import AdminBrand from '../components/AdminBrand'
+import PasswordField from '../components/PasswordField'
 import { auth } from '../firebase'
 import { useAdminAuth } from '../context/AdminAuthContext'
 
@@ -74,23 +75,19 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <div className="admin-field">
-              <label htmlFor="admin-password">Password</label>
-              <input
-                id="admin-password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+            <PasswordField
+              id="admin-password"
+              label="Password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={setPassword}
+              required
+            />
             <button type="submit" className="admin-btn-primary" disabled={busy}>
               {busy ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
-            <Link to="/login" className="admin-forgot">
+            <Link to="/login/forgot" className="admin-forgot">
               Forgot password?
             </Link>
           </div>

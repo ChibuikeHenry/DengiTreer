@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import DashboardPage from './pages/DashboardPage'
 import FamilyTreesPage from './pages/FamilyTreesPage'
 import InvitationsPage from './pages/InvitationsPage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import LoginPage from './pages/LoginPage'
 import AddUserPage from './pages/AddUserPage'
 import CreateFamilyTreePage from './pages/CreateFamilyTreePage'
@@ -16,6 +17,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/login/forgot" element={<ForgotPasswordPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<AdminLayout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
