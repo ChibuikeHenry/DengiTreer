@@ -111,7 +111,7 @@ export default function PhotosPage() {
 
   async function handleDelete(photo: FamilyLibraryPhoto) {
     if (!user?.uid || deletingId) return
-    const ok = window.confirm('Remove this photo from your Family Library?')
+    const ok = window.confirm('Remove this photo from your library?')
     if (!ok) return
     setDeletingId(photo.id)
     setUploadError('')
@@ -130,8 +130,8 @@ export default function PhotosPage() {
     <div className="home upcoming-page photos-page family-library-page">
       <header className="upcoming-head">
         <div>
-          <h1>Family Library</h1>
-          <p>Upload photos, tag family members, and show memories on their profiles.</p>
+          <h1>My library</h1>
+          <p>Upload photos, tag people, and show memories on their profiles.</p>
         </div>
         <button
           type="button"
@@ -186,20 +186,20 @@ export default function PhotosPage() {
 
       <section className="home-card upcoming-panel">
         <div className="photos-section-head">
-          <h2>Your library</h2>
+          <h2>Photo library</h2>
           <span className="upcoming-count">{photos.length} photos</span>
         </div>
         {loading ? (
           <p className="family-library-muted">Loading photos…</p>
         ) : photos.length === 0 ? (
           <div className="upcoming-empty upcoming-empty-compact">
-            <p>No photos yet. Upload your first family memory above.</p>
+            <p>No photos yet. Upload your first photo above.</p>
           </div>
         ) : (
           <ul className="family-library-grid">
             {photos.map((photo) => (
               <li key={photo.id} className="family-library-card">
-                <img src={photo.downloadUrl} alt={photo.caption || 'Family photo'} loading="lazy" />
+                <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
                 <div className="family-library-card-body">
                   {photo.taggedMemberIds.length ? (
                     <ul className="family-library-tags">

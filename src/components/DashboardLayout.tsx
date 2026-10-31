@@ -162,7 +162,7 @@ const navItems = [
   { to: '/home/invitations', label: 'Invitations', icon: DashIcons.mail },
   { to: '/home/discoveries', label: 'Discoveries', icon: DashIcons.leaf },
   { to: '/home/manage', label: 'Manage Trees', icon: DashIcons.folders },
-  { to: '/home/photos', label: 'Family Library', icon: DashIcons.image },
+  { to: '/home/photos', label: 'Photo Library', icon: DashIcons.image },
   {
     to: '/home/build-my-tree',
     label: 'Build my tree',

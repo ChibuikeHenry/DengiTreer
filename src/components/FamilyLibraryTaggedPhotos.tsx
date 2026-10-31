@@ -50,7 +50,7 @@ export default function FamilyLibraryTaggedPhotos({
 
   const title =
     heading ??
-    (memberFirstName ? `Photos of ${memberFirstName}` : 'Family Library photos')
+    (memberFirstName ? `Photos of ${memberFirstName}` : 'Photo library')
 
   return (
     <section className="claimed-card family-library-profile-section">
@@ -58,7 +58,7 @@ export default function FamilyLibraryTaggedPhotos({
         <h2>{title}</h2>
         {showLibraryLink ? (
           <Link to="/home/photos" className="family-library-profile-link">
-            Open Family Library
+            Open photo library
           </Link>
         ) : null}
       </div>
@@ -72,14 +72,14 @@ export default function FamilyLibraryTaggedPhotos({
       ) : photos.length === 0 ? (
         <p className="family-library-muted">
           {emptyHint ??
-            'No tagged photos yet. Upload images in Family Library and tag this person.'}
+            'No tagged photos yet. Upload images in My library and tag this person.'}
         </p>
       ) : (
         <ul className="family-library-profile-grid">
           {photos.map((photo) => (
             <li key={photo.id}>
               <figure className="family-library-profile-figure">
-                <img src={photo.downloadUrl} alt={photo.caption || 'Family photo'} loading="lazy" />
+                <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
                 {photo.caption ? (
                   <figcaption>{photo.caption}</figcaption>
                 ) : null}

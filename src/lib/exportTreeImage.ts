@@ -8,9 +8,18 @@ import {
 
 const SCALE = 2
 const MARGIN = 40
-const BACKGROUND = '#eef6e8'
+const BACKGROUND = '#eef5e8'
 const LINE_COLOR = PED_LINE_COLOR
 const MAX_CANVAS_EDGE = 8192
+
+const TONE = {
+  male: { fill: '#ebf3fa', ring: '#5b8fd4', icon: '#3b74b8' },
+  female: { fill: '#fdf2f7', ring: '#e879a9', icon: '#d15189' },
+  you: { fill: '#254019', ring: '#254019', icon: '#ffffff' },
+  neutral: { fill: '#e2eadc', ring: '#b8c9a8', icon: '#5a7350' },
+} as const
+
+type ToneKey = keyof typeof TONE
 
 function loadImageFromUrl(src: string, crossOrigin: boolean): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -22,7 +31,6 @@ function loadImageFromUrl(src: string, crossOrigin: boolean): Promise<HTMLImageE
   })
 }
 
-/** Only CORS-safe fetches — never load without crossOrigin or the canvas will taint. */
 async function loadImageViaFetch(src: string): Promise<HTMLImageElement | null> {
   try {
     const res = await fetch(src, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
@@ -39,68 +47,22 @@ async function loadImageViaFetch(src: string): Promise<HTMLImageElement | null> 
   }
 }
 
-async function rasterizeSvg(svg: SVGSVGElement, size: number): Promise<HTMLImageElement | null> {
-  const clone = svg.cloneNode(true) as SVGSVGElement
-  clone.setAttribute('width', String(size))
-  clone.setAttribute('height', String(size))
-  const serialized = new XMLSerializer().serializeToString(clone)
-  const url = URL.createObjectURL(new Blob([serialized], { type: 'image/svg+xml;charset=utf-8' }))
-  try {
-    return await loadImageFromUrl(url, false)
-  } finally {
-    URL.revokeObjectURL(url)
+/** CORS-safe photo only — never draw a non-CORS image (taints canvas / blank PNG). */
+async function loadPhotoSafe(src: string | null): Promise<HTMLImageElement | null> {
+  const url = (src || '').trim()
+  if (!url) return null
+  if (
+    url.startsWith('blob:') ||
+    url.startsWith('data:') ||
+    (typeof window !== 'undefined' && url.startsWith(window.location.origin))
+  ) {
+    return loadImageFromUrl(url, false)
   }
+  const fetched = await loadImageViaFetch(url)
+  if (fetched) return fetched
+  return loadImageFromUrl(url, true)
 }
 
-/**
- * Load an avatar that is safe to draw onto an export canvas.
- * Skips any non-CORS path — drawing those would taint the canvas and make toBlob fail.
- */
-async function loadAvatarForExport(
-  photoUrl: string | null,
-  domImg: HTMLImageElement | null,
-  svg: SVGSVGElement | null,
-): Promise<HTMLImageElement | null> {
-  const src = (domImg?.currentSrc || domImg?.src || photoUrl || '').trim()
-  if (src) {
-    // Same-origin / blob / data URLs are always safe
-    if (
-      src.startsWith('blob:') ||
-      src.startsWith('data:') ||
-      (typeof window !== 'undefined' && src.startsWith(window.location.origin))
-    ) {
-      const local = await loadImageFromUrl(src, false)
-      if (local) return local
-    } else {
-      const fetched = await loadImageViaFetch(src)
-      if (fetched) return fetched
-      const cors = await loadImageFromUrl(src, true)
-      if (cors) return cors
-    }
-  }
-
-  if (svg) return rasterizeSvg(svg, PED.av)
-  return null
-}
-
-async function waitForTreeImages(canvasEl: HTMLElement): Promise<void> {
-  const imgs = [...canvasEl.querySelectorAll('img')]
-  await Promise.all(
-    imgs.map(
-      (img) =>
-        new Promise<void>((resolve) => {
-          if (img.complete) {
-            void (img.decode?.() ?? Promise.resolve()).finally(() => resolve())
-            return
-          }
-          img.onload = () => resolve()
-          img.onerror = () => resolve()
-        }),
-    ),
-  )
-}
-
-/** shorten text with an ellipsis so it fits `maxWidth` */
 function fit(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   if (ctx.measureText(text).width <= maxWidth) return text
   let out = text
@@ -108,28 +70,51 @@ function fit(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): str
   return `${out.trimEnd()}…`
 }
 
-function drawPersonGlyph(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string) {
+/** Same silhouette as ProfileAvatar tree SVG. */
+function drawPersonIcon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+  color: string,
+) {
+  const s = (r * 2) / 24
   ctx.save()
+  ctx.translate(cx - 12 * s, cy - 12 * s)
+  ctx.scale(s, s)
   ctx.strokeStyle = color
   ctx.lineWidth = 2
   ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
   ctx.beginPath()
-  ctx.arc(cx, cy - r * 0.2, r * 0.22, 0, Math.PI * 2)
+  ctx.arc(12, 7, 4, 0, Math.PI * 2)
   ctx.stroke()
   ctx.beginPath()
-  ctx.arc(cx, cy + r * 0.62, r * 0.42, Math.PI * 1.1, Math.PI * 1.9)
+  ctx.moveTo(5, 21)
+  ctx.bezierCurveTo(5, 17.5, 8, 15, 12, 15)
+  ctx.bezierCurveTo(16, 15, 19, 17.5, 19, 21)
   ctx.stroke()
   ctx.restore()
+}
+
+function toneFromAvatar(avatar: HTMLElement): ToneKey {
+  if (
+    avatar.classList.contains('profile-avatar-you-tone') ||
+    avatar.classList.contains('tree-person-avatar-you') ||
+    avatar.classList.contains('pedigree-you-badge')
+  ) {
+    return 'you'
+  }
+  if (avatar.classList.contains('profile-avatar-female')) return 'female'
+  if (avatar.classList.contains('profile-avatar-male')) return 'male'
+  return 'neutral'
 }
 
 type PersonDraw = {
   cx: number
   top: number
-  ringColor: string
-  fill: string
+  tone: ToneKey
   photo: string | null
-  domImg: HTMLImageElement | null
-  svg: SVGSVGElement | null
   initials: string | null
   name: string
   role: string
@@ -145,31 +130,28 @@ function readPerson(nodeEl: HTMLElement, cx: number, top: number): PersonDraw | 
   const card = nodeEl.querySelector<HTMLElement>('.tree-person-card')
   const avatar = nodeEl.querySelector<HTMLElement>('.tree-person-avatar')
   if (!card || !avatar) return null
-  const avatarStyle = getComputedStyle(avatar)
   const nameEl = card.querySelector<HTMLElement>('.tree-person-name')
   const roleEl = card.querySelector<HTMLElement>('.tree-person-role')
   const yearsEl = card.querySelector<HTMLElement>('.tree-person-years')
   const nameStyle = nameEl ? getComputedStyle(nameEl) : null
   const roleStyle = roleEl ? getComputedStyle(roleEl) : null
   const yearsStyle = yearsEl ? getComputedStyle(yearsEl) : null
-  const family = nameStyle?.fontFamily ?? 'sans-serif'
+  const family = nameStyle?.fontFamily ?? 'system-ui, sans-serif'
   const img = avatar.querySelector('img')
-  const svg = avatar.querySelector<SVGSVGElement>('svg.profile-avatar-svg')
   const initialsEl = avatar.querySelector<HTMLElement>('.profile-avatar-initials')
-  const badgeText = avatar.classList.contains('pedigree-you-badge') ? avatar.textContent?.trim() : null
+  const badgeText = avatar.classList.contains('pedigree-you-badge')
+    ? avatar.textContent?.trim()
+    : null
   return {
     cx,
     top,
-    ringColor: avatarStyle.borderTopColor,
-    fill: avatarStyle.backgroundColor,
+    tone: toneFromAvatar(avatar),
     photo: img?.currentSrc || img?.src || null,
-    domImg: img ?? null,
-    svg: svg ?? null,
     initials: initialsEl?.textContent?.trim() || badgeText || null,
     name: nameEl?.textContent?.trim() ?? '',
     role: roleEl?.textContent?.trim() ?? '',
     years: yearsEl?.textContent?.trim() ?? '',
-    nameFont: `${nameStyle?.fontWeight ?? 600} ${nameStyle?.fontSize ?? '13px'} ${family}`,
+    nameFont: `${nameStyle?.fontWeight ?? 700} ${nameStyle?.fontSize ?? '13px'} ${family}`,
     roleFont: `${roleStyle?.fontWeight ?? 400} ${roleStyle?.fontSize ?? '11px'} ${family}`,
     yearsFont: `${yearsStyle?.fontWeight ?? 400} ${yearsStyle?.fontSize ?? '10.5px'} ${family}`,
     textColor: nameStyle?.color ?? '#1a1f16',
@@ -215,20 +197,26 @@ function paintTree(
   ctx.lineWidth = PED.line
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  const linePath = buildLinePaths(segs).solid
+  const paths = buildLinePaths(segs)
+  const linePath = `${paths.solid}${paths.dashed}`
   if (linePath) ctx.stroke(new Path2D(linePath))
 
   const r = PED.av / 2
   people.forEach((p, i) => {
     const cy = p.top + r
-    ctx.save()
+    const tone = TONE[p.tone]
+    const photo = photos[i]
+
     ctx.beginPath()
     ctx.arc(p.cx, cy, r, 0, Math.PI * 2)
-    ctx.fillStyle = p.fill
+    ctx.fillStyle = tone.fill
     ctx.fill()
-    ctx.clip()
-    const photo = photos[i]
+
     if (photo && photo.naturalWidth > 0 && photo.naturalHeight > 0) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.arc(p.cx, cy, r, 0, Math.PI * 2)
+      ctx.clip()
       const side = Math.min(photo.naturalWidth, photo.naturalHeight)
       ctx.drawImage(
         photo,
@@ -241,25 +229,21 @@ function paintTree(
         PED.av,
         PED.av,
       )
-    }
-    ctx.restore()
-
-    if (!photo || photo.naturalWidth <= 0) {
-      if (p.initials) {
-        ctx.fillStyle = p.ringColor
-        ctx.font = `700 ${p.initials.length > 2 ? 14 : 20}px ${p.nameFont.split(' ').slice(2).join(' ')}`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(p.initials, p.cx, cy)
-      } else {
-        drawPersonGlyph(ctx, p.cx, cy, r, p.ringColor)
-      }
+      ctx.restore()
+    } else if (p.initials) {
+      ctx.fillStyle = p.tone === 'you' ? '#fff' : tone.icon
+      ctx.font = `700 ${p.initials.length > 2 ? 14 : 18}px ${p.nameFont.split(' ').slice(2).join(' ') || 'system-ui, sans-serif'}`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(p.initials, p.cx, cy)
+    } else {
+      drawPersonIcon(ctx, p.cx, cy, r * 0.72, tone.icon)
     }
 
     ctx.beginPath()
     ctx.arc(p.cx, cy, r - 1.5, 0, Math.PI * 2)
-    ctx.strokeStyle = p.ringColor
-    ctx.lineWidth = 3
+    ctx.strokeStyle = tone.ring
+    ctx.lineWidth = p.tone === 'neutral' ? 2 : 3
     ctx.stroke()
 
     ctx.textAlign = 'center'
@@ -307,7 +291,7 @@ function paintTree(
 
 /**
  * Renders the visible family tree (people + connecting lines, without the "add"
- * placeholders) to a PNG. `canvasEl` is the `.ped-canvas` element holding the nodes.
+ * placeholders) to a PNG.
  */
 export async function renderTreePng(
   canvasEl: HTMLElement,
@@ -315,7 +299,6 @@ export async function renderTreePng(
   caption?: string,
 ): Promise<Blob> {
   if ('fonts' in document) await document.fonts.ready
-  await waitForTreeImages(canvasEl)
 
   const people: PersonDraw[] = []
   canvasEl.querySelectorAll<HTMLElement>('.ped-node').forEach((el) => {
@@ -331,14 +314,15 @@ export async function renderTreePng(
     throw new Error('Nothing to export yet. Add people to your tree first.')
   }
 
-  // Export every connector (dashed flags are display-only; keep full structure)
   const segs = dedupePedSegs(layout.segs)
-
   const xs = [
     ...people.flatMap((p) => [p.cx - PED.nodeW / 2, p.cx + PED.nodeW / 2]),
     ...segs.flatMap((s) => [s.x1, s.x2]),
   ]
-  const ys = [...people.flatMap((p) => [p.top, p.top + PED.nodeH]), ...segs.flatMap((s) => [s.y1, s.y2])]
+  const ys = [
+    ...people.flatMap((p) => [p.top, p.top + PED.nodeH]),
+    ...segs.flatMap((s) => [s.y1, s.y2]),
+  ]
   const minX = Math.min(...xs)
   const minY = Math.min(...ys)
   const maxX = Math.max(...xs)
@@ -362,9 +346,7 @@ export async function renderTreePng(
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas is not supported in this browser.')
 
-  const photos = await Promise.all(
-    people.map((p) => loadAvatarForExport(p.photo, p.domImg, p.svg)),
-  )
+  const photos = await Promise.all(people.map((p) => loadPhotoSafe(p.photo)))
 
   const draw = (photoList: (HTMLImageElement | null)[]) =>
     paintTree(
@@ -387,7 +369,6 @@ export async function renderTreePng(
   try {
     return await canvasToPngBlob(canvas)
   } catch {
-    // Tainted canvas (cross-origin photo): rebuild with initials/glyphs only
     const clean = document.createElement('canvas')
     clean.width = canvas.width
     clean.height = canvas.height

@@ -314,8 +314,8 @@ export default function ProfilePage() {
           ownerUid={user.uid}
           memberId={FAMILY_LIBRARY_SELF_TAG}
           memberFirstName={firstName.trim() || displayName.split(/\s+/)[0]}
-          heading="Family Library"
-          emptyHint="Photos tagged with you appear here. Upload and tag them from Family Library."
+          heading="My library"
+          emptyHint="Photos tagged with you appear here. Upload and tag them from My library."
         />
       ) : null}
     </div>
