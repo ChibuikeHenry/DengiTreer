@@ -1,29 +1,18 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { DashIcons } from './DashboardLayout'
-import { treeShareImageFilename, treeShareViewUrl } from '../lib/treeShare'
+import { treeShareViewUrl } from '../lib/treeShare'
 
 type ShareTreeModalProps = {
   open: boolean
   onClose: () => void
   ownerUid: string | null
-  ownerDisplayName: string
-  exportPng: (caption?: string) => Promise<Blob>
 }
 
-export default function ShareTreeModal({
-  open,
-  onClose,
-  ownerUid,
-  ownerDisplayName,
-  exportPng,
-}: ShareTreeModalProps) {
+export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const [link, setLink] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy link')
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [imageBlob, setImageBlob] = useState<Blob | null>(null)
-  const [loadingImage, setLoadingImage] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [error, setError] = useState('')
 
@@ -32,30 +21,7 @@ export default function ShareTreeModal({
     setLink(treeShareViewUrl(ownerUid))
     setCopyLabel('Copy link')
     setError('')
-    let cancelled = false
-    setLoadingImage(true)
-    const caption = `${ownerDisplayName || 'My'} family tree — DengiTree`
-    void exportPng(caption)
-      .then((blob) => {
-        if (cancelled) return
-        setImageBlob(blob)
-        setPreviewUrl(URL.createObjectURL(blob))
-      })
-      .catch(() => {
-        if (!cancelled) setError('We could not create the tree image. Try again in a moment.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingImage(false)
-      })
-    return () => {
-      cancelled = true
-      setPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev)
-        return null
-      })
-      setImageBlob(null)
-    }
-  }, [open, ownerUid, ownerDisplayName, exportPng])
+  }, [open, ownerUid])
 
   useEffect(() => {
     if (!open) return
@@ -84,46 +50,21 @@ export default function ShareTreeModal({
     }
   }
 
-  function downloadImage() {
-    if (!imageBlob) return
-    const url = URL.createObjectURL(imageBlob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = treeShareImageFilename(ownerDisplayName)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
-
   async function handleShare() {
     if (!link) return
     setSharing(true)
     setError('')
-    const title = `${ownerDisplayName.trim() || 'My'} family tree`
+    const title = 'My family tree'
     const text = `View my family tree on DengiTree:\n${link}`
     try {
-      if (imageBlob && typeof navigator.share === 'function') {
-        const file = new File([imageBlob], treeShareImageFilename(ownerDisplayName), {
-          type: 'image/png',
-        })
-        const withFile = { title, text, files: [file] }
-        if (navigator.canShare?.(withFile)) {
-          await navigator.share(withFile)
-          return
-        }
-        await navigator.share({ title, text, url: link })
-        return
-      }
       if (typeof navigator.share === 'function') {
         await navigator.share({ title, text, url: link })
         return
       }
       await copyLink()
-      if (imageBlob) downloadImage()
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
-      setError('Sharing is not available here. Copy the link or download the image instead.')
+      setError('Sharing is not available here. Copy the link instead.')
     } finally {
       setSharing(false)
     }
@@ -145,10 +86,7 @@ export default function ShareTreeModal({
         <header className="modal-head">
           <div>
             <h2 id={titleId}>Share your family tree</h2>
-            <p>
-              Send a link and an image of your tree. Family on DengiTree can open the link when
-              they are signed in.
-            </p>
+            <p>Opens your tree in DengiTree. Family who are signed in can view it with this link.</p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             {DashIcons.close()}
@@ -158,9 +96,7 @@ export default function ShareTreeModal({
         <div className="share-tree-body">
           <section className="modal-section">
             <h3>Tree link</h3>
-            <p className="field-hint">
-              Opens your tree in DengiTree for relatives who already have access.
-            </p>
+            <p className="field-hint">Opens your tree in DengiTree</p>
             <div className="inv-link-row">
               <label className="inv-link-input-wrap">
                 <span className="inv-link-icon" aria-hidden="true">
@@ -187,20 +123,6 @@ export default function ShareTreeModal({
             </div>
           </section>
 
-          <section className="modal-section">
-            <h3>Tree image</h3>
-            <p className="field-hint">PNG of your diagram (without add placeholders).</p>
-            <div className="share-tree-preview" aria-busy={loadingImage}>
-              {loadingImage ? (
-                <p className="share-tree-preview-loading">Preparing image…</p>
-              ) : previewUrl ? (
-                <img src={previewUrl} alt="" className="share-tree-preview-img" />
-              ) : (
-                <p className="share-tree-preview-loading">Image not ready</p>
-              )}
-            </div>
-          </section>
-
           {error ? (
             <p className="modal-form-error" role="alert">
               {error}
@@ -212,25 +134,16 @@ export default function ShareTreeModal({
               <button
                 type="button"
                 className="modal-submit"
-                disabled={loadingImage || sharing || !imageBlob}
+                disabled={sharing || !link}
                 onClick={() => void handleShare()}
               >
-                {sharing ? 'Opening share…' : 'Share link & image'}
+                {sharing ? 'Opening share…' : 'Share link'}
               </button>
-            ) : null}
-            <button
-              type="button"
-              className={canShareNative ? 'share-tree-secondary' : 'modal-submit'}
-              disabled={loadingImage || !imageBlob}
-              onClick={downloadImage}
-            >
-              Download image
-            </button>
-            {!canShareNative ? (
-              <button type="button" className="share-tree-secondary" onClick={() => void copyLink()}>
+            ) : (
+              <button type="button" className="modal-submit" onClick={() => void copyLink()}>
                 {copyLabel}
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

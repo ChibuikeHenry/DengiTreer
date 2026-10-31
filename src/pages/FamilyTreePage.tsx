@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { Link, useLocation, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 import { DashIcons } from '../components/DashboardLayout'
 import EditFamilyMemberModal from '../components/EditFamilyMemberModal'
@@ -355,13 +355,6 @@ export default function FamilyTreePage() {
     })
   }
 
-  const exportTreePng = useCallback((caption?: string) => {
-    if (!treeRef.current) {
-      return Promise.reject(new Error('Tree is not ready yet.'))
-    }
-    return treeRef.current.exportPng(caption)
-  }, [])
-
   async function runDownload() {
     if (!treeRef.current || downloading) return
     setDownloading(true)
@@ -377,7 +370,12 @@ export default function FamilyTreePage() {
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
       console.error(err)
-      window.alert('Sorry, we could not create the tree image. Please try again.')
+      const detail = err instanceof Error && err.message ? err.message : ''
+      window.alert(
+        detail && !/could not create the image/i.test(detail)
+          ? detail
+          : 'Sorry, we could not create the tree image. Please try again.',
+      )
     } finally {
       setDownloading(false)
     }
@@ -728,8 +726,6 @@ export default function FamilyTreePage() {
         open={shareOpen}
         onClose={() => setShareOpen(false)}
         ownerUid={!isExploreView ? (user?.uid ?? null) : null}
-        ownerDisplayName={centerName || viewerName || 'My'}
-        exportPng={exportTreePng}
       />
 
       {!fullTreeView ? (

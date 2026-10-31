@@ -10,6 +10,7 @@ const SCALE = 2
 const MARGIN = 40
 const BACKGROUND = '#eef6e8'
 const LINE_COLOR = PED_LINE_COLOR
+const MAX_CANVAS_EDGE = 8192
 
 function loadImageFromUrl(src: string, crossOrigin: boolean): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -21,6 +22,7 @@ function loadImageFromUrl(src: string, crossOrigin: boolean): Promise<HTMLImageE
   })
 }
 
+/** Only CORS-safe fetches — never load without crossOrigin or the canvas will taint. */
 async function loadImageViaFetch(src: string): Promise<HTMLImageElement | null> {
   try {
     const res = await fetch(src, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
@@ -50,64 +52,31 @@ async function rasterizeSvg(svg: SVGSVGElement, size: number): Promise<HTMLImage
   }
 }
 
+/**
+ * Load an avatar that is safe to draw onto an export canvas.
+ * Skips any non-CORS path — drawing those would taint the canvas and make toBlob fail.
+ */
 async function loadAvatarForExport(
   photoUrl: string | null,
   domImg: HTMLImageElement | null,
   svg: SVGSVGElement | null,
 ): Promise<HTMLImageElement | null> {
-  if (domImg) {
-    if (!domImg.complete) {
-      await new Promise<void>((resolve) => {
-        domImg.onload = () => resolve()
-        domImg.onerror = () => resolve()
-      })
-    }
-    if (domImg.decode) {
-      try {
-        await domImg.decode()
-      } catch {
-        /* use whatever loaded */
-      }
-    }
-  }
-
   const src = (domImg?.currentSrc || domImg?.src || photoUrl || '').trim()
   if (src) {
-    const fetched = await loadImageViaFetch(src)
-    if (fetched) return fetched
-    const cors = await loadImageFromUrl(src, true)
-    if (cors) return cors
-    if (domImg?.complete && domImg.naturalWidth > 0) {
-      try {
-        const bitmap = await createImageBitmap(domImg)
-        const canvas = document.createElement('canvas')
-        canvas.width = bitmap.width
-        canvas.height = bitmap.height
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          ctx.drawImage(bitmap, 0, 0)
-          bitmap.close()
-          const blob = await new Promise<Blob | null>((resolve) =>
-            canvas.toBlob((b) => resolve(b), 'image/png'),
-          )
-          if (blob) {
-            const objectUrl = URL.createObjectURL(blob)
-            try {
-              const fromDom = await loadImageFromUrl(objectUrl, false)
-              if (fromDom) return fromDom
-            } finally {
-              URL.revokeObjectURL(objectUrl)
-            }
-          }
-        } else {
-          bitmap.close()
-        }
-      } catch {
-        /* canvas tainted or unsupported */
-      }
+    // Same-origin / blob / data URLs are always safe
+    if (
+      src.startsWith('blob:') ||
+      src.startsWith('data:') ||
+      (typeof window !== 'undefined' && src.startsWith(window.location.origin))
+    ) {
+      const local = await loadImageFromUrl(src, false)
+      if (local) return local
+    } else {
+      const fetched = await loadImageViaFetch(src)
+      if (fetched) return fetched
+      const cors = await loadImageFromUrl(src, true)
+      if (cors) return cors
     }
-    const plain = await loadImageFromUrl(src, false)
-    if (plain) return plain
   }
 
   if (svg) return rasterizeSvg(svg, PED.av)
@@ -208,64 +177,47 @@ function readPerson(nodeEl: HTMLElement, cx: number, top: number): PersonDraw | 
   }
 }
 
-/**
- * Renders the visible family tree (people + connecting lines, without the "add"
- * placeholders) to a PNG. `canvasEl` is the `.ped-canvas` element holding the nodes.
- */
-export async function renderTreePng(
-  canvasEl: HTMLElement,
-  layout: PedigreeLayout,
-  caption?: string,
-): Promise<Blob> {
-  if ('fonts' in document) await document.fonts.ready
-  await waitForTreeImages(canvasEl)
-
-  const people: PersonDraw[] = []
-  canvasEl.querySelectorAll<HTMLElement>('.ped-node').forEach((el) => {
-    if (el.querySelector('.ped-add')) return
-    const left = parseFloat(el.style.left)
-    const top = parseFloat(el.style.top)
-    const person = readPerson(el, left + PED.nodeW / 2, top)
-    if (person) people.push(person)
+function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob(
+        (blob) => (blob ? resolve(blob) : reject(new Error('Could not create the image.'))),
+        'image/png',
+      )
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error('Could not create the image.'))
+    }
   })
+}
 
-  const segs = dedupePedSegs(layout.segs.filter((s) => !s.dashed))
-
-  // crop to what is actually drawn
-  const xs = [
-    ...people.flatMap((p) => [p.cx - PED.nodeW / 2, p.cx + PED.nodeW / 2]),
-    ...segs.flatMap((s) => [s.x1, s.x2]),
-  ]
-  const ys = [...people.flatMap((p) => [p.top, p.top + PED.nodeH]), ...segs.flatMap((s) => [s.y1, s.y2])]
-  const minX = Math.min(...xs)
-  const minY = Math.min(...ys)
-  const maxX = Math.max(...xs)
-  const maxY = Math.max(...ys)
-  const captionH = caption ? 36 : 0
-  const width = maxX - minX + MARGIN * 2
-  const height = maxY - minY + MARGIN * 2 + captionH
-
-  const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(width * SCALE)
-  canvas.height = Math.ceil(height * SCALE)
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas is not supported in this browser.')
+function paintTree(
+  ctx: CanvasRenderingContext2D,
+  people: PersonDraw[],
+  photos: (HTMLImageElement | null)[],
+  segs: PedigreeLayout['segs'],
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  width: number,
+  height: number,
+  caption: string | undefined,
+  captionH: number,
+) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   ctx.scale(SCALE, SCALE)
   ctx.fillStyle = BACKGROUND
   ctx.fillRect(0, 0, width, height)
   ctx.translate(MARGIN - minX, MARGIN - minY)
 
-  // lines
   ctx.strokeStyle = LINE_COLOR
   ctx.lineWidth = PED.line
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
-  ctx.stroke(new Path2D(buildLinePaths(segs).solid))
+  const linePath = buildLinePaths(segs).solid
+  if (linePath) ctx.stroke(new Path2D(linePath))
 
-  // people
-  const photos = await Promise.all(
-    people.map((p) => loadAvatarForExport(p.photo, p.domImg, p.svg)),
-  )
   const r = PED.av / 2
   people.forEach((p, i) => {
     const cy = p.top + r
@@ -276,7 +228,7 @@ export async function renderTreePng(
     ctx.fill()
     ctx.clip()
     const photo = photos[i]
-    if (photo) {
+    if (photo && photo.naturalWidth > 0 && photo.naturalHeight > 0) {
       const side = Math.min(photo.naturalWidth, photo.naturalHeight)
       ctx.drawImage(
         photo,
@@ -292,7 +244,7 @@ export async function renderTreePng(
     }
     ctx.restore()
 
-    if (!photo) {
+    if (!photo || photo.naturalWidth <= 0) {
       if (p.initials) {
         ctx.fillStyle = p.ringColor
         ctx.font = `700 ${p.initials.length > 2 ? 14 : 20}px ${p.nameFont.split(' ').slice(2).join(' ')}`
@@ -304,14 +256,12 @@ export async function renderTreePng(
       }
     }
 
-    // ring
     ctx.beginPath()
     ctx.arc(p.cx, cy, r - 1.5, 0, Math.PI * 2)
     ctx.strokeStyle = p.ringColor
     ctx.lineWidth = 3
     ctx.stroke()
 
-    // labels
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
     let y = p.top + PED.av + 9
@@ -322,7 +272,6 @@ export async function renderTreePng(
     if (p.role) {
       ctx.fillStyle = p.mutedColor
       ctx.font = p.roleFont
-      // role may carry "(Deceased)" – wrap onto a second line when too wide
       const words = p.role.split(' ')
       let line = ''
       for (const word of words) {
@@ -354,11 +303,110 @@ export async function renderTreePng(
     ctx.textBaseline = 'alphabetic'
     ctx.fillText(caption, (minX + maxX) / 2, maxY + MARGIN / 2 + captionH - 8)
   }
+}
 
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Could not create the image.'))),
-      'image/png',
-    )
+/**
+ * Renders the visible family tree (people + connecting lines, without the "add"
+ * placeholders) to a PNG. `canvasEl` is the `.ped-canvas` element holding the nodes.
+ */
+export async function renderTreePng(
+  canvasEl: HTMLElement,
+  layout: PedigreeLayout,
+  caption?: string,
+): Promise<Blob> {
+  if ('fonts' in document) await document.fonts.ready
+  await waitForTreeImages(canvasEl)
+
+  const people: PersonDraw[] = []
+  canvasEl.querySelectorAll<HTMLElement>('.ped-node').forEach((el) => {
+    if (el.querySelector('.ped-add')) return
+    const left = parseFloat(el.style.left)
+    const top = parseFloat(el.style.top)
+    if (!Number.isFinite(left) || !Number.isFinite(top)) return
+    const person = readPerson(el, left + PED.nodeW / 2, top)
+    if (person) people.push(person)
   })
+
+  if (!people.length) {
+    throw new Error('Nothing to export yet. Add people to your tree first.')
+  }
+
+  // Export every connector (dashed flags are display-only; keep full structure)
+  const segs = dedupePedSegs(layout.segs)
+
+  const xs = [
+    ...people.flatMap((p) => [p.cx - PED.nodeW / 2, p.cx + PED.nodeW / 2]),
+    ...segs.flatMap((s) => [s.x1, s.x2]),
+  ]
+  const ys = [...people.flatMap((p) => [p.top, p.top + PED.nodeH]), ...segs.flatMap((s) => [s.y1, s.y2])]
+  const minX = Math.min(...xs)
+  const minY = Math.min(...ys)
+  const maxX = Math.max(...xs)
+  const maxY = Math.max(...ys)
+  if (![minX, minY, maxX, maxY].every(Number.isFinite)) {
+    throw new Error('Could not measure the tree for export.')
+  }
+
+  const captionH = caption ? 36 : 0
+  const cssWidth = maxX - minX + MARGIN * 2
+  const cssHeight = maxY - minY + MARGIN * 2 + captionH
+  const pixelW = Math.ceil(cssWidth * SCALE)
+  const pixelH = Math.ceil(cssHeight * SCALE)
+  if (pixelW > MAX_CANVAS_EDGE || pixelH > MAX_CANVAS_EDGE) {
+    throw new Error('This tree is too large to export as one image.')
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, pixelW)
+  canvas.height = Math.max(1, pixelH)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas is not supported in this browser.')
+
+  const photos = await Promise.all(
+    people.map((p) => loadAvatarForExport(p.photo, p.domImg, p.svg)),
+  )
+
+  const draw = (photoList: (HTMLImageElement | null)[]) =>
+    paintTree(
+      ctx,
+      people,
+      photoList,
+      segs,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      cssWidth,
+      cssHeight,
+      caption,
+      captionH,
+    )
+
+  draw(photos)
+
+  try {
+    return await canvasToPngBlob(canvas)
+  } catch {
+    // Tainted canvas (cross-origin photo): rebuild with initials/glyphs only
+    const clean = document.createElement('canvas')
+    clean.width = canvas.width
+    clean.height = canvas.height
+    const cleanCtx = clean.getContext('2d')
+    if (!cleanCtx) throw new Error('Canvas is not supported in this browser.')
+    paintTree(
+      cleanCtx,
+      people,
+      people.map(() => null),
+      segs,
+      minX,
+      minY,
+      maxX,
+      maxY,
+      cssWidth,
+      cssHeight,
+      caption,
+      captionH,
+    )
+    return canvasToPngBlob(clean)
+  }
 }
