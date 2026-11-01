@@ -55,6 +55,9 @@ function memberSearchHaystack(member: TreeMember): string {
     member.siblingRelationship,
     member.memberStatus,
     member.gender,
+    member.inviteeEmail,
+    member.dateOfBirth,
+    member.dateOfDeath,
     ...roleFamilyTerms(member.role),
   ]
   return parts
@@ -126,21 +129,22 @@ export function filterTreeSearchEntries(
   entries: TreeSearchEntry[],
   members: TreeMember[],
   options: { selfName: string; selfPosition: string | null; includeSelf: boolean },
-  limit = 8,
+  limit = 50,
 ): TreeSearchEntry[] {
   const q = query.trim()
   if (!q) return []
 
   const memberById = new Map(members.map((m) => [m.id, m]))
 
-  return entries
-    .filter((entry) => {
-      if (entry.kind === 'self') {
-        return queryMatchesHaystack(q, selfSearchHaystack(options.selfName, options.selfPosition))
-      }
-      const member = entry.memberId ? memberById.get(entry.memberId) : null
-      if (!member) return false
-      return queryMatchesHaystack(q, memberSearchHaystack(member))
-    })
-    .slice(0, limit)
+  const matched = entries.filter((entry) => {
+    if (entry.kind === 'self') {
+      return queryMatchesHaystack(q, selfSearchHaystack(options.selfName, options.selfPosition))
+    }
+    const member = entry.memberId ? memberById.get(entry.memberId) : null
+    if (!member) return false
+    return queryMatchesHaystack(q, memberSearchHaystack(member))
+  })
+
+  if (limit <= 0) return matched
+  return matched.slice(0, limit)
 }

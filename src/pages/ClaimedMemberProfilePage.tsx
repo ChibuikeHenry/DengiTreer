@@ -362,6 +362,9 @@ export default function ClaimedMemberProfilePage() {
           memberId={member.id}
           memberFirstName={member.displayName.split(/\s+/)[0] ?? member.displayName}
           emptyHint="No photos tagged with this person yet. Add some from My library."
+          allowSelfUntag={Boolean(user?.uid && member.joinedUid === user.uid)}
+          viewerUid={user?.uid ?? null}
+          showLibraryLink={treeOwnerUid === user?.uid}
         />
       ) : null}
 

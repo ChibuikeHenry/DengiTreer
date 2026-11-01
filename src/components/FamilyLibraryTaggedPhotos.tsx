@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  untagSelfFromFamilyLibraryPhoto,
   subscribePhotosTaggedMember,
   type FamilyLibraryPhoto,
 } from '../lib/familyLibrary'
+import { getCallableErrorMessage } from '../lib/invitations'
 
 type FamilyLibraryTaggedPhotosProps = {
   ownerUid: string
@@ -12,6 +14,9 @@ type FamilyLibraryTaggedPhotosProps = {
   heading?: string
   emptyHint?: string
   showLibraryLink?: boolean
+  /** When true, show Untag me on each photo (viewer must be the tagged person). */
+  allowSelfUntag?: boolean
+  viewerUid?: string | null
 }
 
 export default function FamilyLibraryTaggedPhotos({
@@ -21,10 +26,13 @@ export default function FamilyLibraryTaggedPhotos({
   heading,
   emptyHint,
   showLibraryLink = true,
+  allowSelfUntag = false,
+  viewerUid = null,
 }: FamilyLibraryTaggedPhotosProps) {
   const [photos, setPhotos] = useState<FamilyLibraryPhoto[]>([])
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
+  const [untaggingId, setUntaggingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!ownerUid || !memberId) {
@@ -47,6 +55,27 @@ export default function FamilyLibraryTaggedPhotos({
       },
     )
   }, [ownerUid, memberId])
+
+  async function handleUntag(photo: FamilyLibraryPhoto) {
+    if (!allowSelfUntag || !ownerUid) return
+    const ok = window.confirm(
+      'Remove your tag from this photo? It will no longer appear on your profile.',
+    )
+    if (!ok) return
+    setUntaggingId(photo.id)
+    setError('')
+    try {
+      await untagSelfFromFamilyLibraryPhoto(ownerUid, photo.id, {
+        viewerUid,
+        selfMemberId: memberId,
+      })
+      setPhotos((prev) => prev.filter((p) => p.id !== photo.id))
+    } catch (err) {
+      setError(getCallableErrorMessage(err) || 'Could not untag you from this photo.')
+    } finally {
+      setUntaggingId(null)
+    }
+  }
 
   const title =
     heading ??
@@ -80,8 +109,16 @@ export default function FamilyLibraryTaggedPhotos({
             <li key={photo.id}>
               <figure className="family-library-profile-figure">
                 <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
-                {photo.caption ? (
-                  <figcaption>{photo.caption}</figcaption>
+                {photo.caption ? <figcaption>{photo.caption}</figcaption> : null}
+                {allowSelfUntag ? (
+                  <button
+                    type="button"
+                    className="family-library-untag-btn"
+                    disabled={untaggingId === photo.id}
+                    onClick={() => void handleUntag(photo)}
+                  >
+                    {untaggingId === photo.id ? 'Untagging…' : 'Untag me'}
+                  </button>
                 ) : null}
               </figure>
             </li>

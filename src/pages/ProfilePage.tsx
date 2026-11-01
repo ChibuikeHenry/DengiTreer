@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import FamilyLibraryTaggedPhotos from '../components/FamilyLibraryTaggedPhotos'
 import { FAMILY_LIBRARY_SELF_TAG } from '../lib/familyLibrary'
+import { subscribeTreeMembers } from '../lib/familyTreeMembers'
 import { uploadProfilePhoto } from '../lib/profilePhoto'
 import { resolveUserProfileForForm, saveUserProfile } from '../lib/userProfile'
 
@@ -45,6 +46,9 @@ export default function ProfilePage() {
   const [profilePrivacy, setProfilePrivacy] = useState<MemberPrivacy>('family_members')
   const [fatherId, setFatherId] = useState('')
   const [motherId, setMotherId] = useState('')
+  const [invitedByUid, setInvitedByUid] = useState<string | null>(null)
+  const [taggedMemberId, setTaggedMemberId] = useState<string | null>(null)
+  const [photoLibraryOwnerUid, setPhotoLibraryOwnerUid] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -71,6 +75,16 @@ export default function ProfilePage() {
       )
       setFatherId(profile.treeFatherMemberId ?? '')
       setMotherId(profile.treeMotherMemberId ?? '')
+      const inviter = profile.invitedByUid?.trim() || null
+      setInvitedByUid(inviter)
+      if (inviter) {
+        // Wait for this user's member/invite id on the inviter's tree — never use __self__.
+        setPhotoLibraryOwnerUid(inviter)
+        setTaggedMemberId(null)
+      } else {
+        setPhotoLibraryOwnerUid(user.uid)
+        setTaggedMemberId(FAMILY_LIBRARY_SELF_TAG)
+      }
       setLoading(false)
     })()
 
@@ -78,6 +92,14 @@ export default function ProfilePage() {
       cancelled = true
     }
   }, [user])
+
+  useEffect(() => {
+    if (!user?.uid || !invitedByUid) return
+    return subscribeTreeMembers(invitedByUid, (members) => {
+      const mine = members.find((m) => m.joinedUid === user.uid)
+      setTaggedMemberId(mine?.id ?? null)
+    })
+  }, [user?.uid, invitedByUid])
 
   const displayName =
     [firstName, middleName, lastName].map((p) => p.trim()).filter(Boolean).join(' ') ||
@@ -309,14 +331,26 @@ export default function ProfilePage() {
         </div>
       </form>
 
-      {user?.uid ? (
+      {photoLibraryOwnerUid && taggedMemberId ? (
         <FamilyLibraryTaggedPhotos
-          ownerUid={user.uid}
-          memberId={FAMILY_LIBRARY_SELF_TAG}
+          ownerUid={photoLibraryOwnerUid}
+          memberId={taggedMemberId}
           memberFirstName={firstName.trim() || displayName.split(/\s+/)[0]}
-          heading="My library"
+          heading="Photos of me"
           emptyHint="Photos tagged with you appear here. Upload and tag them from My library."
+          allowSelfUntag
+          viewerUid={user?.uid ?? null}
+          showLibraryLink={!invitedByUid}
         />
+      ) : invitedByUid && !taggedMemberId && !loading ? (
+        <section className="claimed-card family-library-profile-section">
+          <div className="family-library-profile-head">
+            <h2>Photos of me</h2>
+          </div>
+          <p className="family-library-muted">
+            Photos tagged with you on the family tree will appear here once your profile is linked.
+          </p>
+        </section>
       ) : null}
     </div>
   )

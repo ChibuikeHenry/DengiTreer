@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -11,9 +12,15 @@ import {
   where,
   type Timestamp,
 } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { db, storage } from './firebase'
+import { db, functions, storage } from './firebase'
 import { validateProfilePhoto } from './profilePhoto'
+
+const untagSelfFromFamilyLibraryPhotoFn = httpsCallable<
+  { ownerUid: string; photoId: string; tagId?: string },
+  { ok: boolean; taggedMemberIds: string[] }
+>(functions, 'untagSelfFromFamilyLibraryPhoto')
 
 /** Tag for the signed-in tree owner on their own profile. */
 export const FAMILY_LIBRARY_SELF_TAG = '__self__'
@@ -132,6 +139,46 @@ export async function updateFamilyLibraryPhotoTags(
   await updateDoc(doc(db, 'users', ownerUid, 'familyLibrary', photoId), {
     taggedMemberIds: unique,
   })
+}
+
+/**
+ * Remove only the signed-in user's tag from a photo.
+ * Tree owners update Firestore directly; joined relatives use the callable.
+ * `selfMemberId` must be the same tag id used to list the photo.
+ */
+export async function untagSelfFromFamilyLibraryPhoto(
+  ownerUid: string,
+  photoId: string,
+  options?: { viewerUid?: string | null; selfMemberId?: string | null },
+): Promise<string[]> {
+  const viewerUid = options?.viewerUid?.trim() || null
+  const selfMemberId = options?.selfMemberId?.trim() || null
+  const tagId = selfMemberId || FAMILY_LIBRARY_SELF_TAG
+
+  // Owner can always edit their own library.
+  if (viewerUid && viewerUid === ownerUid) {
+    const photoRef = doc(db, 'users', ownerUid, 'familyLibrary', photoId)
+    const snap = await getDoc(photoRef)
+    if (!snap.exists()) throw new Error('Photo not found.')
+    const tagged = Array.isArray(snap.data()?.taggedMemberIds)
+      ? (snap.data()!.taggedMemberIds as unknown[]).map((v) => String(v)).filter(Boolean)
+      : []
+    const removable = new Set<string>([FAMILY_LIBRARY_SELF_TAG, tagId])
+    const next = tagged.filter((id) => !removable.has(id))
+    if (next.length === tagged.length) {
+      // Already missing — treat as success so the UI can drop the card.
+      return tagged
+    }
+    await updateDoc(photoRef, { taggedMemberIds: next })
+    return next
+  }
+
+  const result = await untagSelfFromFamilyLibraryPhotoFn({
+    ownerUid,
+    photoId,
+    tagId,
+  })
+  return result.data.taggedMemberIds ?? []
 }
 
 export async function updateFamilyLibraryPhotoCaption(

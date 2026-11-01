@@ -1257,6 +1257,7 @@ export const submitTreeMergeRequest = onCall(async (request) => {
   return { ok: true, token: result.token, joinUrl: result.joinUrl }
 })
 
+export { untagSelfFromFamilyLibraryPhoto } from './familyLibraryUntag'
 export { initializePremiumPayment, verifyPremiumPayment } from './premiumPayments'
 export {
   initializeTreeBuildPayment,

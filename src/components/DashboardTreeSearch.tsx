@@ -90,11 +90,17 @@ export default function DashboardTreeSearch({
 
   const results = useMemo(
     () =>
-      filterTreeSearchEntries(query, allEntries, members, {
-        selfName,
-        selfPosition,
-        includeSelf,
-      }),
+      filterTreeSearchEntries(
+        query,
+        allEntries,
+        members,
+        {
+          selfName,
+          selfPosition,
+          includeSelf,
+        },
+        24,
+      ),
     [query, allEntries, members, selfName, selfPosition, includeSelf],
   )
 

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyTreeBuildPayment = exports.initializeTreeBuildPayment = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyTreeBuildPayment = exports.initializeTreeBuildPayment = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.untagSelfFromFamilyLibraryPhoto = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -975,6 +975,8 @@ exports.submitTreeMergeRequest = (0, https_1.onCall)(async (request) => {
     });
     return { ok: true, token: result.token, joinUrl: result.joinUrl };
 });
+var familyLibraryUntag_1 = require("./familyLibraryUntag");
+Object.defineProperty(exports, "untagSelfFromFamilyLibraryPhoto", { enumerable: true, get: function () { return familyLibraryUntag_1.untagSelfFromFamilyLibraryPhoto; } });
 var premiumPayments_1 = require("./premiumPayments");
 Object.defineProperty(exports, "initializePremiumPayment", { enumerable: true, get: function () { return premiumPayments_1.initializePremiumPayment; } });
 Object.defineProperty(exports, "verifyPremiumPayment", { enumerable: true, get: function () { return premiumPayments_1.verifyPremiumPayment; } });

@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom'
 import UpcomingBadge from '../components/UpcomingBadge'
 import { DashIcons } from '../components/DashboardLayout'
-import { formatBuildMyTreePrice } from '../lib/buildMyTreeService'
-import { formatCleanUpMyTreePrice } from '../lib/cleanUpMyTreeService'
 
 const plannedTrees = [
   {
@@ -58,18 +56,6 @@ export default function ManageTreesPage() {
               <span>Share read-only link</span>
               <Link to="/home/tree?share=1" className="manage-tree-link">
                 Share tree
-              </Link>
-            </li>
-            <li>
-              <span>Clean up my tree</span>
-              <Link to="/home/clean-up-my-tree" className="manage-tree-link manage-tree-link-paid">
-                {formatCleanUpMyTreePrice()} · Paid
-              </Link>
-            </li>
-            <li>
-              <span>Build my tree (from spreadsheet)</span>
-              <Link to="/home/build-my-tree" className="manage-tree-link manage-tree-link-paid">
-                {formatBuildMyTreePrice()} · Paid
               </Link>
             </li>
             <li>
