@@ -1,76 +1,88 @@
 export default function AboutOrgChart() {
   return (
-    <div className="about-org-chart" role="img" aria-label="Team structure: CEO with Product Designer, Lead Developer, and Developer">
+    <div
+      className="about-org-chart"
+      role="img"
+      aria-label="Team structure: CEO with Product Designer, Lead Developer, and Developer"
+    >
       <svg
         className="about-org-svg"
-        viewBox="0 0 360 220"
+        viewBox="0 0 400 270"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <line x1="180" y1="58" x2="180" y2="88" stroke="#8fa882" strokeWidth="2" />
-        <line x1="60" y1="88" x2="300" y2="88" stroke="#8fa882" strokeWidth="2" />
-        <line x1="60" y1="88" x2="60" y2="108" stroke="#8fa882" strokeWidth="2" />
-        <line x1="180" y1="88" x2="180" y2="108" stroke="#8fa882" strokeWidth="2" />
-        <line x1="300" y1="88" x2="300" y2="108" stroke="#8fa882" strokeWidth="2" />
+        {/* Connecting lines */}
+        <path
+          d="M200 80v40M60 120h280M60 120v40M200 120v40M340 120v40"
+          stroke="#477334"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
 
-        <circle cx="180" cy="36" r="32" fill="#34611d" />
+        {/* CEO Node */}
+        <circle cx="200" cy="42" r="38" fill="#1f4214" />
         <text
-          x="180"
-          y="41"
+          x="200"
+          y="48"
           textAnchor="middle"
-          fill="#fff"
-          fontSize="13"
-          fontWeight="700"
-          fontFamily="system-ui, sans-serif"
+          fill="#ffffff"
+          fontSize="15"
+          fontWeight="800"
+          fontFamily="system-ui, -apple-system, sans-serif"
+          letterSpacing="0.02em"
         >
           CEO
         </text>
 
-        <circle cx="60" cy="148" r="38" fill="#ddd0e8" />
+        {/* Product Designer Node */}
+        <circle cx="60" cy="202" r="42" fill="#d6b5f0" />
         <text
           x="60"
-          y="142"
+          y="197"
           textAnchor="middle"
-          fill="#5c3d7a"
-          fontSize="9.5"
+          fill="#471c67"
+          fontSize="12"
           fontWeight="700"
-          fontFamily="system-ui, sans-serif"
+          fontFamily="system-ui, -apple-system, sans-serif"
         >
           <tspan x="60" dy="0">
             Product
           </tspan>
-          <tspan x="60" dy="11">
+          <tspan x="60" dy="14">
             Designer
           </tspan>
         </text>
 
-        <circle cx="180" cy="148" r="38" fill="#c5d9ea" />
+        {/* Lead Developer Node */}
+        <circle cx="200" cy="202" r="42" fill="#a4c4f5" />
         <text
-          x="180"
-          y="142"
+          x="200"
+          y="197"
           textAnchor="middle"
-          fill="#1e5580"
-          fontSize="9.5"
+          fill="#1b4372"
+          fontSize="12"
           fontWeight="700"
-          fontFamily="system-ui, sans-serif"
+          fontFamily="system-ui, -apple-system, sans-serif"
         >
-          <tspan x="180" dy="0">
+          <tspan x="200" dy="0">
             Lead
           </tspan>
-          <tspan x="180" dy="11">
+          <tspan x="200" dy="14">
             Developer
           </tspan>
         </text>
 
-        <circle cx="300" cy="148" r="38" fill="#e8dcc8" />
+        {/* Developer Node */}
+        <circle cx="340" cy="202" r="42" fill="#e5c08b" />
         <text
-          x="300"
-          y="148"
+          x="340"
+          y="206"
           textAnchor="middle"
-          fill="#7a5c32"
-          fontSize="10"
+          fill="#664316"
+          fontSize="12"
           fontWeight="700"
-          fontFamily="system-ui, sans-serif"
+          fontFamily="system-ui, -apple-system, sans-serif"
         >
           Developer
         </text>
