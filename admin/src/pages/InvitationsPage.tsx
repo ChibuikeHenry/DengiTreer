@@ -1,9 +1,11 @@
 import AdminPageToolbar from '../components/AdminPageToolbar'
 import AdminSideRail from '../components/AdminSideRail'
 import InvitationsTable from '../components/InvitationsTable'
-import { invitationsPage } from '../data/mockAdminData'
+import { useRealInvitations } from '../lib/adminDataService'
 
 export default function InvitationsPage() {
+  const { invitations, loading } = useRealInvitations()
+
   return (
     <>
       <AdminPageToolbar
@@ -13,10 +15,16 @@ export default function InvitationsPage() {
       <div className="dt-content-split">
         <div className="dt-table-panel">
           <div className="dt-table-panel-head">
-            <h2>All Invitations</h2>
-            <p>Resend or revoke pending invites.</p>
+            <h2>All Invitations ({invitations.length})</h2>
+            <p>Track pending and sent invitations across DengiTree.</p>
           </div>
-          <InvitationsTable rows={invitationsPage} />
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#5c6456' }}>
+              Loading invitations...
+            </div>
+          ) : (
+            <InvitationsTable rows={invitations} />
+          )}
         </div>
         <AdminSideRail />
       </div>

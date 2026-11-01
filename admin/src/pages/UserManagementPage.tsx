@@ -1,13 +1,19 @@
+import { useState } from 'react'
 import AdminPageToolbar from '../components/AdminPageToolbar'
 import AdminSideRail from '../components/AdminSideRail'
 import { IconUsers } from '../components/AdminNavIcons'
-import { members } from '../data/mockAdminData'
 import StatusBadge from '../components/StatusBadge'
-
-/** Set true to preview table rows; Figma shows an empty grid. */
-const SHOW_SAMPLE_USERS = false
+import { useRealUsers } from '../lib/adminDataService'
 
 export default function UserManagementPage() {
+  const { users, loading, error } = useRealUsers()
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredUsers = users.filter((u) => {
+    const term = searchTerm.toLowerCase()
+    return u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)
+  })
+
   return (
     <>
       <AdminPageToolbar
@@ -17,43 +23,76 @@ export default function UserManagementPage() {
 
       <div className="dt-content-split">
         <section className="dt-table-panel">
-          <div className="dt-table-panel-head">
-            <h2>
-              <IconUsers size={18} />
-              All Users
-            </h2>
-            <p>Manage user accounts, roles and status.</p>
+          <div className="dt-table-panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div>
+              <h2>
+                <IconUsers size={18} />
+                All Users ({users.length})
+              </h2>
+              <p>Manage user accounts, roles and status.</p>
+            </div>
+            <div style={{ minWidth: '220px' }}>
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.45rem 0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid #c9dcb8',
+                  fontSize: '0.85rem',
+                  background: '#ffffff',
+                }}
+              />
+            </div>
           </div>
+
           <table className="dt-data-table">
             <thead>
               <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Email</th>
+                <th scope="col">Role</th>
                 <th scope="col">Status</th>
                 <th scope="col">Joined On</th>
-                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {SHOW_SAMPLE_USERS ? (
-                members.map((row) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="dt-empty-cell" style={{ textAlign: 'center', padding: '2rem' }}>
+                    Loading users...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={5} className="dt-empty-cell" style={{ textAlign: 'center', color: '#c53030', padding: '2rem' }}>
+                    {error}
+                  </td>
+                </tr>
+              ) : filteredUsers.length > 0 ? (
+                filteredUsers.map((row) => (
                   <tr key={row.id}>
-                    <td>{row.name}</td>
+                    <td>
+                      <strong>{row.name}</strong>
+                    </td>
                     <td>{row.email}</td>
+                    <td>
+                      <span className="dt-role-pill">{row.role}</span>
+                    </td>
                     <td>
                       <StatusBadge variant={row.status} />
                     </td>
                     <td>{row.joined}</td>
-                    <td>
-                      <button type="button" className="dt-logout-btn">
-                        View
-                      </button>
-                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="dt-empty-cell dt-empty-cell--tall" />
+                  <td colSpan={5} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
+                    {searchTerm ? 'No users matching your search.' : 'No users found in database.'}
+                  </td>
                 </tr>
               )}
             </tbody>

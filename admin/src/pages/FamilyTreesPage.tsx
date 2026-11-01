@@ -1,9 +1,12 @@
 import AdminPageToolbar from '../components/AdminPageToolbar'
 import AdminSideRail from '../components/AdminSideRail'
 import { IconTree } from '../components/AdminNavIcons'
-const SHOW_SAMPLE_TREES = false
+import StatusBadge from '../components/StatusBadge'
+import { useRealFamilyTrees } from '../lib/adminDataService'
 
 export default function FamilyTreesPage() {
+  const { trees, loading } = useRealFamilyTrees()
+
   return (
     <>
       <AdminPageToolbar
@@ -16,7 +19,7 @@ export default function FamilyTreesPage() {
           <div className="dt-table-panel-head">
             <h2>
               <IconTree size={18} />
-              All Family Trees
+              All Family Trees ({trees.length})
             </h2>
             <p>View owners, member counts, and tree status.</p>
           </div>
@@ -27,20 +30,35 @@ export default function FamilyTreesPage() {
                 <th scope="col">Owner</th>
                 <th scope="col">Members</th>
                 <th scope="col">Status</th>
-                <th scope="col">Last Updated</th>
-                <th scope="col">Actions</th>
+                <th scope="col">Created On</th>
               </tr>
             </thead>
             <tbody>
-              {SHOW_SAMPLE_TREES ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={6} className="dt-empty-cell">
-                    Sample rows disabled.
+                  <td colSpan={5} className="dt-empty-cell" style={{ textAlign: 'center', padding: '2rem' }}>
+                    Loading family trees...
                   </td>
                 </tr>
+              ) : trees.length > 0 ? (
+                trees.map((tree) => (
+                  <tr key={tree.id}>
+                    <td>
+                      <strong>{tree.treeName}</strong>
+                    </td>
+                    <td>{tree.owner}</td>
+                    <td>{tree.members} members</td>
+                    <td>
+                      <StatusBadge variant={tree.status} />
+                    </td>
+                    <td>{tree.created}</td>
+                  </tr>
+                ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="dt-empty-cell dt-empty-cell--tall" />
+                  <td colSpan={5} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
+                    No family trees created yet.
+                  </td>
                 </tr>
               )}
             </tbody>

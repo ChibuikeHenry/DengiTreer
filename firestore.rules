@@ -7,6 +7,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
     function myUserPath() {
       return /databases/$(database)/documents/users/$(request.auth.uid);
     }
@@ -39,6 +43,7 @@ service cloud.firestore {
     }
 
     match /invitations/{token} {
+      allow read, write: if isAdmin();
       allow read: if isAuthed() && resource.data.inviterUid == request.auth.uid;
       allow read: if isAuthed() && resource.data.joinedUid == request.auth.uid;
       allow read: if isAuthed()
@@ -54,6 +59,7 @@ service cloud.firestore {
     }
 
     match /users/{uid} {
+      allow read, write: if isAdmin();
       allow read: if isAuthed() && (
         request.auth.uid == uid
         || resource.data.get('invitedByUid', null) == request.auth.uid
@@ -63,6 +69,7 @@ service cloud.firestore {
       allow write: if isAuthed() && request.auth.uid == uid;
 
       match /familyMembers/{memberId} {
+        allow read, write: if isAdmin();
         allow read: if isAuthed() && (
           request.auth.uid == uid
           || (myInvitedByUid() != null && myInvitedByUid() == uid)
@@ -71,6 +78,7 @@ service cloud.firestore {
       }
 
       match /familyLibrary/{photoId} {
+        allow read, write: if isAdmin();
         allow read: if isAuthed() && (
           request.auth.uid == uid
           || (myInvitedByUid() != null && myInvitedByUid() == uid)
@@ -90,6 +98,7 @@ service cloud.firestore {
     }
 
     match /treeMergeRequests/{token} {
+      allow read, write: if isAdmin();
       // Separate allow read lines so list/get queries stay valid (OR in one rule breaks queries).
       allow read: if isAuthed() && resource != null && resource.data.inviterUid == request.auth.uid;
       allow read: if isAuthed() && resource != null && resource.data.inviteeUid == request.auth.uid;
@@ -105,15 +114,18 @@ service cloud.firestore {
     }
 
     match /mail/{docId} {
+      allow read: if isAdmin();
       allow read, write: if false;
     }
 
     match /premiumPayments/{reference} {
+      allow read: if isAdmin();
       allow read: if isAuthed() && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
 
     match /concessionRequests/{docId} {
+      allow read, write: if isAdmin();
       allow create: if request.resource.data.email is string
         && request.resource.data.reason is string
         && request.resource.data.status == 'pending'
@@ -125,6 +137,7 @@ service cloud.firestore {
     }
 
     match /treeBuildRequests/{docId} {
+      allow read, write: if isAdmin();
       allow create: if isAuthed()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.email is string
@@ -138,11 +151,13 @@ service cloud.firestore {
     }
 
     match /treeBuildPayments/{reference} {
+      allow read: if isAdmin();
       allow read: if isAuthed() && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
 
     match /treeCleanupRequests/{docId} {
+      allow read, write: if isAdmin();
       allow create: if isAuthed()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.email is string

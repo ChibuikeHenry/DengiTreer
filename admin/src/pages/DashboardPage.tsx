@@ -1,14 +1,13 @@
+import { Link } from 'react-router-dom'
 import AdminPageToolbar from '../components/AdminPageToolbar'
 import { IconChevronRight } from '../components/AdminNavIcons'
 import StatusBadge from '../components/StatusBadge'
 import {
-  adminQuickActions,
   chartMonths,
   chartPoints,
   operationsQueue,
-  platformStats,
-  recentPlatformActivity,
 } from '../data/mockPlatformData'
+import { useRealPlatformOverview } from '../lib/adminDataService'
 
 function toneClass(tone: string) {
   return `dt-stat-card dt-stat-card--${tone}`
@@ -19,6 +18,8 @@ function queueDot(tone: string) {
 }
 
 export default function DashboardPage() {
+  const { stats, recentActivities } = useRealPlatformOverview()
+
   const max = Math.max(...chartPoints)
   const width = 400
   const height = 160
@@ -35,12 +36,12 @@ export default function DashboardPage() {
     <>
       <AdminPageToolbar
         title="Platform Overview"
-        subtitle="Monitor user activity, account claims, invitations, and relationship verification across DengiTree."
+        subtitle="Monitor real-time user activity, account claims, invitations, and relationship verification across DengiTree."
         backTo="/dashboard"
       />
 
       <div className="dt-stat-grid">
-        {platformStats.map((stat) => (
+        {stats.map((stat) => (
           <article key={stat.label} className={toneClass(stat.tone)}>
             <span>{stat.label}</span>
             <strong>{stat.value}</strong>
@@ -50,7 +51,7 @@ export default function DashboardPage() {
 
       <div className="dt-overview-mid">
         <section className="dt-panel">
-          <h2 className="dt-panel-title">Platform Overview</h2>
+          <h2 className="dt-panel-title">Platform Growth Trend</h2>
           <div className="dt-chart-wrap">
             <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Activity trend">
               <polyline
@@ -95,11 +96,18 @@ export default function DashboardPage() {
         <section className="dt-panel">
           <h2 className="dt-panel-title">Admin Quick Actions</h2>
           <ul className="dt-quick-actions">
-            {adminQuickActions.map((label) => (
-              <li key={label}>
-                <button type="button">{label}</button>
-              </li>
-            ))}
+            <li>
+              <Link to="/profile-claims" className="dt-quick-btn">Review Profile Claim</Link>
+            </li>
+            <li>
+              <Link to="/invitations" className="dt-quick-btn">Manage Invitation</Link>
+            </li>
+            <li>
+              <Link to="/add-user" className="dt-quick-btn">Add User</Link>
+            </li>
+            <li>
+              <Link to="/create-family-tree" className="dt-quick-btn">Create Family Tree</Link>
+            </li>
           </ul>
         </section>
       </div>
@@ -118,16 +126,24 @@ export default function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {recentPlatformActivity.map((row) => (
-              <tr key={row.time + row.event}>
-                <td>{row.event}</td>
-                <td>{row.category}</td>
-                <td>
-                  <StatusBadge variant={row.status === 'Completed' ? 'Active' : 'Pending'} />
+            {recentActivities.length > 0 ? (
+              recentActivities.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.event}</td>
+                  <td>{row.category}</td>
+                  <td>
+                    <StatusBadge variant={row.status === 'Completed' ? 'Active' : 'Pending'} />
+                  </td>
+                  <td>{row.time}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={4} className="dt-empty-cell">
+                  No recent activity recorded.
                 </td>
-                <td>{row.time}</td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </section>
