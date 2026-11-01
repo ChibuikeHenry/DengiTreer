@@ -226,7 +226,8 @@ export default function DashboardLayout({
 
   async function handleLogout() {
     await logout()
-    navigate('/', { replace: true })
+    // Full navigation so ProtectedRoute cannot bounce a cleared session to /login.
+    window.location.replace('/')
   }
 
   return (
