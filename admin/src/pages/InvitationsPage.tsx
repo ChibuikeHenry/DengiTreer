@@ -2,9 +2,15 @@ import AdminPageToolbar from '../components/AdminPageToolbar'
 import AdminSideRail from '../components/AdminSideRail'
 import InvitationsTable from '../components/InvitationsTable'
 import { useRealInvitations } from '../lib/adminDataService'
+import { useQuickFilterState } from '../lib/useQuickFilterState'
 
 export default function InvitationsPage() {
   const { invitations, loading } = useRealInvitations()
+  const { filterState, toggleStatus, toggleRole, matchesStatusAndRole } = useQuickFilterState()
+
+  const filteredInvitations = invitations.filter((inv) =>
+    matchesStatusAndRole(inv.status, inv.role),
+  )
 
   return (
     <>
@@ -15,7 +21,9 @@ export default function InvitationsPage() {
       <div className="dt-content-split">
         <div className="dt-table-panel">
           <div className="dt-table-panel-head">
-            <h2>All Invitations ({invitations.length})</h2>
+            <h2>
+              All Invitations ({filteredInvitations.length} of {invitations.length})
+            </h2>
             <p>Track pending and sent invitations across DengiTree.</p>
           </div>
           {loading ? (
@@ -23,10 +31,15 @@ export default function InvitationsPage() {
               Loading invitations...
             </div>
           ) : (
-            <InvitationsTable rows={invitations} />
+            <InvitationsTable rows={filteredInvitations} />
           )}
         </div>
-        <AdminSideRail />
+        <AdminSideRail
+          variant="users"
+          filterState={filterState}
+          onToggleStatus={toggleStatus}
+          onToggleRole={toggleRole}
+        />
       </div>
     </>
   )

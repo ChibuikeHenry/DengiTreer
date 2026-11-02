@@ -2,9 +2,13 @@ import AdminPageToolbar from '../components/AdminPageToolbar'
 import AdminSideRail from '../components/AdminSideRail'
 import StatusBadge from '../components/StatusBadge'
 import { useRealProfileClaims } from '../lib/adminDataService'
+import { useQuickFilterState } from '../lib/useQuickFilterState'
 
 export default function ProfileClaimsPage() {
   const { claims, loading } = useRealProfileClaims()
+  const { filterState, toggleStatus, toggleRole, matchesStatusAndRole } = useQuickFilterState()
+
+  const filteredClaims = claims.filter((c) => matchesStatusAndRole(c.status, 'Member'))
 
   return (
     <>
@@ -15,7 +19,7 @@ export default function ProfileClaimsPage() {
       <div className="dt-content-split">
         <section className="dt-table-panel">
           <div className="dt-table-panel-head">
-            <h2>Claims Awaiting Review ({claims.length})</h2>
+            <h2>Claims Awaiting Review ({filteredClaims.length} of {claims.length})</h2>
             <p>Approve or reject member profile claims.</p>
           </div>
           <table className="dt-data-table">
@@ -34,8 +38,8 @@ export default function ProfileClaimsPage() {
                     Loading claims...
                   </td>
                 </tr>
-              ) : claims.length > 0 ? (
-                claims.map((claim) => (
+              ) : filteredClaims.length > 0 ? (
+                filteredClaims.map((claim) => (
                   <tr key={claim.id}>
                     <td>
                       <strong>{claim.member}</strong>
@@ -50,14 +54,19 @@ export default function ProfileClaimsPage() {
               ) : (
                 <tr>
                   <td colSpan={4} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
-                    No profile claims in the queue.
+                    No profile claims matching current filters.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </section>
-        <AdminSideRail variant="users" />
+        <AdminSideRail
+          variant="users"
+          filterState={filterState}
+          onToggleStatus={toggleStatus}
+          onToggleRole={toggleRole}
+        />
       </div>
     </>
   )

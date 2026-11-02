@@ -4,14 +4,18 @@ import AdminSideRail from '../components/AdminSideRail'
 import { IconUsers } from '../components/AdminNavIcons'
 import StatusBadge from '../components/StatusBadge'
 import { useRealUsers } from '../lib/adminDataService'
+import { useQuickFilterState } from '../lib/useQuickFilterState'
 
 export default function UserManagementPage() {
   const { users, loading, error } = useRealUsers()
   const [searchTerm, setSearchTerm] = useState('')
+  const { filterState, toggleStatus, toggleRole, matchesStatusAndRole } = useQuickFilterState()
 
   const filteredUsers = users.filter((u) => {
     const term = searchTerm.toLowerCase()
-    return u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)
+    const textMatch = u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)
+    const filterMatch = matchesStatusAndRole(u.status, u.role)
+    return textMatch && filterMatch
   })
 
   return (
@@ -27,7 +31,7 @@ export default function UserManagementPage() {
             <div>
               <h2>
                 <IconUsers size={18} />
-                All Users ({users.length})
+                All Users ({filteredUsers.length} of {users.length})
               </h2>
               <p>Manage user accounts, roles and status.</p>
             </div>
@@ -91,14 +95,19 @@ export default function UserManagementPage() {
               ) : (
                 <tr>
                   <td colSpan={5} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
-                    {searchTerm ? 'No users matching your search.' : 'No users found in database.'}
+                    No users matching current filters or search term.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </section>
-        <AdminSideRail variant="users" />
+        <AdminSideRail
+          variant="users"
+          filterState={filterState}
+          onToggleStatus={toggleStatus}
+          onToggleRole={toggleRole}
+        />
       </div>
     </>
   )

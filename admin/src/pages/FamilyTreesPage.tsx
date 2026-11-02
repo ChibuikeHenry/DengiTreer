@@ -3,9 +3,13 @@ import AdminSideRail from '../components/AdminSideRail'
 import { IconTree } from '../components/AdminNavIcons'
 import StatusBadge from '../components/StatusBadge'
 import { useRealFamilyTrees } from '../lib/adminDataService'
+import { useQuickFilterState } from '../lib/useQuickFilterState'
 
 export default function FamilyTreesPage() {
   const { trees, loading } = useRealFamilyTrees()
+  const { filterState, toggleStatus, toggleRole, matchesStatusAndRole } = useQuickFilterState()
+
+  const filteredTrees = trees.filter((t) => matchesStatusAndRole(t.status, 'Member'))
 
   return (
     <>
@@ -19,7 +23,7 @@ export default function FamilyTreesPage() {
           <div className="dt-table-panel-head">
             <h2>
               <IconTree size={18} />
-              All Family Trees ({trees.length})
+              All Family Trees ({filteredTrees.length} of {trees.length})
             </h2>
             <p>View owners, member counts, and tree status.</p>
           </div>
@@ -40,8 +44,8 @@ export default function FamilyTreesPage() {
                     Loading family trees...
                   </td>
                 </tr>
-              ) : trees.length > 0 ? (
-                trees.map((tree) => (
+              ) : filteredTrees.length > 0 ? (
+                filteredTrees.map((tree) => (
                   <tr key={tree.id}>
                     <td>
                       <strong>{tree.treeName}</strong>
@@ -57,14 +61,19 @@ export default function FamilyTreesPage() {
               ) : (
                 <tr>
                   <td colSpan={5} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
-                    No family trees created yet.
+                    No family trees matching current filters.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </section>
-        <AdminSideRail variant="trees" />
+        <AdminSideRail
+          variant="trees"
+          filterState={filterState}
+          onToggleStatus={toggleStatus}
+          onToggleRole={toggleRole}
+        />
       </div>
     </>
   )
