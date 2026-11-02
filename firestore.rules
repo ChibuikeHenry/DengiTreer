@@ -8,7 +8,13 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return request.auth != null && request.auth.token.admin == true;
+      return request.auth != null && (
+        request.auth.token.admin == true
+        || (request.auth.token.email != null && (
+             request.auth.token.email.lower() == 'ugwuhenry195@gmail.com'
+          || request.auth.token.email.lower() == 'kool4evar@yahoo.com'
+        ))
+      );
     }
 
     function myUserPath() {
@@ -114,12 +120,11 @@ service cloud.firestore {
     }
 
     match /mail/{docId} {
-      allow read: if isAdmin();
-      allow read, write: if false;
+      allow read, write: if isAdmin();
     }
 
     match /premiumPayments/{reference} {
-      allow read: if isAdmin();
+      allow read, write: if isAdmin();
       allow read: if isAuthed() && resource.data.uid == request.auth.uid;
       allow write: if false;
     }
@@ -151,7 +156,7 @@ service cloud.firestore {
     }
 
     match /treeBuildPayments/{reference} {
-      allow read: if isAdmin();
+      allow read, write: if isAdmin();
       allow read: if isAuthed() && resource.data.uid == request.auth.uid;
       allow write: if false;
     }

@@ -17,7 +17,11 @@ export async function resolveAdminAccess(user: {
   email: string | null | undefined
   getIdTokenResult: (forceRefresh?: boolean) => Promise<{ claims: Record<string, unknown> }>
 }): Promise<boolean> {
-  if (isAllowlistedAdminEmail(user.email)) return true
-  const token = await user.getIdTokenResult()
-  return token.claims.admin === true
+  try {
+    const token = await user.getIdTokenResult(true)
+    if (token.claims.admin === true) return true
+  } catch (e) {
+    console.warn('Error refreshing ID token claims:', e)
+  }
+  return isAllowlistedAdminEmail(user.email)
 }
