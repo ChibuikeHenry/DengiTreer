@@ -3,11 +3,8 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import { DashIcons } from '../components/DashboardLayout'
 import ProfileAvatar from '../components/ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
-import {
-  positionLabel,
-  subscribeTreeMembers,
-  type TreeMember,
-} from '../lib/familyTreeMembers'
+import { positionLabel, type TreeMember } from '../lib/familyTreeMembers'
+import { subscribeFamilySearchIndex } from '../lib/familySearchIndex'
 import { hasSelfOnTree } from '../lib/treeStorage'
 import {
   buildTreeSearchEntries,
@@ -36,7 +33,7 @@ export default function DiscoveriesPage() {
       setMembers([])
       return
     }
-    return subscribeTreeMembers(user.uid, setMembers)
+    return subscribeFamilySearchIndex(user.uid, setMembers)
   }, [user?.uid, treeVersion])
 
   useEffect(() => {
@@ -97,7 +94,7 @@ export default function DiscoveriesPage() {
     }
     if (!entry.memberId || !user?.uid) return
     navigate(`/home/member/${encodeURIComponent(entry.memberId)}`, {
-      state: { treeOwnerUid: user.uid },
+      state: { treeOwnerUid: entry.treeOwnerUid || user.uid },
     })
   }
 
@@ -107,8 +104,8 @@ export default function DiscoveriesPage() {
         <header className="disc-head">
           <h1>Discover Connections</h1>
           <p>
-            Find relatives across your tree — search by name, relationship, or details in your
-            family network.
+            Search your full family network by name or how someone relates to you — parents,
+            siblings, grandparents, and relatives linked through family who have joined.
           </p>
         </header>
 
@@ -124,7 +121,7 @@ export default function DiscoveriesPage() {
             {DashIcons.search()}
             <input
               type="search"
-              placeholder="Search by name, relation or location..."
+              placeholder="Search by name or relationship (e.g. mother, half-brother)…"
               value={query}
               onChange={(event) => {
                 setQuery(event.target.value)
@@ -154,7 +151,7 @@ export default function DiscoveriesPage() {
                 {results.map((entry) => {
                   const member =
                     entry.kind === 'member'
-                      ? members.find((m) => m.id === entry.memberId)
+                      ? members.find((m) => m.id === entry.key || m.id === entry.memberId)
                       : null
                   return (
                     <li key={entry.key}>

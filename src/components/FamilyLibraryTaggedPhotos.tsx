@@ -11,6 +11,7 @@ type FamilyLibraryTaggedPhotosProps = {
   ownerUid: string
   memberId: string
   memberFirstName?: string
+  memberDisplayName?: string
   heading?: string
   emptyHint?: string
   showLibraryLink?: boolean
@@ -19,10 +20,25 @@ type FamilyLibraryTaggedPhotosProps = {
   viewerUid?: string | null
 }
 
+function personLibraryHref(
+  ownerUid: string,
+  memberId: string,
+  displayName?: string,
+): string {
+  const params = new URLSearchParams({
+    tagged: memberId,
+    owner: ownerUid,
+  })
+  const name = displayName?.trim()
+  if (name) params.set('name', name)
+  return `/home/photos?${params.toString()}`
+}
+
 export default function FamilyLibraryTaggedPhotos({
   ownerUid,
   memberId,
   memberFirstName,
+  memberDisplayName,
   heading,
   emptyHint,
   showLibraryLink = true,
@@ -77,16 +93,22 @@ export default function FamilyLibraryTaggedPhotos({
     }
   }
 
+  const personName =
+    memberDisplayName?.trim() ||
+    memberFirstName?.trim() ||
+    'this person'
   const title =
-    heading ??
-    (memberFirstName ? `Photos of ${memberFirstName}` : 'Photo library')
+    heading ?? (memberFirstName ? `Photos of ${memberFirstName}` : 'Photo library')
 
   return (
     <section className="claimed-card family-library-profile-section">
       <div className="family-library-profile-head">
         <h2>{title}</h2>
         {showLibraryLink ? (
-          <Link to="/home/photos" className="family-library-profile-link">
+          <Link
+            to={personLibraryHref(ownerUid, memberId, personName)}
+            className="family-library-profile-link"
+          >
             Open photo library
           </Link>
         ) : null}
@@ -101,7 +123,7 @@ export default function FamilyLibraryTaggedPhotos({
       ) : photos.length === 0 ? (
         <p className="family-library-muted">
           {emptyHint ??
-            'No tagged photos yet. Upload images in My library and tag this person.'}
+            `No photos tagged with ${personName} yet. Tag them from My library.`}
         </p>
       ) : (
         <ul className="family-library-profile-grid">

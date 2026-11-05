@@ -336,11 +336,12 @@ export default function ProfilePage() {
           ownerUid={photoLibraryOwnerUid}
           memberId={taggedMemberId}
           memberFirstName={firstName.trim() || displayName.split(/\s+/)[0]}
+          memberDisplayName={displayName.trim() || firstName.trim() || 'You'}
           heading="Photos of me"
-          emptyHint="Photos tagged with you appear here. Upload and tag them from My library."
+          emptyHint="Photos tagged with you appear here. Open your photo library to add and tag more."
           allowSelfUntag
           viewerUid={user?.uid ?? null}
-          showLibraryLink={!invitedByUid}
+          showLibraryLink
         />
       ) : invitedByUid && !taggedMemberId && !loading ? (
         <section className="claimed-card family-library-profile-section">

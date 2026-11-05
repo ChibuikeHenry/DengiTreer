@@ -86,7 +86,10 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
         <header className="modal-head">
           <div>
             <h2 id={titleId}>Share your family tree</h2>
-            <p>Opens your tree in DengiTree. Family who are signed in can view it with this link.</p>
+            <p>
+              Share your family tree with relatives and friends, invite them to discover their
+              roots.
+            </p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
             {DashIcons.close()}
@@ -95,8 +98,7 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
 
         <div className="share-tree-body">
           <section className="modal-section">
-            <h3>Tree link</h3>
-            <p className="field-hint">Opens your tree in DengiTree</p>
+            <h3>Tree Link</h3>
             <div className="inv-link-row">
               <label className="inv-link-input-wrap">
                 <span className="inv-link-icon" aria-hidden="true">
@@ -130,20 +132,14 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
           ) : null}
 
           <div className="share-tree-actions">
-            {canShareNative ? (
-              <button
-                type="button"
-                className="modal-submit"
-                disabled={sharing || !link}
-                onClick={() => void handleShare()}
-              >
-                {sharing ? 'Opening share…' : 'Share link'}
-              </button>
-            ) : (
-              <button type="button" className="modal-submit" onClick={() => void copyLink()}>
-                {copyLabel}
-              </button>
-            )}
+            <button
+              type="button"
+              className="share-tree-share-btn"
+              disabled={sharing || !link}
+              onClick={() => void (canShareNative ? handleShare() : copyLink())}
+            >
+              {sharing ? 'Opening share…' : 'Share link'}
+            </button>
           </div>
         </div>
       </div>

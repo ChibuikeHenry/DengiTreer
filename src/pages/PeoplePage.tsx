@@ -16,6 +16,7 @@ import {
   subscribeTreeMembers,
   type TreeMember,
 } from '../lib/familyTreeMembers'
+import { filterTreeSearchEntries, buildTreeSearchEntries } from '../lib/treeSearch'
 import {
   getCallableErrorMessage,
   removeFamilyMemberFromTree,
@@ -89,14 +90,26 @@ export default function PeoplePage() {
   }, [user, treeVersion])
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (!q) return members
-    return members.filter(
-      (m) =>
-        m.displayName.toLowerCase().includes(q) ||
-        roleLabel(m.role).toLowerCase().includes(q),
+    const entries = buildTreeSearchEntries({
+      selfName,
+      selfPosition,
+      members,
+      includeSelf: false,
+    })
+    const matched = filterTreeSearchEntries(
+      q,
+      entries,
+      members,
+      { selfName, selfPosition, includeSelf: false },
+      0,
     )
-  }, [members, query])
+    const byId = new Map(members.map((m) => [m.id, m]))
+    return matched
+      .map((entry) => (entry.memberId ? byId.get(entry.memberId) ?? byId.get(entry.key) : null))
+      .filter((m): m is TreeMember => Boolean(m))
+  }, [members, query, selfName, selfPosition])
 
   const totalCount = (selfOnTree ? 1 : 0) + members.length
 

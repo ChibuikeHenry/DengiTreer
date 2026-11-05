@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext'
 import {
   BUILD_MY_TREE_ACCEPT,
   BUILD_MY_TREE_CHECKOUT_ENABLED,
-  BUILD_MY_TREE_MAX_BYTES,
   formatBuildMyTreePrice,
 } from '../lib/buildMyTreeService'
 import {

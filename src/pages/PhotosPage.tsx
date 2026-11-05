@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
 import TagFamilyLibraryModal from '../components/TagFamilyLibraryModal'
 import { DashIcons } from '../components/DashboardLayout'
 import { useAuth } from '../context/AuthContext'
@@ -7,6 +7,7 @@ import {
   createFamilyLibraryPhoto,
   deleteFamilyLibraryPhoto,
   subscribeFamilyLibraryPhotos,
+  subscribePhotosTaggedMember,
   updateFamilyLibraryPhotoTags,
   validateFamilyLibraryPhoto,
   FAMILY_LIBRARY_SELF_TAG,
@@ -28,7 +29,20 @@ function memberTagLabel(id: string, selfName: string, members: TreeMember[]): st
 export default function PhotosPage() {
   const { user } = useAuth()
   const { treeVersion } = useOutletContext<DashboardContext>()
+  const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const taggedMemberId = searchParams.get('tagged')?.trim() || null
+  const taggedNameParam = searchParams.get('name')?.trim() || null
+  const ownerFromQuery = searchParams.get('owner')?.trim() || null
+  const libraryOwnerUid = ownerFromQuery || user?.uid || null
+  const isOwnLibrary = Boolean(user?.uid && libraryOwnerUid === user.uid)
+  const personFilterActive = Boolean(taggedMemberId)
+  /** Someone else's tagged album — browse only, no upload/tag/delete. */
+  const viewingOtherPerson =
+    Boolean(taggedMemberId) && taggedMemberId !== FAMILY_LIBRARY_SELF_TAG
+  const canManagePhotos = isOwnLibrary && !viewingOtherPerson
+
   const [photos, setPhotos] = useState<FamilyLibraryPhoto[]>([])
   const [members, setMembers] = useState<TreeMember[]>([])
   const [selfName, setSelfName] = useState('You')
@@ -41,21 +55,37 @@ export default function PhotosPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!user?.uid) return
+    if (!libraryOwnerUid) {
+      setPhotos([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    if (taggedMemberId) {
+      return subscribePhotosTaggedMember(
+        libraryOwnerUid,
+        taggedMemberId,
+        (next) => {
+          setPhotos(next)
+          setLoading(false)
+        },
+        () => setLoading(false),
+      )
+    }
     return subscribeFamilyLibraryPhotos(
-      user.uid,
+      libraryOwnerUid,
       (next) => {
         setPhotos(next)
         setLoading(false)
       },
       () => setLoading(false),
     )
-  }, [user?.uid])
+  }, [libraryOwnerUid, taggedMemberId])
 
   useEffect(() => {
-    if (!user?.uid) return
-    return subscribeTreeMembers(user.uid, setMembers)
-  }, [user?.uid, treeVersion])
+    if (!libraryOwnerUid) return
+    return subscribeTreeMembers(libraryOwnerUid, setMembers)
+  }, [libraryOwnerUid, treeVersion])
 
   useEffect(() => {
     if (!user) return
@@ -64,9 +94,16 @@ export default function PhotosPage() {
     })
   }, [user, treeVersion])
 
+  const taggedPersonName = useMemo(() => {
+    if (!taggedMemberId) return null
+    if (taggedNameParam) return taggedNameParam
+    if (taggedMemberId === FAMILY_LIBRARY_SELF_TAG) return selfName || 'You'
+    return members.find((m) => m.id === taggedMemberId)?.displayName ?? 'this person'
+  }, [taggedMemberId, taggedNameParam, members, selfName])
+
   const uploadFiles = useCallback(
     async (fileList: FileList | File[]) => {
-      if (!user?.uid || uploading) return
+      if (!user?.uid || !canManagePhotos || uploading) return
       const files = [...fileList]
       if (!files.length) return
       setUploadError('')
@@ -87,17 +124,18 @@ export default function PhotosPage() {
         if (fileInputRef.current) fileInputRef.current.value = ''
       }
     },
-    [user?.uid, uploading],
+    [user?.uid, canManagePhotos, uploading],
   )
 
   function onDrop(event: React.DragEvent) {
     event.preventDefault()
     setDragOver(false)
+    if (!canManagePhotos) return
     void uploadFiles(event.dataTransfer.files)
   }
 
   async function handleSaveTags(taggedMemberIds: string[]) {
-    if (!user?.uid || !tagPhoto) return
+    if (!user?.uid || !canManagePhotos || !tagPhoto) return
     setTagSaving(true)
     try {
       await updateFamilyLibraryPhotoTags(user.uid, tagPhoto.id, taggedMemberIds)
@@ -110,7 +148,7 @@ export default function PhotosPage() {
   }
 
   async function handleDelete(photo: FamilyLibraryPhoto) {
-    if (!user?.uid || deletingId) return
+    if (!user?.uid || !canManagePhotos || deletingId) return
     const ok = window.confirm('Remove this photo from your library?')
     if (!ok) return
     setDeletingId(photo.id)
@@ -125,23 +163,40 @@ export default function PhotosPage() {
   }
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members])
+  const pageTitle = viewingOtherPerson
+    ? `Photos of ${taggedPersonName}`
+    : personFilterActive
+      ? `Photos of ${taggedPersonName}`
+      : 'My library'
+  const pageSubtitle = viewingOtherPerson
+    ? `View-only · photos tagged with ${taggedPersonName}.`
+    : personFilterActive
+      ? `Photos tagged with ${taggedPersonName} in this family library.`
+      : 'Upload photos, tag people, and show memories on their profiles.'
 
   return (
     <div className="home upcoming-page photos-page family-library-page">
       <header className="upcoming-head">
         <div>
-          <h1>My library</h1>
-          <p>Upload photos, tag people, and show memories on their profiles.</p>
+          <h1>{pageTitle}</h1>
+          <p>{pageSubtitle}</p>
+          {personFilterActive ? (
+            <p className="family-library-back">
+              <Link to="/home/photos">← Back to full photo library</Link>
+            </p>
+          ) : null}
         </div>
-        <button
-          type="button"
-          className="upcoming-primary-btn"
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {DashIcons.upload()}
-          {uploading ? 'Uploading…' : 'Upload photos'}
-        </button>
+        {canManagePhotos ? (
+          <button
+            type="button"
+            className="upcoming-primary-btn"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {DashIcons.upload()}
+            {uploading ? 'Uploading…' : 'Upload photos'}
+          </button>
+        ) : null}
         <input
           ref={fileInputRef}
           type="file"
@@ -154,29 +209,31 @@ export default function PhotosPage() {
         />
       </header>
 
-      <section
-        className={`home-card upcoming-panel photos-upload-preview${dragOver ? ' is-drag-over' : ''}`}
-      >
-        <div
-          className="photos-dropzone photos-dropzone-active"
-          role="button"
-          tabIndex={0}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragOver(true)
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
-          }}
+      {canManagePhotos ? (
+        <section
+          className={`home-card upcoming-panel photos-upload-preview${dragOver ? ' is-drag-over' : ''}`}
         >
-          {DashIcons.image()}
-          <strong>{uploading ? 'Uploading…' : 'Drag photos here or click to browse'}</strong>
-          <span>JPG or PNG, up to 5 MB each</span>
-        </div>
-      </section>
+          <div
+            className="photos-dropzone photos-dropzone-active"
+            role="button"
+            tabIndex={0}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
+            }}
+          >
+            {DashIcons.image()}
+            <strong>{uploading ? 'Uploading…' : 'Drag photos here or click to browse'}</strong>
+            <span>JPG or PNG, up to 5 MB each</span>
+          </div>
+        </section>
+      ) : null}
 
       {uploadError ? (
         <p className="modal-form-error family-library-error" role="alert">
@@ -186,14 +243,20 @@ export default function PhotosPage() {
 
       <section className="home-card upcoming-panel">
         <div className="photos-section-head">
-          <h2>Photo library</h2>
+          <h2>{personFilterActive ? 'Tagged photos' : 'Photo library'}</h2>
           <span className="upcoming-count">{photos.length} photos</span>
         </div>
         {loading ? (
           <p className="family-library-muted">Loading photos…</p>
         ) : photos.length === 0 ? (
           <div className="upcoming-empty upcoming-empty-compact">
-            <p>No photos yet. Upload your first photo above.</p>
+            <p>
+              {viewingOtherPerson
+                ? `No photos tagged with ${taggedPersonName} yet.`
+                : personFilterActive
+                  ? `No photos tagged with ${taggedPersonName} yet.`
+                  : 'No photos yet. Upload your first photo above.'}
+            </p>
           </div>
         ) : (
           <ul className="family-library-grid">
@@ -215,19 +278,21 @@ export default function PhotosPage() {
                   ) : (
                     <p className="family-library-muted">Not tagged yet</p>
                   )}
-                  <div className="family-library-card-actions">
-                    <button type="button" onClick={() => setTagPhoto(photo)}>
-                      Tag people
-                    </button>
-                    <button
-                      type="button"
-                      className="family-library-delete"
-                      disabled={deletingId === photo.id}
-                      onClick={() => void handleDelete(photo)}
-                    >
-                      {deletingId === photo.id ? 'Removing…' : 'Delete'}
-                    </button>
-                  </div>
+                  {canManagePhotos ? (
+                    <div className="family-library-card-actions">
+                      <button type="button" onClick={() => setTagPhoto(photo)}>
+                        Tag people
+                      </button>
+                      <button
+                        type="button"
+                        className="family-library-delete"
+                        disabled={deletingId === photo.id}
+                        onClick={() => void handleDelete(photo)}
+                      >
+                        {deletingId === photo.id ? 'Removing…' : 'Delete'}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -235,16 +300,18 @@ export default function PhotosPage() {
         )}
       </section>
 
-      <TagFamilyLibraryModal
-        open={tagPhoto !== null}
-        onClose={() => setTagPhoto(null)}
-        photoLabel="this photo"
-        members={members}
-        selfName={selfName}
-        initialTaggedIds={tagPhoto?.taggedMemberIds ?? []}
-        saving={tagSaving}
-        onSave={handleSaveTags}
-      />
+      {canManagePhotos ? (
+        <TagFamilyLibraryModal
+          open={tagPhoto !== null}
+          onClose={() => setTagPhoto(null)}
+          photoLabel="this photo"
+          members={members}
+          selfName={selfName}
+          initialTaggedIds={tagPhoto?.taggedMemberIds ?? []}
+          saving={tagSaving}
+          onSave={handleSaveTags}
+        />
+      ) : null}
     </div>
   )
 }

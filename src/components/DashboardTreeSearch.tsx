@@ -3,16 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { DashIcons } from './DashboardLayout'
 import ProfileAvatar from './ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
+import { subscribeFamilySearchIndex } from '../lib/familySearchIndex'
 import {
   buildTreeSearchEntries,
   filterTreeSearchEntries,
   type TreeSearchEntry,
 } from '../lib/treeSearch'
-import {
-  positionLabel,
-  subscribeTreeMembers,
-  type TreeMember,
-} from '../lib/familyTreeMembers'
+import { positionLabel, type TreeMember } from '../lib/familyTreeMembers'
 import { hasSelfOnTree } from '../lib/treeStorage'
 import { profileFullName, resolveUserProfileForForm } from '../lib/userProfile'
 
@@ -52,7 +49,7 @@ export default function DashboardTreeSearch({
       setMembers([])
       return
     }
-    return subscribeTreeMembers(treeOwnerUid, setMembers)
+    return subscribeFamilySearchIndex(treeOwnerUid, setMembers)
   }, [treeOwnerUid, treeVersion])
 
   useEffect(() => {
@@ -126,7 +123,7 @@ export default function DashboardTreeSearch({
     }
     if (!entry.memberId || !treeOwnerUid) return
     navigate(`/home/member/${encodeURIComponent(entry.memberId)}`, {
-      state: { treeOwnerUid },
+      state: { treeOwnerUid: entry.treeOwnerUid || treeOwnerUid },
     })
   }
 
@@ -174,7 +171,7 @@ export default function DashboardTreeSearch({
               ? `${listboxId}-${results[activeIndex].key}`
               : undefined
           }
-          placeholder="Search for people, relationships, or families..."
+          placeholder="Search people or relationships (mother, uncle, half-brother…)"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value)
@@ -202,9 +199,19 @@ export default function DashboardTreeSearch({
                   onClick={() => openProfile(entry)}
                 >
                   <ProfileAvatar
-                    photoURL={entry.kind === 'self' ? selfPhotoURL : members.find((m) => m.id === entry.memberId)?.photoURL}
+                    photoURL={
+                      entry.kind === 'self'
+                        ? selfPhotoURL
+                        : members.find((m) => m.id === entry.key || m.id === entry.memberId)
+                            ?.photoURL
+                    }
                     name={entry.name}
-                    gender={entry.kind === 'self' ? selfGender : members.find((m) => m.id === entry.memberId)?.gender}
+                    gender={
+                      entry.kind === 'self'
+                        ? selfGender
+                        : members.find((m) => m.id === entry.key || m.id === entry.memberId)
+                            ?.gender
+                    }
                     size="sm"
                   />
                   <span className="dash-search-result-text">
