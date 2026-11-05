@@ -56,10 +56,46 @@ function normalizePedSeg(seg: PedSeg): PedSeg {
   return seg
 }
 
-/** Merge identical or overlapping axis-aligned segments so strokes are not drawn twice. */
+/**
+ * Merge collinear segments that overlap or abut so strokes are not drawn twice.
+ * Disconnected pieces on the same axis stay separate — otherwise couple links and
+ * add-button stubs at avatar height become one bar drawn through siblings.
+ */
 export function dedupePedSegs(segs: PedSeg[]): PedSeg[] {
-  const vertical = new Map<string, PedSeg>()
-  const horizontal = new Map<string, PedSeg>()
+  const mergeGap = 1.5
+
+  const mergeGroups = (items: PedSeg[], axis: 'v' | 'h'): PedSeg[] => {
+    if (!items.length) return []
+    const sorted = [...items].sort((a, b) =>
+      axis === 'v'
+        ? a.y1 - b.y1 || a.y2 - b.y2
+        : a.x1 - b.x1 || a.x2 - b.x2,
+    )
+    const out: PedSeg[] = [{ ...sorted[0] }]
+    for (let i = 1; i < sorted.length; i += 1) {
+      const cur = sorted[i]
+      const prev = out[out.length - 1]
+      const touches =
+        axis === 'v'
+          ? cur.y1 <= prev.y2 + mergeGap
+          : cur.x1 <= prev.x2 + mergeGap
+      if (touches) {
+        if (axis === 'v') {
+          prev.y1 = Math.min(prev.y1, cur.y1)
+          prev.y2 = Math.max(prev.y2, cur.y2)
+        } else {
+          prev.x1 = Math.min(prev.x1, cur.x1)
+          prev.x2 = Math.max(prev.x2, cur.x2)
+        }
+      } else {
+        out.push({ ...cur })
+      }
+    }
+    return out
+  }
+
+  const vertical = new Map<string, PedSeg[]>()
+  const horizontal = new Map<string, PedSeg[]>()
   const other: PedSeg[] = []
 
   for (const raw of segs) {
@@ -68,26 +104,24 @@ export function dedupePedSegs(segs: PedSeg[]): PedSeg[] {
     const dash = seg.dashed ? 'd' : 's'
     if (seg.x1 === seg.x2) {
       const key = `${dash}:v:${Math.round(seg.x1 * 10) / 10}`
-      const prev = vertical.get(key)
-      if (!prev) vertical.set(key, { ...seg })
-      else {
-        prev.y1 = Math.min(prev.y1, seg.y1)
-        prev.y2 = Math.max(prev.y2, seg.y2)
-      }
+      const list = vertical.get(key) ?? []
+      list.push({ ...seg })
+      vertical.set(key, list)
     } else if (seg.y1 === seg.y2) {
       const key = `${dash}:h:${Math.round(seg.y1 * 10) / 10}`
-      const prev = horizontal.get(key)
-      if (!prev) horizontal.set(key, { ...seg })
-      else {
-        prev.x1 = Math.min(prev.x1, seg.x1)
-        prev.x2 = Math.max(prev.x2, seg.x2)
-      }
+      const list = horizontal.get(key) ?? []
+      list.push({ ...seg })
+      horizontal.set(key, list)
     } else {
       other.push(seg)
     }
   }
 
-  return [...vertical.values(), ...horizontal.values(), ...other]
+  return [
+    ...[...vertical.values()].flatMap((list) => mergeGroups(list, 'v')),
+    ...[...horizontal.values()].flatMap((list) => mergeGroups(list, 'h')),
+    ...other,
+  ]
 }
 
 /**
@@ -778,15 +812,19 @@ function layoutPass(
     memberX.set(member.id, x)
     pushSelfRowNode({ kind: 'member', member }, x)
   }
-  /** "Add Sibling" sits at the left-hand end, dashed-linked to whoever is next to it. */
+  /**
+   * "Add Sibling" sits at the left-hand end. It is wired into the parent→children bracket
+   * (not a side line at avatar height — those are only for couples).
+   */
+  let addSiblingX: number | null = null
   const placeAddSibling = (leftmostSiblingX: number | null) => {
     if (!allowAdds) return
     const leftEdge = Math.min(leftmostSiblingX ?? Infinity, slotX[0])
-    const x = leftEdge - pitch
-    pushSelfRowNode({ kind: 'add', modal: 'sibling', label: 'Add Sibling' }, x)
-    // the next person along is a sibling, or You when nobody stands between
-    const next = leftmostSiblingX ?? (leftSpouse ? null : selfX)
-    if (next != null) hJoin(x, next, selfTop)
+    addSiblingX = leftEdge - pitch
+    pushSelfRowNode(
+      { kind: 'add', modal: 'sibling', label: 'Add Sibling' },
+      addSiblingX,
+    )
   }
 
   /* --------------------------------------------------------------- parents row */
@@ -841,16 +879,25 @@ function layoutPass(
         x,
         y: parentsTop,
       })
+      // dashed couple-style link from the last parent to "Add Parent"
       if (lastX != null) hJoin(lastX, x, parentsTop)
     }
 
-    // parents → their children, one bracket per family so lines never share a bus
+    placeAddSibling(
+      siblings.length ? Math.min(...siblings.map((s) => memberX.get(s.id) as number)) : null,
+    )
+
+    // parents → their children: drop from the couple, bus above kids, verticals to each
+    // (no sibling-to-sibling side lines — those are only for couples)
     const busToSelf = selfTop - busOffset
     const dropOrder = [selfFamily, ...families.filter((f) => !f.isSelf && f.kids.length)]
     for (const family of dropOrder) {
       const kidXs = family.kids.map((s) => memberX.get(s.id) as number)
       if (family.isSelf) kidXs.push(selfX)
       const targets: Target[] = kidXs.map((x) => ({ x, y: selfTop }))
+      if (family.isSelf && addSiblingX != null) {
+        targets.push({ x: addSiblingX, y: selfTop, dashed: true })
+      }
       const xs = family.parents.map((p) => parentX.get(p.id) as number)
       if (xs.length === 0) {
         // no parents on the tree yet: dashed line up to the "Add Parent" circle
@@ -862,26 +909,33 @@ function layoutPass(
         bracket(mean(xs), parentsTop + av / 2, targets, busToSelf)
       } else {
         // a couple that is not side by side: both drop onto one shared bus
-        const all = [...xs, ...kidXs]
-        const busY = takeLane(busToSelf, Math.min(...all), Math.max(...all))
+        const allXs = [...xs, ...targets.map((t) => t.x)]
+        const busY = takeLane(busToSelf, Math.min(...allXs), Math.max(...allXs))
         family.parents.forEach((p, i) => vLine(xs[i], underLabelY(parentsTop, p.id), busY))
-        hLine(Math.min(...all), Math.max(...all), busY)
-        for (const t of targets) vLine(t.x, busY, t.y)
+        hLine(Math.min(...allXs), Math.max(...allXs), busY)
+        for (const t of targets) vLine(t.x, busY, t.y, Boolean(t.dashed))
       }
     }
-  } else if (selfFamily.kids.length) {
-    // no parents on the tree: link the siblings and you with a plain line
-    const xs = [...selfFamily.kids.map((s) => memberX.get(s.id) as number), selfX]
-    for (let i = 0; i < xs.length - 1; i += 1) {
-      const blocked = leftSpouse && (memberX.get(leftSpouse.id) as number) > xs[i] &&
-        (memberX.get(leftSpouse.id) as number) < xs[i + 1]
-      if (!blocked) hJoin(xs[i], xs[i + 1], selfTop)
+  } else {
+    placeAddSibling(
+      siblings.length ? Math.min(...siblings.map((s) => memberX.get(s.id) as number)) : null,
+    )
+    // no parents row: siblings still connect from above (bus + verticals), never side-to-side
+    const kidXs = [
+      ...selfFamily.kids.map((s) => memberX.get(s.id) as number),
+      selfX,
+      ...(addSiblingX != null ? [addSiblingX] : []),
+    ]
+    if (kidXs.length > 1 || addSiblingX != null) {
+      const busY = selfTop - Math.min(busOffset, 36)
+      const minX = Math.min(...kidXs)
+      const maxX = Math.max(...kidXs)
+      if (maxX > minX) hLine(minX, maxX, busY)
+      for (const x of kidXs) {
+        vLine(x, busY, selfTop, addSiblingX != null && x === addSiblingX)
+      }
     }
   }
-
-  placeAddSibling(
-    siblings.length ? Math.min(...siblings.map((s) => memberX.get(s.id) as number)) : null,
-  )
 
   /* ----------------------------------------------------------------- grandparents */
   const gpTop = showGP ? rowTop(gpRow) : 0

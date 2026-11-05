@@ -1,26 +1,24 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { db, storage } from './firebase'
-import { BUILD_MY_TREE_PRICE_NAIRA } from './buildMyTreeService'
-
-const SPREADSHEET_TYPES = new Set([
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/csv',
-  'application/csv',
-])
+import { BUILD_MY_TREE_MAX_BYTES, BUILD_MY_TREE_PRICE_NAIRA } from './buildMyTreeService'
 
 function safeFileName(name: string): string {
-  return name.replace(/[^\w.\-()+ ]+/g, '_').slice(0, 120) || 'family-data.xlsx'
+  return name.replace(/[^\w.\-()+ ]+/g, '_').slice(0, 120) || 'family-data'
 }
 
-export function isTreeBuildSpreadsheet(file: File): boolean {
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') return true
-  return SPREADSHEET_TYPES.has(file.type)
+/** Any non-empty file under the size limit is allowed. */
+export function isTreeBuildUploadFile(file: File): boolean {
+  return file.size > 0 && file.size <= BUILD_MY_TREE_MAX_BYTES
 }
 
-export async function uploadTreeBuildSpreadsheet(uid: string, file: File): Promise<{
+/** @deprecated Use isTreeBuildUploadFile — kept for older imports. */
+export const isTreeBuildSpreadsheet = isTreeBuildUploadFile
+
+export async function uploadTreeBuildFile(
+  uid: string,
+  file: File,
+): Promise<{
   storagePath: string
   downloadUrl: string
 }> {
@@ -30,13 +28,14 @@ export async function uploadTreeBuildSpreadsheet(uid: string, file: File): Promi
   const contentType =
     file.type && file.type !== 'application/octet-stream'
       ? file.type
-      : file.name.endsWith('.csv')
-        ? 'text/csv'
-        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : 'application/octet-stream'
   await uploadBytes(objectRef, file, { contentType })
   const downloadUrl = await getDownloadURL(objectRef)
   return { storagePath, downloadUrl }
 }
+
+/** @deprecated Use uploadTreeBuildFile */
+export const uploadTreeBuildSpreadsheet = uploadTreeBuildFile
 
 export type TreeBuildRequestInput = {
   uid: string

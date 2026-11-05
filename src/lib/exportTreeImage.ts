@@ -290,8 +290,9 @@ function paintTree(
 }
 
 /**
- * Renders the visible family tree (people + connecting lines, without the "add"
- * placeholders) to a PNG.
+ * Renders the family tree (people + connecting lines) to a PNG.
+ * `layout` must be built with `allowAdds: false` so lines never end on empty
+ * "Add …" placeholders that are omitted from the download.
  */
 export async function renderTreePng(
   canvasEl: HTMLElement,
@@ -300,13 +301,24 @@ export async function renderTreePng(
 ): Promise<Blob> {
   if ('fonts' in document) await document.fonts.ready
 
+  const byId = new Map<string, { cx: number; top: number }>()
+  for (const node of layout.nodes) {
+    if (node.kind === 'add') continue
+    if (node.kind === 'self') byId.set('self', { cx: node.x, top: node.y })
+    else byId.set(node.member.id, { cx: node.x, top: node.y })
+  }
+
   const people: PersonDraw[] = []
   canvasEl.querySelectorAll<HTMLElement>('.ped-node').forEach((el) => {
     if (el.querySelector('.ped-add')) return
+    const id = el.dataset.pedPerson
+    const placed = id ? byId.get(id) : null
     const left = parseFloat(el.style.left)
     const top = parseFloat(el.style.top)
-    if (!Number.isFinite(left) || !Number.isFinite(top)) return
-    const person = readPerson(el, left + PED.nodeW / 2, top)
+    const cx = placed?.cx ?? (Number.isFinite(left) ? left + PED.nodeW / 2 : NaN)
+    const nodeTop = placed?.top ?? (Number.isFinite(top) ? top : NaN)
+    if (!Number.isFinite(cx) || !Number.isFinite(nodeTop)) return
+    const person = readPerson(el, cx, nodeTop)
     if (person) people.push(person)
   })
 

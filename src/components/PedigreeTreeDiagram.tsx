@@ -223,10 +223,29 @@ export default function PedigreeTreeDiagram({
     () => ({
       exportPng: (caption) => {
         if (!canvasRef.current) return Promise.reject(new Error('Tree is not ready yet.'))
-        return renderTreePng(canvasRef.current, layout, caption)
+        // Download must not include lines to "Add …" placeholders (those nodes are omitted).
+        const exportLayout = allowAdds
+          ? buildPedigreeLayout({
+              members,
+              allowAdds: false,
+              centerSelfMemberIds,
+              selfFatherMemberId: centerFatherMemberId,
+              selfMotherMemberId: centerMotherMemberId,
+              labelHeights,
+            })
+          : layout
+        return renderTreePng(canvasRef.current, exportLayout, caption)
       },
     }),
-    [layout],
+    [
+      layout,
+      allowAdds,
+      members,
+      centerSelfMemberIds,
+      centerFatherMemberId,
+      centerMotherMemberId,
+      labelHeights,
+    ],
   )
 
   const selfDisplayName = selfName.trim() || 'You'

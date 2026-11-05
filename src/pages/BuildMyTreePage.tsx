@@ -10,8 +10,8 @@ import {
 } from '../lib/buildMyTreeService'
 import {
   createTreeBuildRequest,
-  isTreeBuildSpreadsheet,
-  uploadTreeBuildSpreadsheet,
+  isTreeBuildUploadFile,
+  uploadTreeBuildFile,
 } from '../lib/treeBuildRequest'
 import {
   initializeTreeBuildPayment,
@@ -78,14 +78,10 @@ export default function BuildMyTreePage() {
     event.preventDefault()
     if (!user?.uid) return
     if (!file) {
-      setError('Choose an Excel or CSV file with your family data.')
+      setError('Choose a file with your family information.')
       return
     }
-    if (!isTreeBuildSpreadsheet(file)) {
-      setError('Upload a .xlsx, .xls, or .csv file.')
-      return
-    }
-    if (file.size > BUILD_MY_TREE_MAX_BYTES) {
+    if (!isTreeBuildUploadFile(file)) {
       setError('File is too large. Maximum size is 10 MB.')
       return
     }
@@ -97,7 +93,7 @@ export default function BuildMyTreePage() {
     setError('')
     setSubmitting(true)
     try {
-      const { storagePath, downloadUrl } = await uploadTreeBuildSpreadsheet(user.uid, file)
+      const { storagePath, downloadUrl } = await uploadTreeBuildFile(user.uid, file)
       const requestId = await createTreeBuildRequest({
         uid: user.uid,
         fullName,
@@ -136,9 +132,9 @@ export default function BuildMyTreePage() {
           <div>
             <h1 id={titleId}>Build my tree</h1>
             <p>
-              Send us your family list in Excel or CSV and our team will build your DengiTree
-              diagram for you — clear parents, siblings, and generations like a professional
-              pedigree layout.
+              Send us your family information in any file format and our team will build your
+              DengiTree diagram for you — clear parents, siblings, and generations like a
+              professional pedigree layout.
             </p>
           </div>
           <span className="build-tree-price-badge">{formatBuildMyTreePrice()} · Paid service</span>
@@ -154,8 +150,8 @@ export default function BuildMyTreePage() {
               </p>
             ) : (
               <p>
-                We have your spreadsheet. Our team will contact you at <strong>{email}</strong>{' '}
-                to confirm details and payment ({formatBuildMyTreePrice()}), then build your tree
+                We have your file. Our team will contact you at <strong>{email}</strong> to
+                confirm details and payment ({formatBuildMyTreePrice()}), then build your tree
                 on DengiTree.
               </p>
             )}
@@ -167,8 +163,9 @@ export default function BuildMyTreePage() {
           <>
             <ol className="build-tree-steps">
               <li>
-                <strong>Download the template</strong> (optional) or use your own sheet with names
-                and relationships.
+                <strong>Prepare your file</strong> — spreadsheet, Word/PDF, photos of handwritten
+                notes, or any other document with names and relationships. A CSV template is
+                optional if you prefer a sheet.
               </li>
               <li>
                 <strong>Upload your file</strong> and tell us how to reach you.
@@ -181,7 +178,7 @@ export default function BuildMyTreePage() {
 
             <p className="build-tree-template-row">
               <a href="/tree-build-template.csv" download className="build-tree-template-link">
-                Download CSV template
+                Download CSV template (optional)
               </a>
               <span className="field-hint">
                 Columns: name, relationship, parents, dates, notes.
@@ -190,7 +187,7 @@ export default function BuildMyTreePage() {
 
             {!BUILD_MY_TREE_CHECKOUT_ENABLED ? (
               <p className="build-tree-checkout-note" role="note">
-                Online payment for this service is coming soon. Submit your sheet now — we will
+                Online payment for this service is coming soon. Submit your file now — we will
                 email you a payment link before we start.
               </p>
             ) : null}
@@ -235,7 +232,7 @@ export default function BuildMyTreePage() {
                 />
               </label>
               <label className="field build-tree-file-field">
-                <span>Family spreadsheet (.xlsx, .xls, or .csv)</span>
+                <span>Family file (any type — spreadsheet, PDF, Word, image, etc.)</span>
                 <input
                   type="file"
                   accept={BUILD_MY_TREE_ACCEPT}
