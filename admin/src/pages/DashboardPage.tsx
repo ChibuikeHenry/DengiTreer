@@ -15,16 +15,16 @@ function queueDot(tone: string) {
 export default function DashboardPage() {
   const { stats, recentActivities, operationsQueue, growthTrend } = useRealPlatformOverview()
 
-  const chartPoints = growthTrend.points.length > 0 ? growthTrend.points : [0, 0, 0, 0, 0]
-  const chartMonths = growthTrend.months.length > 0 ? growthTrend.months : ['Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+  const chartPoints = growthTrend.points.length > 0 ? growthTrend.points : [0]
+  const chartMonths = growthTrend.months.length > 0 ? growthTrend.months : ['Nov']
 
   const max = Math.max(...chartPoints, 1)
   const width = 400
   const height = 160
-  const step = width / Math.max(chartPoints.length - 1, 1)
+  const step = chartPoints.length > 1 ? width / (chartPoints.length - 1) : 0
   const points = chartPoints
     .map((v, i) => {
-      const x = i * step
+      const x = chartPoints.length === 1 ? width / 2 : i * step
       const y = height - (v / max) * (height - 20) - 10
       return `${x},${y}`
     })
@@ -61,15 +61,15 @@ export default function DashboardPage() {
                 points={points}
               />
               {chartPoints.map((v, i) => {
-                const x = i * step
+                const x = chartPoints.length === 1 ? width / 2 : i * step
                 const y = height - (v / max) * (height - 20) - 10
                 return <circle key={i} cx={x} cy={y} r="5" fill="#163706" />
               })}
             </svg>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#5c6456' }}>
-            {chartMonths.map((m) => (
-              <span key={m}>{m}</span>
+          <div style={{ display: 'flex', justifyContent: chartMonths.length === 1 ? 'center' : 'space-between', fontSize: '0.72rem', color: '#5c6456' }}>
+            {chartMonths.map((m, i) => (
+              <span key={`${m}-${i}`}>{m}</span>
             ))}
           </div>
         </section>

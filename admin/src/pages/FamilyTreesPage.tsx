@@ -80,7 +80,25 @@ export default function FamilyTreesPage() {
                         {tree.treeName}
                       </button>
                     </td>
-                    <td>{tree.owner}</td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {tree.ownerPhotoUrl ? (
+                          <img
+                            src={tree.ownerPhotoUrl}
+                            alt={tree.owner}
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: '1px solid #34611d',
+                              flexShrink: 0,
+                            }}
+                          />
+                        ) : null}
+                        <span>{tree.owner}</span>
+                      </div>
+                    </td>
                     <td>{tree.members} members</td>
                     <td>
                       <StatusBadge variant={tree.status} />

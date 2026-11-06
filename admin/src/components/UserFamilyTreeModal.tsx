@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import StatusBadge from './StatusBadge'
 import { useUserFamilyTree, type AdminTreeMember } from '../lib/useUserFamilyTree'
+import { IconTree } from './AdminNavIcons'
 
 type UserFamilyTreeModalProps = {
   userId: string | null
@@ -15,8 +16,16 @@ function getInitials(name: string): string {
 }
 
 export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeModalProps) {
-  const { ownerName, ownerEmail, ownerRole, ownerStatus, ownerJoined, members, loading } =
-    useUserFamilyTree(userId)
+  const [activeUserId, setActiveUserId] = useState<string | null>(userId)
+  const [history, setHistory] = useState<Array<{ id: string; name: string }>>([])
+
+  useEffect(() => {
+    setActiveUserId(userId)
+    setHistory([])
+  }, [userId])
+
+  const { ownerName, ownerEmail, ownerPhotoUrl, ownerRole, ownerStatus, ownerJoined, members, loading } =
+    useUserFamilyTree(activeUserId)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -26,7 +35,20 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  if (!userId) return null
+  if (!userId || !activeUserId) return null
+
+  function handleNavigateToUser(targetUid: string) {
+    if (targetUid === activeUserId) return
+    setHistory((prev) => [...prev, { id: activeUserId!, name: ownerName || 'Previous Tree' }])
+    setActiveUserId(targetUid)
+  }
+
+  function handleGoBack() {
+    if (history.length === 0) return
+    const last = history[history.length - 1]
+    setHistory((prev) => prev.slice(0, prev.length - 1))
+    setActiveUserId(last.id)
+  }
 
   // Group members into pedigree tiers
   const selfMember = members.find((m) => m.isSelf)
@@ -88,20 +110,80 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
             gap: '1rem',
           }}
         >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#163706', margin: 0 }}>
-                {loading ? 'Loading Family Tree…' : `${ownerName}'s Family Tree`}
-              </h2>
-              <span className="dt-role-pill">{ownerRole}</span>
-              <StatusBadge variant={ownerStatus as any} />
-            </div>
-            {ownerEmail ? (
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#5c6456' }}>
-                {ownerEmail} · Joined {ownerJoined} · <strong>{members.length} Total Members</strong>
-              </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {history.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleGoBack}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  background: '#e2edd6',
+                  border: '1px solid #c8e0b8',
+                  borderRadius: '8px',
+                  padding: '0.45rem 0.75rem',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  color: '#163706',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                ← Back to {history[history.length - 1].name}
+              </button>
             ) : null}
+
+            {/* Owner Photo / Avatar */}
+            {ownerPhotoUrl ? (
+              <img
+                src={ownerPhotoUrl}
+                alt={ownerName}
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '2px solid #34611d',
+                  flexShrink: 0,
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  background: '#163706',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  fontSize: '1.1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {getInitials(ownerName || '?')}
+              </div>
+            )}
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#163706', margin: 0 }}>
+                  {loading ? 'Loading Family Tree…' : `${ownerName}'s Family Tree`}
+                </h2>
+                <span className="dt-role-pill">{ownerRole}</span>
+                <StatusBadge variant={ownerStatus as any} />
+              </div>
+              {ownerEmail ? (
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#5c6456' }}>
+                  {ownerEmail} · Joined {ownerJoined} · <strong>{members.length} Total Members</strong>
+                </p>
+              ) : null}
+            </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
@@ -160,7 +242,7 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                         {grandparents.map((m) => (
-                          <MemberCard key={m.id} member={m} />
+                          <MemberCard key={m.id} member={m} onNavigate={handleNavigateToUser} />
                         ))}
                       </div>
                     </div>
@@ -174,7 +256,7 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                         {parents.map((m) => (
-                          <MemberCard key={m.id} member={m} />
+                          <MemberCard key={m.id} member={m} onNavigate={handleNavigateToUser} />
                         ))}
                       </div>
                     </div>
@@ -186,12 +268,12 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
                       Self, Spouse & Siblings Generation
                     </span>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                      {selfMember ? <MemberCard member={selfMember} isSelf /> : null}
+                      {selfMember ? <MemberCard member={selfMember} isSelf onNavigate={handleNavigateToUser} /> : null}
                       {spouse.map((m) => (
-                        <MemberCard key={m.id} member={m} />
+                        <MemberCard key={m.id} member={m} onNavigate={handleNavigateToUser} />
                       ))}
                       {siblings.map((m) => (
-                        <MemberCard key={m.id} member={m} />
+                        <MemberCard key={m.id} member={m} onNavigate={handleNavigateToUser} />
                       ))}
                     </div>
                   </div>
@@ -204,7 +286,7 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                         {children.map((m) => (
-                          <MemberCard key={m.id} member={m} />
+                          <MemberCard key={m.id} member={m} onNavigate={handleNavigateToUser} />
                         ))}
                       </div>
                     </div>
@@ -218,7 +300,7 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
                       </span>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
                         {others.map((m) => (
-                          <MemberCard key={m.id} member={m} />
+                          <MemberCard key={m.id} member={m} onNavigate={handleNavigateToUser} />
                         ))}
                       </div>
                     </div>
@@ -239,53 +321,136 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
                       <th scope="col">Email</th>
                       <th scope="col">Life Status</th>
                       <th scope="col">Account Status</th>
-                      <th scope="col">Added On</th>
+                      <th scope="col" style={{ textAlign: 'right' }}>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {members.map((m) => (
-                      <tr key={m.id} style={m.isSelf ? { background: '#f5faf0' } : undefined}>
-                        <td>
-                          <strong>{m.name}</strong>
-                          {m.isSelf ? (
+                    {members.map((m) => {
+                      const canNavigate = Boolean(m.targetTreeUid && m.targetTreeUid !== activeUserId)
+                      return (
+                        <tr key={m.id} style={m.isSelf ? { background: '#f5faf0' } : undefined}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                              {m.photoUrl ? (
+                                <img
+                                  src={m.photoUrl}
+                                  alt={m.name}
+                                  style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: '1px solid #34611d',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    background: m.isSelf ? '#163706' : '#5c6456',
+                                    color: '#ffffff',
+                                    fontWeight: 700,
+                                    fontSize: '0.78rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {getInitials(m.name)}
+                                </div>
+                              )}
+                              <div>
+                                <strong style={{ color: '#163706' }}>{m.name}</strong>
+                                {m.isSelf ? (
+                                  <span
+                                    style={{
+                                      marginLeft: '0.5rem',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      background: '#163706',
+                                      color: '#ffffff',
+                                      padding: '0.15rem 0.45rem',
+                                      borderRadius: '999px',
+                                    }}
+                                  >
+                                    Tree Owner
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+                          <td>{m.relationship}</td>
+                          <td>{m.email ?? '—'}</td>
+                          <td>
                             <span
                               style={{
-                                marginLeft: '0.5rem',
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                background: '#163706',
-                                color: '#ffffff',
-                                padding: '0.15rem 0.45rem',
+                                display: 'inline-block',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                                padding: '0.2rem 0.55rem',
                                 borderRadius: '999px',
+                                background: m.memberStatus === 'deceased' ? '#fee2e2' : '#eef6e8',
+                                color: m.memberStatus === 'deceased' ? '#991b1b' : '#163706',
                               }}
                             >
-                              Tree Owner
+                              {m.memberStatus === 'deceased' ? 'Deceased' : 'Living'}
                             </span>
-                          ) : null}
-                        </td>
-                        <td>{m.relationship}</td>
-                        <td>{m.email ?? '—'}</td>
-                        <td>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              fontSize: '0.75rem',
-                              fontWeight: 600,
-                              padding: '0.2rem 0.55rem',
-                              borderRadius: '999px',
-                              background: m.memberStatus === 'deceased' ? '#fee2e2' : '#eef6e8',
-                              color: m.memberStatus === 'deceased' ? '#991b1b' : '#163706',
-                            }}
-                          >
-                            {m.memberStatus === 'deceased' ? 'Deceased' : 'Living'}
-                          </span>
-                        </td>
-                        <td>
-                          <StatusBadge variant={m.claimed ? 'Claimed' : 'Unclaimed'} />
-                        </td>
-                        <td>{m.addedDate}</td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            <StatusBadge variant={m.claimed ? 'Claimed' : 'Unclaimed'} />
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {m.targetTreeUid === activeUserId || m.isSelf ? (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem',
+                                  background: '#eef6e8',
+                                  color: '#163706',
+                                  border: '1px solid #c8e0b8',
+                                  borderRadius: '6px',
+                                  padding: '0.3rem 0.6rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                <IconTree size={14} />
+                                Viewing Tree
+                              </span>
+                            ) : canNavigate ? (
+                              <button
+                                type="button"
+                                onClick={() => handleNavigateToUser(m.targetTreeUid!)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '0.35rem',
+                                  background: '#34611d',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '0.35rem 0.65rem',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                }}
+                              >
+                                <IconTree size={14} />
+                                View Tree
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Unclaimed</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -297,46 +462,145 @@ export default function UserFamilyTreeModal({ userId, onClose }: UserFamilyTreeM
   )
 }
 
-function MemberCard({ member, isSelf = false }: { member: AdminTreeMember; isSelf?: boolean }) {
+function MemberCard({
+  member,
+  isSelf = false,
+  onNavigate,
+}: {
+  member: AdminTreeMember
+  isSelf?: boolean
+  onNavigate: (uid: string) => void
+}) {
   const initials = getInitials(member.name)
+  const canNavigate = Boolean(member.targetTreeUid && !isSelf)
+
   return (
     <div
+      onClick={() => {
+        if (canNavigate && member.targetTreeUid) {
+          onNavigate(member.targetTreeUid)
+        }
+      }}
       style={{
         background: isSelf ? '#eef7e6' : '#ffffff',
         border: isSelf ? '2px solid #34611d' : '1px solid #d4e3c7',
-        borderRadius: '10px',
-        padding: '0.75rem 1rem',
-        minWidth: '160px',
+        borderRadius: '12px',
+        padding: '0.85rem 1rem',
+        minWidth: '165px',
         maxWidth: '220px',
         textAlign: 'center',
         boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+        cursor: canNavigate ? 'pointer' : 'default',
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+      }}
+      onMouseEnter={(e) => {
+        if (canNavigate) {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.boxShadow = '0 6px 14px rgba(22, 55, 6, 0.12)'
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (canNavigate) {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.04)'
+        }
       }}
     >
-      <div
+      {/* Member Photo or Initials */}
+      {member.photoUrl ? (
+        <img
+          src={member.photoUrl}
+          alt={member.name}
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            objectFit: 'cover',
+            border: isSelf ? '2px solid #34611d' : '1px solid #c9dcb8',
+            margin: '0 auto 0.45rem',
+            display: 'block',
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: isSelf ? '#163706' : '#5c6456',
+            color: '#ffffff',
+            fontWeight: 700,
+            fontSize: '0.92rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 0.45rem',
+          }}
+        >
+          {initials}
+        </div>
+      )}
+
+      <strong
         style={{
-          width: '38px',
-          height: '38px',
-          borderRadius: '50%',
-          background: isSelf ? '#163706' : '#5c6456',
-          color: '#ffffff',
-          fontWeight: 700,
-          fontSize: '0.88rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto 0.4rem',
+          display: 'block',
+          fontSize: '0.85rem',
+          color: '#163706',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
       >
-        {initials}
-      </div>
-      <strong style={{ display: 'block', fontSize: '0.85rem', color: '#163706', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {member.name}
       </strong>
       <span style={{ fontSize: '0.75rem', color: '#5c6456', fontWeight: 600 }}>
         {member.relationship}
       </span>
-      <div style={{ marginTop: '0.35rem', display: 'flex', justifyContent: 'center', gap: '0.35rem' }}>
+
+      <div style={{ marginTop: '0.4rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
         <StatusBadge variant={member.claimed ? 'Claimed' : 'Unclaimed'} />
+        {isSelf ? (
+          <span
+            style={{
+              fontSize: '0.7rem',
+              fontWeight: 700,
+              color: '#163706',
+              background: '#eef6e8',
+              padding: '0.15rem 0.45rem',
+              borderRadius: '6px',
+              border: '1px solid #c8e0b8',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.2rem',
+            }}
+          >
+            <IconTree size={12} /> Viewing Tree
+          </span>
+        ) : canNavigate ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (member.targetTreeUid) onNavigate(member.targetTreeUid)
+            }}
+            style={{
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              color: '#ffffff',
+              background: '#34611d',
+              padding: '0.2rem 0.55rem',
+              borderRadius: '6px',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.25rem',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            }}
+          >
+            <IconTree size={12} /> View Tree
+          </button>
+        ) : null}
       </div>
     </div>
   )

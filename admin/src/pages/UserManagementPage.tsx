@@ -7,6 +7,13 @@ import UserFamilyTreeModal from '../components/UserFamilyTreeModal'
 import { useRealUsers } from '../lib/adminDataService'
 import { useQuickFilterState } from '../lib/useQuickFilterState'
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 0 || !parts[0]) return '?'
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
+
 export default function UserManagementPage() {
   const { users, loading, error } = useRealUsers()
   const [searchTerm, setSearchTerm] = useState('')
@@ -87,29 +94,63 @@ export default function UserManagementPage() {
                     onClick={() => setSelectedUserId(row.id)}
                   >
                     <td>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedUserId(row.id)
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          padding: 0,
-                          color: '#163706',
-                          fontWeight: 700,
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          textDecorationColor: 'transparent',
-                          transition: 'text-decoration-color 0.15s ease',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.textDecorationColor = '#163706')}
-                        onMouseLeave={(e) => (e.currentTarget.style.textDecorationColor = 'transparent')}
-                      >
-                        {row.name}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        {row.photoUrl ? (
+                          <img
+                            src={row.photoUrl}
+                            alt={row.name}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: '1px solid #34611d',
+                              flexShrink: 0,
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: '#163706',
+                              color: '#ffffff',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {getInitials(row.name)}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedUserId(row.id)
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            color: '#163706',
+                            fontWeight: 700,
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            textDecorationColor: 'transparent',
+                            transition: 'text-decoration-color 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.textDecorationColor = '#163706')}
+                          onMouseLeave={(e) => (e.currentTarget.style.textDecorationColor = 'transparent')}
+                        >
+                          {row.name}
+                        </button>
+                      </div>
                     </td>
                     <td>{row.email}</td>
                     <td>

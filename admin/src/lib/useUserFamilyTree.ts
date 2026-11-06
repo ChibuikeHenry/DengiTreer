@@ -6,6 +6,7 @@ export type AdminTreeMember = {
   id: string
   name: string
   email: string | null
+  photoUrl: string | null
   relationship: string
   rawRole: string
   parentSlot?: 'father' | 'mother' | 'unknown' | null
@@ -13,6 +14,7 @@ export type AdminTreeMember = {
   memberStatus: 'living' | 'deceased'
   claimed: boolean
   claimedByUid: string | null
+  targetTreeUid: string | null
   addedDate: string
   isSelf?: boolean
 }
@@ -20,6 +22,7 @@ export type AdminTreeMember = {
 export type UserFamilyTreeData = {
   ownerName: string
   ownerEmail: string
+  ownerPhotoUrl: string | null
   ownerRole: string
   ownerStatus: string
   ownerJoined: string
@@ -61,10 +64,55 @@ function formatRoleLabel(role: string, parentSlot?: string | null, lineageSide?:
   return r.charAt(0).toUpperCase() + r.slice(1)
 }
 
+function extractPhoto(obj: any): string | null {
+  if (!obj || typeof obj !== 'object') return null
+  return (
+    obj.photoURL ||
+    obj.photoUrl ||
+    obj.avatarUrl ||
+    obj.avatar ||
+    obj.profileImage ||
+    obj.picture ||
+    obj.inviteePhoto ||
+    null
+  )
+}
+
+function getReciprocalRoleString(role: string): string {
+  const r = (role || '').toLowerCase().trim()
+  if (r === 'child') return 'parent'
+  if (r === 'parent') return 'child'
+  if (r === 'sibling') return 'sibling'
+  if (r === 'spouse') return 'spouse'
+  if (r === 'grandparent') return 'grandchild'
+  return 'relative'
+}
+
+function mapInviterRoleToViewer(viewerRoleToInviter: string, otherRoleToInviter: string): string {
+  const v = (viewerRoleToInviter || '').toLowerCase().trim()
+  const o = (otherRoleToInviter || '').toLowerCase().trim()
+
+  if (v === 'child') {
+    if (o === 'parent') return 'grandparent'
+    if (o === 'spouse') return 'parent'
+    if (o === 'child') return 'sibling'
+    if (o === 'grandparent') return 'great-grandparent'
+  } else if (v === 'sibling') {
+    if (o === 'parent') return 'parent'
+    if (o === 'sibling') return 'sibling'
+    if (o === 'grandparent') return 'grandparent'
+  } else if (v === 'spouse') {
+    if (o === 'child') return 'child'
+    if (o === 'parent') return 'parent'
+  }
+  return o
+}
+
 export function useUserFamilyTree(uid: string | null) {
   const [data, setData] = useState<UserFamilyTreeData>({
     ownerName: '',
     ownerEmail: '',
+    ownerPhotoUrl: null,
     ownerRole: 'Member',
     ownerStatus: 'Active',
     ownerJoined: '',
@@ -77,6 +125,7 @@ export function useUserFamilyTree(uid: string | null) {
       setData({
         ownerName: '',
         ownerEmail: '',
+        ownerPhotoUrl: null,
         ownerRole: 'Member',
         ownerStatus: 'Active',
         ownerJoined: '',
@@ -86,21 +135,35 @@ export function useUserFamilyTree(uid: string | null) {
       return
     }
 
+    let unsubUsers: (() => void) | null = null
     let unsubUser: (() => void) | null = null
     let unsubFamily: (() => void) | null = null
-    let unsubInvites: (() => void) | null = null
+    let unsubInvites1: (() => void) | null = null
+    let unsubInvites2: (() => void) | null = null
+    let unsubInvites3: (() => void) | null = null
+    let unsubInviterTree: (() => void) | null = null
+
+    const usersByEmail = new Map<string, { uid: string; photoUrl: string | null; name: string }>()
+    const usersByUid = new Map<string, { uid: string; photoUrl: string | null; name: string }>()
 
     let ownerInfo = {
       ownerName: 'User',
       ownerEmail: '',
+      ownerPhotoUrl: null as string | null,
       ownerRole: 'Member',
       ownerStatus: 'Active',
       ownerJoined: '',
+      invitedByUid: null as string | null,
+      invitedByEmail: null as string | null,
+      familyRole: 'member' as string,
       selfMember: null as AdminTreeMember | null,
     }
 
-    let familyMembersList: AdminTreeMember[] = []
-    let invitesList: AdminTreeMember[] = []
+    let rawFamilyMembers: any[] = []
+    let rawInvitesSentByUid: any[] = []
+    let rawInvitesSentByEmail: any[] = []
+    let rawInvitesReceivedByEmail: any[] = []
+    let rawInviterTreeRecords: any[] = []
 
     function updateResult() {
       const combinedMap = new Map<string, AdminTreeMember>()
@@ -109,21 +172,128 @@ export function useUserFamilyTree(uid: string | null) {
         combinedMap.set(ownerInfo.selfMember.id, ownerInfo.selfMember)
       }
 
-      familyMembersList.forEach((m) => {
-        combinedMap.set(m.id, m)
-      })
+      const processRecord = (m: any, isInviterTree = false) => {
+        if (!m || !m.id) return
 
-      invitesList.forEach((inv) => {
-        if (!combinedMap.has(inv.id)) {
-          combinedMap.set(inv.id, inv)
+        const rawRole = (m.role || 'member').toLowerCase().trim()
+        const email = m.inviteeEmail || m.email || null
+        const emailKey = email ? email.toLowerCase().trim() : ''
+        const claimedByUid = m.claimedByUid || m.joinedUid || null
+
+        const matchedByUid = claimedByUid ? usersByUid.get(claimedByUid) : null
+        const matchedByEmail = emailKey ? usersByEmail.get(emailKey) : null
+        const matchedUser = matchedByUid || matchedByEmail
+
+        const photoUrl = extractPhoto(m) || matchedUser?.photoUrl || null
+        const claimed = Boolean(claimedByUid || m.claimedAt || m.profileClaimed || matchedUser)
+        const targetTreeUid = claimedByUid || matchedUser?.uid || null
+
+        let name =
+          m.displayName ||
+          [m.firstName, m.lastName].filter(Boolean).join(' ') ||
+          m.inviteeName ||
+          matchedUser?.name ||
+          email ||
+          'Family member'
+
+        let displayRole = formatRoleLabel(rawRole, m.parentSlot, m.lineageSide)
+
+        if (isInviterTree && ownerInfo.familyRole) {
+          const mappedRole = mapInviterRoleToViewer(ownerInfo.familyRole, rawRole)
+          if (mappedRole) {
+            displayRole = formatRoleLabel(mappedRole, m.parentSlot, m.lineageSide)
+          }
+        }
+
+        const idKey = m.id || claimedByUid || emailKey
+
+        if (!combinedMap.has(idKey)) {
+          combinedMap.set(idKey, {
+            id: idKey,
+            name,
+            email,
+            photoUrl,
+            relationship: displayRole,
+            rawRole,
+            parentSlot: m.parentSlot || null,
+            lineageSide: m.lineageSide || null,
+            memberStatus: m.memberStatus === 'deceased' ? 'deceased' : 'living',
+            claimed,
+            claimedByUid,
+            targetTreeUid,
+            addedDate: formatDate(m.createdAt),
+          })
+        }
+      }
+
+      rawFamilyMembers.forEach((m) => processRecord(m))
+      rawInvitesSentByUid.forEach((m) => processRecord(m))
+      rawInvitesSentByEmail.forEach((m) => processRecord(m))
+
+      rawInvitesReceivedByEmail.forEach((m) => {
+        const inviterUid = m.inviterUid || null
+        const inviterEmail = m.inviterEmail || null
+        const matchedInviter = inviterUid ? usersByUid.get(inviterUid) : (inviterEmail ? usersByEmail.get(inviterEmail.toLowerCase()) : null)
+
+        const inviterName = m.inviterName || matchedInviter?.name || inviterEmail || 'Family Member'
+        const inviterPhoto = matchedInviter?.photoUrl || extractPhoto(m) || null
+        const reciprocalRole = getReciprocalRoleString(m.role || 'member')
+
+        const idKey = `inviter-${inviterUid || inviterEmail || m.id}`
+        if (!combinedMap.has(idKey)) {
+          combinedMap.set(idKey, {
+            id: idKey,
+            name: inviterName,
+            email: inviterEmail,
+            photoUrl: inviterPhoto,
+            relationship: formatRoleLabel(reciprocalRole, null, null),
+            rawRole: reciprocalRole,
+            memberStatus: 'living',
+            claimed: true,
+            claimedByUid: inviterUid || matchedInviter?.uid || null,
+            targetTreeUid: inviterUid || matchedInviter?.uid || null,
+            addedDate: formatDate(m.createdAt),
+          })
         }
       })
+
+      if (ownerInfo.invitedByUid || ownerInfo.invitedByEmail) {
+        const inviterUid = ownerInfo.invitedByUid
+        const inviterEmail = ownerInfo.invitedByEmail
+        const matchedInviter = inviterUid ? usersByUid.get(inviterUid) : (inviterEmail ? usersByEmail.get(inviterEmail.toLowerCase()) : null)
+
+        if (matchedInviter) {
+          const reciprocalRole = getReciprocalRoleString(ownerInfo.familyRole)
+          const idKey = `inviter-user-${matchedInviter.uid}`
+          if (!combinedMap.has(idKey)) {
+            combinedMap.set(idKey, {
+              id: idKey,
+              name: matchedInviter.name,
+              email: inviterEmail || null,
+              photoUrl: matchedInviter.photoUrl,
+              relationship: formatRoleLabel(reciprocalRole, null, null),
+              rawRole: reciprocalRole,
+              memberStatus: 'living',
+              claimed: true,
+              claimedByUid: matchedInviter.uid,
+              targetTreeUid: matchedInviter.uid,
+              addedDate: ownerInfo.ownerJoined,
+            })
+          }
+        }
+
+        rawInviterTreeRecords.forEach((m) => {
+          if (m.joinedUid === uid || (m.inviteeEmail && m.inviteeEmail.toLowerCase() === ownerInfo.ownerEmail.toLowerCase())) return
+          processRecord(m, true)
+        })
+      }
 
       const allMembers = Array.from(combinedMap.values())
 
       setData({
         ownerName: ownerInfo.ownerName,
         ownerEmail: ownerInfo.ownerEmail,
+        ownerPhotoUrl: ownerInfo.ownerPhotoUrl,
         ownerRole: ownerInfo.ownerRole,
         ownerStatus: ownerInfo.ownerStatus,
         ownerJoined: ownerInfo.ownerJoined,
@@ -132,7 +302,27 @@ export function useUserFamilyTree(uid: string | null) {
       })
     }
 
-    // 1. Listen to user doc
+    // 0. Listen to all registered users
+    unsubUsers = onSnapshot(collection(db, 'users'), (usersSnap) => {
+      usersByEmail.clear()
+      usersByUid.clear()
+      usersSnap.docs.forEach((uDoc) => {
+        const uData = uDoc.data()
+        const email = typeof uData.email === 'string' ? uData.email.toLowerCase().trim() : ''
+        const photo = extractPhoto(uData)
+        const name =
+          uData.displayName ||
+          [uData.firstName, uData.lastName].filter(Boolean).join(' ') ||
+          (email ? email.split('@')[0] : 'User')
+
+        const info = { uid: uDoc.id, photoUrl: photo, name }
+        if (email) usersByEmail.set(email, info)
+        usersByUid.set(uDoc.id, info)
+      })
+      updateResult()
+    })
+
+    // 1. Listen to target user doc
     unsubUser = onSnapshot(doc(db, 'users', uid), (userSnap) => {
       if (userSnap.exists()) {
         const uData = userSnap.data()
@@ -142,115 +332,103 @@ export function useUserFamilyTree(uid: string | null) {
           uData.email?.split('@')[0] ||
           'User'
         const email = uData.email || ''
+        const photoUrl = extractPhoto(uData)
         const role = uData.customClaims?.admin === true || uData.role === 'admin' ? 'Admin' : 'Member'
         const status = uData.status === 'pending' ? 'Pending' : 'Active'
         const joined = formatDate(uData.createdAt || uData.updatedAt)
 
+        const invitedByUid = uData.invitedByUid ? String(uData.invitedByUid) : null
+        const invitedByEmail = uData.inviterEmail ? String(uData.inviterEmail) : null
+        const familyRole = uData.familyRole || 'member'
+
         ownerInfo = {
           ownerName: name,
           ownerEmail: email,
+          ownerPhotoUrl: photoUrl,
           ownerRole: role,
           ownerStatus: status,
           ownerJoined: joined,
+          invitedByUid,
+          invitedByEmail,
+          familyRole,
           selfMember: {
             id: uid,
             name: `${name} (Self)`,
             email,
+            photoUrl,
             relationship: 'Self (Tree Owner)',
             rawRole: 'self',
             memberStatus: 'living',
             claimed: true,
             claimedByUid: uid,
+            targetTreeUid: uid,
             addedDate: joined,
             isSelf: true,
           },
+        }
+
+        // Listen to invitations sent by inviter if user was invited by someone
+        if (invitedByUid && invitedByUid !== uid) {
+          unsubInviterTree?.()
+          unsubInviterTree = onSnapshot(
+            query(collection(db, 'invitations'), where('inviterUid', '==', invitedByUid)),
+            (snap) => {
+              rawInviterTreeRecords = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+              updateResult()
+            },
+          )
+        }
+
+        // Listen to invitations matching user's email
+        if (email) {
+          unsubInvites2?.()
+          unsubInvites2 = onSnapshot(
+            query(collection(db, 'invitations'), where('inviterEmail', '==', email.toLowerCase())),
+            (snap) => {
+              rawInvitesSentByEmail = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+              updateResult()
+            },
+          )
+
+          unsubInvites3?.()
+          unsubInvites3 = onSnapshot(
+            query(collection(db, 'invitations'), where('inviteeEmail', '==', email.toLowerCase())),
+            (snap) => {
+              rawInvitesReceivedByEmail = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+              updateResult()
+            },
+          )
         }
       }
       updateResult()
     })
 
-    // 2. Listen to users/{uid}/familyMembers subcollection
-    const familyCol = collection(db, 'users', uid, 'familyMembers')
+    // 2. Listen to users/{uid}/familyMembers
     unsubFamily = onSnapshot(
-      familyCol,
+      collection(db, 'users', uid, 'familyMembers'),
       (snap) => {
-        familyMembersList = snap.docs.map((docSnap) => {
-          const m = docSnap.data()
-          const name =
-            m.displayName ||
-            [m.firstName, m.lastName].filter(Boolean).join(' ') ||
-            m.inviteeEmail ||
-            'Family member'
-          const email = m.inviteeEmail || null
-          const claimed = Boolean(m.claimedByUid || m.claimedAt)
-
-          return {
-            id: docSnap.id,
-            name,
-            email,
-            relationship: formatRoleLabel(m.role, m.parentSlot, m.lineageSide),
-            rawRole: m.role || 'member',
-            parentSlot: m.parentSlot || null,
-            lineageSide: m.lineageSide || null,
-            memberStatus: m.memberStatus === 'deceased' ? 'deceased' : 'living',
-            claimed,
-            claimedByUid: m.claimedByUid || null,
-            addedDate: formatDate(m.createdAt),
-          }
-        })
-        updateResult()
-      },
-      () => {
+        rawFamilyMembers = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
         updateResult()
       },
     )
 
-    // 3. Listen to invitations where inviterUid == uid
-    const qInvites = query(collection(db, 'invitations'), where('inviterUid', '==', uid))
-    unsubInvites = onSnapshot(
-      qInvites,
+    // 3. Listen to invitations sent by UID
+    unsubInvites1 = onSnapshot(
+      query(collection(db, 'invitations'), where('inviterUid', '==', uid)),
       (snap) => {
-        const list: AdminTreeMember[] = []
-        snap.docs.forEach((docSnap) => {
-          const data = docSnap.data()
-          if (data.role === 'member') return
-
-          const name =
-            data.inviteeName ||
-            data.inviteeEmail ||
-            'Family member'
-          const email = data.inviteeEmail || null
-          const claimed =
-            data.profileClaimed === true ||
-            Boolean(data.joinedUid) ||
-            data.status === 'joined'
-
-          list.push({
-            id: docSnap.id,
-            name,
-            email,
-            relationship: formatRoleLabel(data.role, data.parentSlot, data.lineageSide),
-            rawRole: data.role || 'member',
-            parentSlot: data.parentSlot || null,
-            lineageSide: data.lineageSide || null,
-            memberStatus: data.memberStatus === 'deceased' ? 'deceased' : 'living',
-            claimed,
-            claimedByUid: data.joinedUid || null,
-            addedDate: formatDate(data.createdAt),
-          })
-        })
-        invitesList = list
-        updateResult()
-      },
-      () => {
+        rawInvitesSentByUid = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
         updateResult()
       },
     )
 
     return () => {
-      if (unsubUser) unsubUser()
-      if (unsubFamily) unsubFamily()
-      if (unsubInvites) unsubInvites()
+      unsubUsers?.()
+      unsubUser?.()
+      unsubFamily?.()
+      unsubInvites1?.()
+      unsubInvites2?.()
+      unsubInvites3?.()
+      unsubInviterTree?.()
     }
   }, [uid])
 

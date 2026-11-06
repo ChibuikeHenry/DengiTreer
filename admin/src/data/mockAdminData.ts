@@ -2,6 +2,7 @@ export type TreeRow = {
   id: string
   treeName: string
   owner: string
+  ownerPhotoUrl?: string | null
   ownerIsEmail?: boolean
   members: number
   status: 'Active' | 'Pending'
@@ -12,6 +13,7 @@ export type MemberRow = {
   id: string
   name: string
   email: string
+  photoUrl?: string | null
   role: 'Admin' | 'Member'
   status: 'Active' | 'Pending'
   joined: string

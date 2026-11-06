@@ -464,12 +464,7 @@ export function useRealPlatformOverview() {
 
       const now = new Date()
       const months: string[] = []
-      const monthPoints: number[] = [0, 0, 0, 0, 0]
-
-      for (let i = 4; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        months.push(d.toLocaleDateString('en-US', { month: 'short' }))
-      }
+      const monthPoints: number[] = []
 
       const allTimestamps = [
         ...users.map((u) => u.createdAtMs),
@@ -479,13 +474,48 @@ export function useRealPlatformOverview() {
         ...treeCleanups.map((c) => c.createdAtMs),
       ].filter((ts): ts is number => typeof ts === 'number' && ts > 0)
 
-      for (let i = 0; i < 5; i++) {
-        const endOfMonth = new Date(now.getFullYear(), now.getMonth() - (4 - i) + 1, 0, 23, 59, 59).getTime()
-        const count = allTimestamps.filter((ts) => ts <= endOfMonth).length
-        monthPoints[i] = count
+      if (allTimestamps.length > 0) {
+        const minTs = Math.min(...allTimestamps)
+        const minDate = new Date(minTs)
+
+        let startYear = minDate.getFullYear()
+        let startMonth = minDate.getMonth()
+
+        const endYear = now.getFullYear()
+        const endMonth = now.getMonth()
+
+        let currYear = startYear
+        let currMonth = startMonth
+
+        while (
+          currYear < endYear ||
+          (currYear === endYear && currMonth <= endMonth)
+        ) {
+          const d = new Date(currYear, currMonth, 1)
+          const label = d.toLocaleDateString('en-US', { month: 'short' })
+
+          const endOfMonth = new Date(currYear, currMonth + 1, 0, 23, 59, 59, 999).getTime()
+          const count = allTimestamps.filter((ts) => ts <= endOfMonth).length
+
+          months.push(label)
+          monthPoints.push(count)
+
+          currMonth++
+          if (currMonth > 11) {
+            currMonth = 0
+            currYear++
+          }
+        }
+      } else {
+        const currentMonthLabel = now.toLocaleDateString('en-US', { month: 'short' })
+        months.push(currentMonthLabel)
+        monthPoints.push(0)
       }
 
-      setGrowthTrend({ months, points: monthPoints })
+      const finalMonths = months.length > 12 ? months.slice(-12) : months
+      const finalPoints = monthPoints.length > 12 ? monthPoints.slice(-12) : monthPoints
+
+      setGrowthTrend({ months: finalMonths, points: finalPoints })
     }
 
     unsubConcessions = onSnapshot(collection(db, 'concessionRequests'), (snap) => {
