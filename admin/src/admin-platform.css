@@ -496,6 +496,13 @@
   color: var(--dt-muted);
 }
 
+.dt-cell-muted {
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--dt-muted);
+}
+
 .dt-side-rail {
   display: flex;
   flex-direction: column;

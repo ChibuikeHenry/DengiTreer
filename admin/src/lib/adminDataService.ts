@@ -19,9 +19,16 @@ export type RealActivityItem = {
 
 export type RealProfileClaim = {
   id: string
+  /** Profile / invitee shown on a family tree */
   member: string
-  claimant: string
-  status: 'Pending' | 'Approved' | 'Rejected'
+  memberEmail: string | null
+  /** Who added them to the tree */
+  addedBy: string
+  /** DengiTree user who claimed the profile (or null if still unclaimed) */
+  claimant: string | null
+  relationship: string
+  /** Claimed = joined DengiTree account; Unclaimed = stub / pending invite */
+  status: 'Claimed' | 'Unclaimed'
   submitted: string
 }
 
@@ -198,41 +205,127 @@ export function useRealFamilyTrees() {
   return { trees, loading }
 }
 
-/** Hook for fetching profile claim requests from Firestore */
+function formatRelationship(role: unknown): string {
+  const raw = typeof role === 'string' ? role.trim() : ''
+  if (!raw) return 'Member'
+  return raw
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('-')
+}
+
+/**
+ * Profile claims = family-tree invitations that are either still unclaimed stubs
+ * or claimed by a DengiTree account (joinedUid / profileClaimed / matching user email).
+ * Cross-references registered users in Firestore to determine claimed vs unclaimed status accurately.
+ */
 export function useRealProfileClaims() {
   const [claims, setClaims] = useState<RealProfileClaim[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const q = query(collection(db, 'treeMergeRequests'))
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: RealProfileClaim[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data()
-          const member = data.inviteeName || data.inviteeEmail || 'Family Member'
-          const claimant = data.inviterName || data.inviterEmail || 'Claimant'
-          const status = data.status === 'accepted' ? 'Approved' : data.status === 'declined' ? 'Rejected' : 'Pending'
-          const submitted = formatDate(data.createdAt)
+    let unsubscribeInvites: (() => void) | null = null
 
-          return {
-            id: docSnap.id,
-            member,
-            claimant,
-            status,
-            submitted,
+    const usersMap = new Map<string, { displayName: string; email: string; uid: string }>()
+    const usersByUid = new Map<string, { displayName: string; email: string }>()
+
+    const qUsers = query(collection(db, 'users'))
+    const unsubscribeUsers = onSnapshot(
+      qUsers,
+      (usersSnap) => {
+        usersMap.clear()
+        usersByUid.clear()
+        usersSnap.docs.forEach((docSnap) => {
+          const uData = docSnap.data() as Record<string, unknown>
+          const email = typeof uData.email === 'string' ? uData.email.trim().toLowerCase() : ''
+          const name =
+            (typeof uData.displayName === 'string' && uData.displayName.trim()) ||
+            [uData.firstName, uData.lastName].filter(Boolean).join(' ').trim() ||
+            (email ? email.split('@')[0] : 'User')
+
+          if (email) {
+            usersMap.set(email, { displayName: name, email, uid: docSnap.id })
           }
+          usersByUid.set(docSnap.id, { displayName: name, email })
         })
-        setClaims(list)
-        setLoading(false)
+
+        if (!unsubscribeInvites) {
+          const qInvites = query(collection(db, 'invitations'), orderBy('createdAt', 'desc'))
+          unsubscribeInvites = onSnapshot(
+            qInvites,
+            (snapshot) => {
+              const list: RealProfileClaim[] = snapshot.docs
+                .map((docSnap) => {
+                  const data = docSnap.data() as Record<string, unknown>
+                  const role = typeof data.role === 'string' ? data.role : 'member'
+                  // Platform share invites (role === 'member') are general invites, not profile claims
+                  if (role === 'member') return null
+
+                  const memberName =
+                    (typeof data.inviteeName === 'string' && data.inviteeName.trim()) ||
+                    (typeof data.inviteeEmail === 'string' && data.inviteeEmail.trim()) ||
+                    'Family member'
+                  const memberEmail =
+                    typeof data.inviteeEmail === 'string' && data.inviteeEmail.trim()
+                      ? data.inviteeEmail.trim().toLowerCase()
+                      : null
+
+                  const joinedUid = typeof data.joinedUid === 'string' ? data.joinedUid.trim() : ''
+                  const statusStr = typeof data.status === 'string' ? data.status.toLowerCase().trim() : ''
+
+                  const matchedUserByUid = joinedUid ? usersByUid.get(joinedUid) : null
+                  const matchedUserByEmail = memberEmail ? usersMap.get(memberEmail) : null
+                  const matchedUser = matchedUserByUid || matchedUserByEmail
+
+                  const claimed =
+                    data.profileClaimed === true ||
+                    data.profileClaimed === 'true' ||
+                    Boolean(joinedUid) ||
+                    ['joined', 'claimed', 'accepted', 'approved'].includes(statusStr) ||
+                    Boolean(matchedUser)
+
+                  const addedBy =
+                    (typeof data.inviterName === 'string' && data.inviterName.trim()) ||
+                    (typeof data.inviterEmail === 'string' && data.inviterEmail.trim()) ||
+                    'Unknown'
+
+                  const claimant = claimed
+                    ? matchedUser?.displayName || matchedUser?.email || memberName
+                    : null
+
+                  return {
+                    id: docSnap.id,
+                    member: memberName,
+                    memberEmail,
+                    addedBy,
+                    claimant,
+                    relationship: formatRelationship(role),
+                    status: claimed ? ('Claimed' as const) : ('Unclaimed' as const),
+                    submitted: formatDate(data.createdAt),
+                  }
+                })
+                .filter((row): row is RealProfileClaim => Boolean(row))
+
+              setClaims(list)
+              setLoading(false)
+            },
+            (err) => {
+              console.warn('Error fetching profile claims:', err)
+              setLoading(false)
+            },
+          )
+        }
       },
       (err) => {
-        console.warn('Error fetching profile claims:', err)
+        console.warn('Error fetching users for profile claims:', err)
         setLoading(false)
       },
     )
 
-    return () => unsubscribe()
+    return () => {
+      unsubscribeUsers()
+      if (unsubscribeInvites) unsubscribeInvites()
+    }
   }, [])
 
   return { claims, loading }
@@ -273,13 +366,14 @@ export function useRealPlatformOverview() {
   const totalUsers = users.length
   const activeTrees = trees.length
   const pendingInvites = invitations.filter((i) => i.status === 'Pending').length
-  const pendingClaims = claims.filter((c) => c.status === 'Pending').length
+  const claimedProfiles = claims.filter((c) => c.status === 'Claimed').length
+  const unclaimedProfiles = claims.filter((c) => c.status === 'Unclaimed').length
 
   const stats: RealPlatformStat[] = [
     { label: 'Total Users', value: String(totalUsers), tone: 'green' },
-    { label: 'Active Trees', value: String(activeTrees), tone: 'mint' },
+    { label: 'Claimed Profiles', value: String(claimedProfiles), tone: 'mint' },
+    { label: 'Unclaimed Profiles', value: String(unclaimedProfiles), tone: 'yellow' },
     { label: 'Pending Invitations', value: String(pendingInvites), tone: 'lavender' },
-    { label: 'Claims Awaiting Review', value: String(pendingClaims), tone: 'yellow' },
     { label: 'Total Invitations', value: String(invitations.length), tone: 'purple' },
     { label: 'Total Families', value: String(activeTrees), tone: 'sage' },
   ]

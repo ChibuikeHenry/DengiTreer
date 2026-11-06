@@ -704,6 +704,16 @@ select {
   color: var(--admin-member-text);
 }
 
+.admin-badge--claimed {
+  background: var(--admin-green-pale);
+  color: var(--admin-green);
+}
+
+.admin-badge--unclaimed {
+  background: var(--admin-warning-bg);
+  color: var(--admin-warning-text);
+}
+
 .admin-row-actions {
   display: inline-flex;
   flex-wrap: wrap;

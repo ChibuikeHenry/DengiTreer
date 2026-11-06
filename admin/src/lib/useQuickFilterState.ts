@@ -32,8 +32,22 @@ export function useQuickFilterState() {
       statusMatches = true
     } else {
       statusMatches = statuses.some((s) => {
-        if (s === 'Active') return normStatus === 'Active' || normStatus === 'Sent' || normStatus === 'Joined'
-        if (s === 'Pending Claim') return normStatus === 'Pending' || normStatus === 'Pending Claim'
+        if (s === 'Active') {
+          return (
+            normStatus === 'Active' ||
+            normStatus === 'Sent' ||
+            normStatus === 'Joined' ||
+            normStatus === 'Claimed' ||
+            normStatus === 'Approved'
+          )
+        }
+        if (s === 'Pending Claim') {
+          return (
+            normStatus === 'Pending' ||
+            normStatus === 'Pending Claim' ||
+            normStatus === 'Unclaimed'
+          )
+        }
         if (s === 'Inactive') return normStatus === 'Inactive' || normStatus === 'Expired'
         if (s === 'Blocked') return normStatus === 'Blocked'
         return normStatus.toLowerCase() === s.toLowerCase()

@@ -1,5 +1,13 @@
 type StatusBadgeProps = {
-  variant: 'Active' | 'Pending' | 'Sent' | 'Expired' | 'Admin' | 'Member'
+  variant:
+    | 'Active'
+    | 'Pending'
+    | 'Sent'
+    | 'Expired'
+    | 'Admin'
+    | 'Member'
+    | 'Claimed'
+    | 'Unclaimed'
 }
 
 const classMap: Record<StatusBadgeProps['variant'], string> = {
@@ -9,6 +17,8 @@ const classMap: Record<StatusBadgeProps['variant'], string> = {
   Expired: 'admin-badge--expired',
   Admin: 'admin-badge--admin',
   Member: 'admin-badge--member',
+  Claimed: 'admin-badge--claimed',
+  Unclaimed: 'admin-badge--unclaimed',
 }
 
 export default function StatusBadge({ variant }: StatusBadgeProps) {
