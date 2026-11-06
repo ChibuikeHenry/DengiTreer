@@ -2,11 +2,6 @@ import { Link } from 'react-router-dom'
 import AdminPageToolbar from '../components/AdminPageToolbar'
 import { IconChevronRight } from '../components/AdminNavIcons'
 import StatusBadge from '../components/StatusBadge'
-import {
-  chartMonths,
-  chartPoints,
-  operationsQueue,
-} from '../data/mockPlatformData'
 import { useRealPlatformOverview } from '../lib/adminDataService'
 
 function toneClass(tone: string) {
@@ -18,12 +13,15 @@ function queueDot(tone: string) {
 }
 
 export default function DashboardPage() {
-  const { stats, recentActivities } = useRealPlatformOverview()
+  const { stats, recentActivities, operationsQueue, growthTrend } = useRealPlatformOverview()
 
-  const max = Math.max(...chartPoints)
+  const chartPoints = growthTrend.points.length > 0 ? growthTrend.points : [0, 0, 0, 0, 0]
+  const chartMonths = growthTrend.months.length > 0 ? growthTrend.months : ['Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+
+  const max = Math.max(...chartPoints, 1)
   const width = 400
   const height = 160
-  const step = width / (chartPoints.length - 1)
+  const step = width / Math.max(chartPoints.length - 1, 1)
   const points = chartPoints
     .map((v, i) => {
       const x = i * step
@@ -81,13 +79,35 @@ export default function DashboardPage() {
           <ul className="dt-queue-list">
             {operationsQueue.map((item) => (
               <li key={item.label}>
-                <button type="button">
+                <Link
+                  to={item.link}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    width: '100%',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                  }}
+                >
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span className={queueDot(item.tone)} />
                     {item.label}
+                    <span
+                      style={{
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        padding: '0.15rem 0.45rem',
+                        borderRadius: '12px',
+                        background: '#eef6e8',
+                        color: '#163706',
+                      }}
+                    >
+                      {item.count}
+                    </span>
                   </span>
                   <IconChevronRight />
-                </button>
+                </Link>
               </li>
             ))}
           </ul>

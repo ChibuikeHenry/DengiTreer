@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot, query, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import type { InvitationRow, MemberRow, TreeRow } from '../data/mockAdminData'
 
@@ -81,7 +81,9 @@ export function useRealUsers() {
           const email = data.email || 'No email'
           const role = data.customClaims?.admin === true || data.role === 'admin' ? 'Admin' : 'Member'
           const status = data.status === 'pending' ? 'Pending' : 'Active'
-          const joined = formatDate(data.createdAt || data.updatedAt)
+          const ts = data.createdAt || data.updatedAt
+          const joined = formatDate(ts)
+          const createdAtMs = ts?.toMillis ? ts.toMillis() : ts ? new Date(ts).getTime() : Date.now()
 
           return {
             id: docSnap.id,
@@ -90,6 +92,7 @@ export function useRealUsers() {
             role,
             status,
             joined,
+            createdAtMs,
           }
         })
         setUsers(list)
@@ -130,6 +133,11 @@ export function useRealInvitations() {
                 ? 'Expired'
                 : 'Pending'
           const sent = formatDate(data.createdAt)
+          const createdAtMs = data.createdAt?.toMillis
+            ? data.createdAt.toMillis()
+            : data.createdAt
+              ? new Date(data.createdAt).getTime()
+              : Date.now()
 
           return {
             id: docSnap.id,
@@ -138,6 +146,7 @@ export function useRealInvitations() {
             role: role as 'Admin' | 'Member',
             status: status as 'Pending' | 'Sent' | 'Expired',
             sent,
+            createdAtMs,
           }
         })
         setInvitations(list)
@@ -331,6 +340,18 @@ export function useRealProfileClaims() {
   return { claims, loading }
 }
 
+export type RealQueueItem = {
+  label: string
+  count: number
+  tone: 'green' | 'yellow' | 'blue' | 'purple'
+  link: string
+}
+
+export type RealGrowthTrend = {
+  months: string[]
+  points: number[]
+}
+
 /** Hook for real dashboard overview statistics */
 export function useRealPlatformOverview() {
   const { users } = useRealUsers()
@@ -339,29 +360,169 @@ export function useRealPlatformOverview() {
   const { claims } = useRealProfileClaims()
 
   const [recentActivities, setRecentActivities] = useState<RealActivityItem[]>([])
+  const [operationsQueue, setOperationsQueue] = useState<RealQueueItem[]>([])
+  const [growthTrend, setGrowthTrend] = useState<RealGrowthTrend>({ months: [], points: [] })
 
   useEffect(() => {
-    const q = query(collection(db, 'invitations'), orderBy('createdAt', 'desc'), limit(5))
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const activities: RealActivityItem[] = snapshot.docs.map((docSnap) => {
-          const data = docSnap.data()
-          const isJoined = data.status === 'joined'
-          return {
-            id: docSnap.id,
+    let unsubConcessions: (() => void) | null = null
+    let unsubTreeBuilds: (() => void) | null = null
+    let unsubTreeCleanups: (() => void) | null = null
+
+    let concessions: Array<{ id: string; status?: string; createdAt?: any; createdAtMs?: number }> = []
+    let treeBuilds: Array<{ id: string; status?: string; createdAt?: any; createdAtMs?: number }> = []
+    let treeCleanups: Array<{ id: string; status?: string; createdAt?: any; createdAtMs?: number }> = []
+
+    function updateAggregates() {
+      const unclaimedCount = claims.filter((c) => c.status === 'Unclaimed').length
+      const pendingConcessions = concessions.filter((c) => c.status === 'pending').length
+      const pendingBuilds = treeBuilds.filter((b) => b.status === 'queued' || b.status === 'awaiting_payment').length
+      const pendingCleanups = treeCleanups.filter((c) => c.status === 'queued' || c.status === 'awaiting_payment').length
+
+      const queue: RealQueueItem[] = [
+        { label: 'Profile Claims Awaiting Review', count: unclaimedCount, tone: 'green', link: '/profile-claims' },
+        { label: 'Concession Requests', count: pendingConcessions, tone: 'yellow', link: '/dashboard' },
+        { label: 'Tree Build Requests', count: pendingBuilds, tone: 'blue', link: '/dashboard' },
+        { label: 'Tree Cleanup Requests', count: pendingCleanups, tone: 'purple', link: '/dashboard' },
+      ]
+      setOperationsQueue(queue)
+
+      const allActivities: { timestampMs: number; item: RealActivityItem }[] = []
+
+      invitations.forEach((inv) => {
+        const isJoined = inv.status !== 'Pending' && inv.status !== 'Expired'
+        const timestampMs = inv.createdAtMs || Date.now()
+        allActivities.push({
+          timestampMs,
+          item: {
+            id: `inv-${inv.id}`,
             event: isJoined ? 'Profile Claimed' : 'Invitation Sent',
             category: isJoined ? 'Profile Management' : 'Invitations',
             status: isJoined ? 'Completed' : 'Pending',
-            time: formatTimeAgo(data.createdAt),
-          }
+            time: formatTimeAgo(timestampMs),
+          },
         })
-        setRecentActivities(activities)
-      },
-      () => {},
-    )
-    return () => unsubscribe()
-  }, [])
+      })
+
+      users.forEach((u) => {
+        const timestampMs = u.createdAtMs || Date.now()
+        allActivities.push({
+          timestampMs,
+          item: {
+            id: `user-${u.id}`,
+            event: 'User Registered',
+            category: 'User Management',
+            status: 'Completed',
+            time: formatTimeAgo(timestampMs),
+          },
+        })
+      })
+
+      concessions.forEach((c) => {
+        const timestampMs = c.createdAtMs || Date.now()
+        allActivities.push({
+          timestampMs,
+          item: {
+            id: `conc-${c.id}`,
+            event: 'Concession Request',
+            category: 'Billing',
+            status: c.status === 'approved' ? 'Completed' : 'Pending',
+            time: formatTimeAgo(timestampMs),
+          },
+        })
+      })
+
+      treeBuilds.forEach((b) => {
+        const timestampMs = b.createdAtMs || Date.now()
+        allActivities.push({
+          timestampMs,
+          item: {
+            id: `build-${b.id}`,
+            event: 'Tree Build Request',
+            category: 'Services',
+            status: b.status === 'completed' ? 'Completed' : 'Pending',
+            time: formatTimeAgo(timestampMs),
+          },
+        })
+      })
+
+      treeCleanups.forEach((c) => {
+        const timestampMs = c.createdAtMs || Date.now()
+        allActivities.push({
+          timestampMs,
+          item: {
+            id: `cleanup-${c.id}`,
+            event: 'Tree Cleanup Request',
+            category: 'Services',
+            status: c.status === 'completed' ? 'Completed' : 'Pending',
+            time: formatTimeAgo(timestampMs),
+          },
+        })
+      })
+
+      allActivities.sort((a, b) => b.timestampMs - a.timestampMs)
+      setRecentActivities(allActivities.slice(0, 5).map((a) => a.item))
+
+      const now = new Date()
+      const months: string[] = []
+      const monthPoints: number[] = [0, 0, 0, 0, 0]
+
+      for (let i = 4; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        months.push(d.toLocaleDateString('en-US', { month: 'short' }))
+      }
+
+      const allTimestamps = [
+        ...users.map((u) => u.createdAtMs),
+        ...invitations.map((i) => i.createdAtMs),
+        ...concessions.map((c) => c.createdAtMs),
+        ...treeBuilds.map((b) => b.createdAtMs),
+        ...treeCleanups.map((c) => c.createdAtMs),
+      ].filter((ts): ts is number => typeof ts === 'number' && ts > 0)
+
+      for (let i = 0; i < 5; i++) {
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() - (4 - i) + 1, 0, 23, 59, 59).getTime()
+        const count = allTimestamps.filter((ts) => ts <= endOfMonth).length
+        monthPoints[i] = count
+      }
+
+      setGrowthTrend({ months, points: monthPoints })
+    }
+
+    unsubConcessions = onSnapshot(collection(db, 'concessionRequests'), (snap) => {
+      concessions = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        createdAtMs: d.data().createdAt?.toMillis ? d.data().createdAt.toMillis() : Date.now(),
+      }))
+      updateAggregates()
+    })
+
+    unsubTreeBuilds = onSnapshot(collection(db, 'treeBuildRequests'), (snap) => {
+      treeBuilds = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        createdAtMs: d.data().createdAt?.toMillis ? d.data().createdAt.toMillis() : Date.now(),
+      }))
+      updateAggregates()
+    })
+
+    unsubTreeCleanups = onSnapshot(collection(db, 'treeCleanupRequests'), (snap) => {
+      treeCleanups = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+        createdAtMs: d.data().createdAt?.toMillis ? d.data().createdAt.toMillis() : Date.now(),
+      }))
+      updateAggregates()
+    })
+
+    updateAggregates()
+
+    return () => {
+      if (unsubConcessions) unsubConcessions()
+      if (unsubTreeBuilds) unsubTreeBuilds()
+      if (unsubTreeCleanups) unsubTreeCleanups()
+    }
+  }, [users, invitations, claims])
 
   const totalUsers = users.length
   const activeTrees = trees.length
@@ -378,7 +539,7 @@ export function useRealPlatformOverview() {
     { label: 'Total Families', value: String(activeTrees), tone: 'sage' },
   ]
 
-  return { stats, recentActivities }
+  return { stats, recentActivities, operationsQueue, growthTrend }
 }
 
 /** Create new user directly in Firestore */

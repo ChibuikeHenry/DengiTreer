@@ -15,6 +15,7 @@ export type MemberRow = {
   role: 'Admin' | 'Member'
   status: 'Active' | 'Pending'
   joined: string
+  createdAtMs?: number
 }
 
 export type InvitationRow = {
@@ -24,6 +25,7 @@ export type InvitationRow = {
   role: 'Admin' | 'Member'
   status: 'Pending' | 'Sent' | 'Expired'
   sent: string
+  createdAtMs?: number
 }
 
 export type ActivityRow = {

@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import AdminPageToolbar from '../components/AdminPageToolbar'
 import AdminSideRail from '../components/AdminSideRail'
-import { IconUsers } from '../components/AdminNavIcons'
+import { IconUsers, IconTree } from '../components/AdminNavIcons'
 import StatusBadge from '../components/StatusBadge'
+import UserFamilyTreeModal from '../components/UserFamilyTreeModal'
 import { useRealUsers } from '../lib/adminDataService'
 import { useQuickFilterState } from '../lib/useQuickFilterState'
 
 export default function UserManagementPage() {
   const { users, loading, error } = useRealUsers()
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const { filterState, toggleStatus, toggleRole, matchesStatusAndRole } = useQuickFilterState()
 
   const filteredUsers = users.filter((u) => {
@@ -33,7 +35,7 @@ export default function UserManagementPage() {
                 <IconUsers size={18} />
                 All Users ({filteredUsers.length} of {users.length})
               </h2>
-              <p>Manage user accounts, roles and status.</p>
+              <p>Manage user accounts, roles and status. Click any user to view their family tree.</p>
             </div>
             <div style={{ minWidth: '220px' }}>
               <input
@@ -61,26 +63,53 @@ export default function UserManagementPage() {
                 <th scope="col">Role</th>
                 <th scope="col">Status</th>
                 <th scope="col">Joined On</th>
+                <th scope="col" style={{ textAlign: 'right' }}>Family Tree</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="dt-empty-cell" style={{ textAlign: 'center', padding: '2rem' }}>
+                  <td colSpan={6} className="dt-empty-cell" style={{ textAlign: 'center', padding: '2rem' }}>
                     Loading users...
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
-                  <td colSpan={5} className="dt-empty-cell" style={{ textAlign: 'center', color: '#c53030', padding: '2rem' }}>
+                  <td colSpan={6} className="dt-empty-cell" style={{ textAlign: 'center', color: '#c53030', padding: '2rem' }}>
                     {error}
                   </td>
                 </tr>
               ) : filteredUsers.length > 0 ? (
                 filteredUsers.map((row) => (
-                  <tr key={row.id}>
+                  <tr
+                    key={row.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setSelectedUserId(row.id)}
+                  >
                     <td>
-                      <strong>{row.name}</strong>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedUserId(row.id)
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          color: '#163706',
+                          fontWeight: 700,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          textDecorationColor: 'transparent',
+                          transition: 'text-decoration-color 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.textDecorationColor = '#163706')}
+                        onMouseLeave={(e) => (e.currentTarget.style.textDecorationColor = 'transparent')}
+                      >
+                        {row.name}
+                      </button>
                     </td>
                     <td>{row.email}</td>
                     <td>
@@ -90,11 +119,36 @@ export default function UserManagementPage() {
                       <StatusBadge variant={row.status} />
                     </td>
                     <td>{row.joined}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedUserId(row.id)
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          background: '#eef6e8',
+                          color: '#163706',
+                          border: '1px solid #c8e0b8',
+                          borderRadius: '6px',
+                          padding: '0.3rem 0.6rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <IconTree size={14} />
+                        View Tree
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
+                  <td colSpan={6} className="dt-empty-cell dt-empty-cell--tall" style={{ textAlign: 'center', padding: '2rem' }}>
                     No users matching current filters or search term.
                   </td>
                 </tr>
@@ -109,6 +163,13 @@ export default function UserManagementPage() {
           onToggleRole={toggleRole}
         />
       </div>
+
+      {selectedUserId ? (
+        <UserFamilyTreeModal
+          userId={selectedUserId}
+          onClose={() => setSelectedUserId(null)}
+        />
+      ) : null}
     </>
   )
 }
