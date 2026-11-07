@@ -20,6 +20,7 @@ import ProfilePage from './pages/ProfilePage'
 import SettingsPage from './pages/SettingsPage'
 import BuildMyTreePage from './pages/BuildMyTreePage'
 import CleanUpMyTreePage from './pages/CleanUpMyTreePage'
+import PublicSharedTreePage from './pages/PublicSharedTreePage'
 import {
   MergeExistsPage,
   MergeIncomingPage,
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/join/:token" element={<JoinInvitePage />} />
+          <Route path="/tree/:token" element={<PublicSharedTreePage />} />
           <Route
             path="/home"
             element={

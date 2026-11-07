@@ -3189,12 +3189,82 @@
   background: #fff;
 }
 
-.family-library-card > img {
+.family-library-card > img,
+.family-library-card > .family-library-thumb {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  object-fit: cover;
   background: #eef3ea;
+}
+
+.family-library-card > img,
+.family-library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.family-library-thumb {
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.family-library-thumb:focus-visible {
+  outline: 2px solid var(--dash-brand);
+  outline-offset: 2px;
+}
+
+.photo-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(16, 20, 14, 0.82);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.photo-lightbox-panel {
+  position: relative;
+  max-width: min(96vw, 1100px);
+  max-height: 92vh;
+  outline: none;
+}
+
+.photo-lightbox-img {
+  display: block;
+  max-width: 96vw;
+  max-height: 88vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #111;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.photo-lightbox-close {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.35rem;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: #fff;
+  color: #1a1f16;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.photo-lightbox-close:hover {
+  background: #f3f6f0;
 }
 
 .family-library-card-body {
@@ -3287,13 +3357,20 @@
   margin: 0;
 }
 
-.family-library-profile-figure img {
+.family-library-profile-figure img,
+.family-library-profile-figure .family-library-thumb {
   display: block;
   width: 100%;
   aspect-ratio: 1;
-  object-fit: cover;
   border-radius: 10px;
   background: #eef3ea;
+}
+
+.family-library-profile-figure .family-library-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
 }
 
 .family-library-profile-figure figcaption {

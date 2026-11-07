@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useOutletContext, useSearchParams } from 'react-router-dom'
+import PhotoLightbox from '../components/PhotoLightbox'
 import TagFamilyLibraryModal from '../components/TagFamilyLibraryModal'
 import { DashIcons } from '../components/DashboardLayout'
 import { useAuth } from '../context/AuthContext'
@@ -53,6 +54,7 @@ export default function PhotosPage() {
   const [tagPhoto, setTagPhoto] = useState<FamilyLibraryPhoto | null>(null)
   const [tagSaving, setTagSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [lightboxPhoto, setLightboxPhoto] = useState<FamilyLibraryPhoto | null>(null)
 
   useEffect(() => {
     if (!libraryOwnerUid) {
@@ -262,7 +264,14 @@ export default function PhotosPage() {
           <ul className="family-library-grid">
             {photos.map((photo) => (
               <li key={photo.id} className="family-library-card">
-                <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
+                <button
+                  type="button"
+                  className="family-library-thumb"
+                  onClick={() => setLightboxPhoto(photo)}
+                  aria-label={`Enlarge ${photo.caption || 'photo'}`}
+                >
+                  <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
+                </button>
                 <div className="family-library-card-body">
                   {photo.taggedMemberIds.length ? (
                     <ul className="family-library-tags">
@@ -312,6 +321,13 @@ export default function PhotosPage() {
           onSave={handleSaveTags}
         />
       ) : null}
+
+      <PhotoLightbox
+        open={lightboxPhoto !== null}
+        src={lightboxPhoto?.downloadUrl ?? null}
+        alt={lightboxPhoto?.caption || 'Photo'}
+        onClose={() => setLightboxPhoto(null)}
+      />
     </div>
   )
 }

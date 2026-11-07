@@ -1,6 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { DashIcons } from './DashboardLayout'
-import { treeShareViewUrl } from '../lib/treeShare'
+import {
+  ensureTreeShareLink,
+  getCallableErrorMessage,
+  treeSharePublicViewUrl,
+} from '../lib/treePublicShare'
 
 type ShareTreeModalProps = {
   open: boolean
@@ -14,13 +18,35 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
   const [link, setLink] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy link')
   const [sharing, setSharing] = useState(false)
+  const [loadingLink, setLoadingLink] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!open || !ownerUid) return
-    setLink(treeShareViewUrl(ownerUid))
+    let cancelled = false
     setCopyLabel('Copy link')
     setError('')
+    setLoadingLink(true)
+    setLink('')
+    void ensureTreeShareLink()
+      .then((result) => {
+        if (cancelled) return
+        // Prefer the current origin so shared links open on this host (prod/staging/local).
+        setLink(treeSharePublicViewUrl(result.token) || result.viewUrl)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(
+          getCallableErrorMessage(err) ||
+            'Could not create a public share link. Try again in a moment.',
+        )
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLink(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [open, ownerUid])
 
   useEffect(() => {
@@ -55,7 +81,7 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
     setSharing(true)
     setError('')
     const title = 'My family tree'
-    const text = `View my family tree on DengiTree:\n${link}`
+    const text = `View my family tree on DengiTree (no sign-in needed):\n${link}`
     try {
       if (typeof navigator.share === 'function') {
         await navigator.share({ title, text, url: link })
@@ -88,7 +114,7 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
             <h2 id={titleId}>Share your family tree</h2>
             <p>
               Share your family tree with relatives and friends, invite them to discover their
-              roots.
+              roots. Anyone with the link can view it without signing in.
             </p>
           </div>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
@@ -99,6 +125,7 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
         <div className="share-tree-body">
           <section className="modal-section">
             <h3>Tree Link</h3>
+            <p className="field-hint">Public view-only link · no account required</p>
             <div className="inv-link-row">
               <label className="inv-link-input-wrap">
                 <span className="inv-link-icon" aria-hidden="true">
@@ -117,9 +144,19 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
                     />
                   </svg>
                 </span>
-                <input className="inv-link-input" readOnly value={link} onFocus={(e) => e.target.select()} />
+                <input
+                  className="inv-link-input"
+                  readOnly
+                  value={loadingLink ? 'Creating public link…' : link}
+                  onFocus={(e) => e.target.select()}
+                />
               </label>
-              <button type="button" className="inv-copy-btn" onClick={() => void copyLink()}>
+              <button
+                type="button"
+                className="inv-copy-btn"
+                disabled={!link || loadingLink}
+                onClick={() => void copyLink()}
+              >
                 {copyLabel}
               </button>
             </div>
@@ -135,7 +172,7 @@ export default function ShareTreeModal({ open, onClose, ownerUid }: ShareTreeMod
             <button
               type="button"
               className="share-tree-share-btn"
-              disabled={sharing || !link}
+              disabled={sharing || loadingLink || !link}
               onClick={() => void (canShareNative ? handleShare() : copyLink())}
             >
               {sharing ? 'Opening share…' : 'Share link'}

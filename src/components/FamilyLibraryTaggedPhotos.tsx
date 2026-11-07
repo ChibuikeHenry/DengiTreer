@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import PhotoLightbox from './PhotoLightbox'
 import {
   untagSelfFromFamilyLibraryPhoto,
   subscribePhotosTaggedMember,
@@ -49,6 +50,7 @@ export default function FamilyLibraryTaggedPhotos({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [untaggingId, setUntaggingId] = useState<string | null>(null)
+  const [lightboxPhoto, setLightboxPhoto] = useState<FamilyLibraryPhoto | null>(null)
 
   useEffect(() => {
     if (!ownerUid || !memberId) {
@@ -130,7 +132,14 @@ export default function FamilyLibraryTaggedPhotos({
           {photos.map((photo) => (
             <li key={photo.id}>
               <figure className="family-library-profile-figure">
-                <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
+                <button
+                  type="button"
+                  className="family-library-thumb"
+                  onClick={() => setLightboxPhoto(photo)}
+                  aria-label={`Enlarge ${photo.caption || 'photo'}`}
+                >
+                  <img src={photo.downloadUrl} alt={photo.caption || 'Photo'} loading="lazy" />
+                </button>
                 {photo.caption ? <figcaption>{photo.caption}</figcaption> : null}
                 {allowSelfUntag ? (
                   <button
@@ -147,6 +156,13 @@ export default function FamilyLibraryTaggedPhotos({
           ))}
         </ul>
       )}
+
+      <PhotoLightbox
+        open={lightboxPhoto !== null}
+        src={lightboxPhoto?.downloadUrl ?? null}
+        alt={lightboxPhoto?.caption || 'Photo'}
+        onClose={() => setLightboxPhoto(null)}
+      />
     </section>
   )
 }

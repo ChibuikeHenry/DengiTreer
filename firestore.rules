@@ -173,5 +173,11 @@ service cloud.firestore {
       allow read: if isAuthed() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
+
+    // Public view-only family tree snapshots (created by ensureTreeShareLink).
+    match /treePublicShares/{token} {
+      allow read: if resource.data.enabled == true;
+      allow write: if false;
+    }
   }
 }

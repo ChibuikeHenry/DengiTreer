@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.verifyTreeBuildPayment = exports.initializeTreeBuildPayment = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.untagSelfFromFamilyLibraryPhoto = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.ensureTreeShareLink = exports.disableTreeShareLink = exports.verifyTreeBuildPayment = exports.initializeTreeBuildPayment = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.untagSelfFromFamilyLibraryPhoto = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -983,6 +983,9 @@ Object.defineProperty(exports, "verifyPremiumPayment", { enumerable: true, get: 
 var treeBuildService_1 = require("./treeBuildService");
 Object.defineProperty(exports, "initializeTreeBuildPayment", { enumerable: true, get: function () { return treeBuildService_1.initializeTreeBuildPayment; } });
 Object.defineProperty(exports, "verifyTreeBuildPayment", { enumerable: true, get: function () { return treeBuildService_1.verifyTreeBuildPayment; } });
+var treePublicShare_1 = require("./treePublicShare");
+Object.defineProperty(exports, "disableTreeShareLink", { enumerable: true, get: function () { return treePublicShare_1.disableTreeShareLink; } });
+Object.defineProperty(exports, "ensureTreeShareLink", { enumerable: true, get: function () { return treePublicShare_1.ensureTreeShareLink; } });
 var treeMerge_2 = require("./treeMerge");
 Object.defineProperty(exports, "acceptTreeMerge", { enumerable: true, get: function () { return treeMerge_2.acceptTreeMerge; } });
 Object.defineProperty(exports, "checkInviteeEmailForMerge", { enumerable: true, get: function () { return treeMerge_2.checkInviteeEmailForMerge; } });

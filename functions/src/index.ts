@@ -1263,6 +1263,7 @@ export {
   initializeTreeBuildPayment,
   verifyTreeBuildPayment,
 } from './treeBuildService'
+export { disableTreeShareLink, ensureTreeShareLink } from './treePublicShare'
 export {
   acceptTreeMerge,
   checkInviteeEmailForMerge,
