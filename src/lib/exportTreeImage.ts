@@ -25,30 +25,48 @@ function loadImageFromUrl(src: string, crossOrigin: boolean): Promise<HTMLImageE
   return new Promise((resolve) => {
     const img = new Image()
     if (crossOrigin) img.crossOrigin = 'anonymous'
+    img.referrerPolicy = 'no-referrer'
     img.onload = () => resolve(img.naturalWidth > 0 ? img : null)
     img.onerror = () => resolve(null)
     img.src = src
   })
 }
 
+async function blobToImage(blob: Blob): Promise<HTMLImageElement | null> {
+  const objectUrl = URL.createObjectURL(blob)
+  const img = await loadImageFromUrl(objectUrl, false)
+  // Decoded bitmap stays on the Image; revoke after export finishes drawing.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+  return img
+}
+
 async function loadImageViaFetch(src: string): Promise<HTMLImageElement | null> {
   try {
-    const res = await fetch(src, { mode: 'cors', credentials: 'omit', cache: 'force-cache' })
+    const res = await fetch(src, {
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-cache',
+      referrerPolicy: 'no-referrer',
+    })
     if (!res.ok) return null
-    const blob = await res.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    try {
-      return await loadImageFromUrl(objectUrl, false)
-    } finally {
-      URL.revokeObjectURL(objectUrl)
-    }
+    return blobToImage(await res.blob())
   } catch {
     return null
   }
 }
 
+function withCacheBust(url: string): string {
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set('dengitree_export', '1')
+    return parsed.toString()
+  } catch {
+    return url.includes('?') ? `${url}&dengitree_export=1` : `${url}?dengitree_export=1`
+  }
+}
+
 /** CORS-safe photo only — never draw a non-CORS image (taints canvas / blank PNG). */
-async function loadPhotoSafe(src: string | null): Promise<HTMLImageElement | null> {
+async function loadPhotoSafe(src: string | null | undefined): Promise<HTMLImageElement | null> {
   const url = (src || '').trim()
   if (!url) return null
   if (
@@ -58,9 +76,15 @@ async function loadPhotoSafe(src: string | null): Promise<HTMLImageElement | nul
   ) {
     return loadImageFromUrl(url, false)
   }
+
   const fetched = await loadImageViaFetch(url)
   if (fetched) return fetched
-  return loadImageFromUrl(url, true)
+
+  const busted = await loadImageViaFetch(withCacheBust(url))
+  if (busted) return busted
+
+  // Last resort: anonymous Image() load (needs Storage / host CORS).
+  return loadImageFromUrl(withCacheBust(url), true)
 }
 
 function fit(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
@@ -126,7 +150,12 @@ type PersonDraw = {
   mutedColor: string
 }
 
-function readPerson(nodeEl: HTMLElement, cx: number, top: number): PersonDraw | null {
+function readPerson(
+  nodeEl: HTMLElement,
+  cx: number,
+  top: number,
+  photoOverride?: string | null,
+): PersonDraw | null {
   const card = nodeEl.querySelector<HTMLElement>('.tree-person-card')
   const avatar = nodeEl.querySelector<HTMLElement>('.tree-person-avatar')
   if (!card || !avatar) return null
@@ -142,11 +171,12 @@ function readPerson(nodeEl: HTMLElement, cx: number, top: number): PersonDraw | 
   const badgeText = avatar.classList.contains('pedigree-you-badge')
     ? avatar.textContent?.trim()
     : null
+  const domPhoto = img?.currentSrc || img?.src || null
   return {
     cx,
     top,
     tone: toneFromAvatar(avatar),
-    photo: img?.currentSrc || img?.src || null,
+    photo: (photoOverride && photoOverride.trim()) || domPhoto,
     initials: initialsEl?.textContent?.trim() || badgeText || null,
     name: nameEl?.textContent?.trim() ?? '',
     role: roleEl?.textContent?.trim() ?? '',
@@ -293,11 +323,13 @@ function paintTree(
  * Renders the family tree (people + connecting lines) to a PNG.
  * `layout` must be built with `allowAdds: false` so lines never end on empty
  * "Add …" placeholders that are omitted from the download.
+ * Pass `photoUrls` (member id / `self` → URL) so profile photos are included.
  */
 export async function renderTreePng(
   canvasEl: HTMLElement,
   layout: PedigreeLayout,
   caption?: string,
+  photoUrls?: Record<string, string | null | undefined>,
 ): Promise<Blob> {
   if ('fonts' in document) await document.fonts.ready
 
@@ -318,7 +350,8 @@ export async function renderTreePng(
     const cx = placed?.cx ?? (Number.isFinite(left) ? left + PED.nodeW / 2 : NaN)
     const nodeTop = placed?.top ?? (Number.isFinite(top) ? top : NaN)
     if (!Number.isFinite(cx) || !Number.isFinite(nodeTop)) return
-    const person = readPerson(el, cx, nodeTop)
+    const override = id && photoUrls ? photoUrls[id] : null
+    const person = readPerson(el, cx, nodeTop, override)
     if (person) people.push(person)
   })
 
@@ -358,29 +391,34 @@ export async function renderTreePng(
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Canvas is not supported in this browser.')
 
+  // Load each photo independently — skip failures instead of dropping every face.
   const photos = await Promise.all(people.map((p) => loadPhotoSafe(p.photo)))
 
-  const draw = (photoList: (HTMLImageElement | null)[]) =>
-    paintTree(
-      ctx,
-      people,
-      photoList,
-      segs,
-      minX,
-      minY,
-      maxX,
-      maxY,
-      cssWidth,
-      cssHeight,
-      caption,
-      captionH,
-    )
-
-  draw(photos)
+  paintTree(
+    ctx,
+    people,
+    photos,
+    segs,
+    minX,
+    minY,
+    maxX,
+    maxY,
+    cssWidth,
+    cssHeight,
+    caption,
+    captionH,
+  )
 
   try {
     return await canvasToPngBlob(canvas)
   } catch {
+    // If the canvas was tainted, redraw using only blob-backed (safe) photos.
+    const safePhotos = await Promise.all(
+      people.map(async (p, i) => {
+        if (photos[i]?.src?.startsWith('blob:')) return photos[i]
+        return loadImageViaFetch((p.photo || '').trim())
+      }),
+    )
     const clean = document.createElement('canvas')
     clean.width = canvas.width
     clean.height = canvas.height
@@ -389,7 +427,7 @@ export async function renderTreePng(
     paintTree(
       cleanCtx,
       people,
-      people.map(() => null),
+      safePhotos,
       segs,
       minX,
       minY,

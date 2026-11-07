@@ -234,7 +234,11 @@ export default function PedigreeTreeDiagram({
               labelHeights,
             })
           : layout
-        return renderTreePng(canvasRef.current, exportLayout, caption)
+        const photoUrls: Record<string, string | null> = { self: selfPhotoURL }
+        for (const member of members) {
+          if (member.photoURL) photoUrls[member.id] = member.photoURL
+        }
+        return renderTreePng(canvasRef.current, exportLayout, caption, photoUrls)
       },
     }),
     [
@@ -245,6 +249,7 @@ export default function PedigreeTreeDiagram({
       centerFatherMemberId,
       centerMotherMemberId,
       labelHeights,
+      selfPhotoURL,
     ],
   )
 

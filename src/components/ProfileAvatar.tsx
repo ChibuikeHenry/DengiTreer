@@ -57,7 +57,16 @@ export default function ProfileAvatar({
       aria-hidden={photoURL ? undefined : true}
     >
       {photoURL ? (
-        <img src={photoURL} alt={name ? `${name} profile` : ''} />
+        <img
+          src={photoURL}
+          alt={name ? `${name} profile` : ''}
+          crossOrigin={
+            photoURL.startsWith('http://') || photoURL.startsWith('https://')
+              ? 'anonymous'
+              : undefined
+          }
+          referrerPolicy="no-referrer"
+        />
       ) : size === 'tree' ? (
         <svg
           className="profile-avatar-svg"
