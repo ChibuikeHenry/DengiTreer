@@ -793,19 +793,7 @@ function layoutPass(
   }
   slots.forEach((slot, i) => pushSelfRowNode(slot, slotX[i]))
 
-  // you – spouse(s)
   const spouseXs = spouses.map((s) => memberX.get(s.id) as number)
-  const rightSpouseXs = rightSpouses.map((s) => memberX.get(s.id) as number)
-  if (leftSpouse) hJoin(memberX.get(leftSpouse.id) as number, selfX, selfTop)
-  let prevX = selfX
-  for (const x of rightSpouseXs) {
-    hJoin(prevX, x, selfTop)
-    prevX = x
-  }
-  if (allowAdds) {
-    // dashed link to the add circle at the right-hand end of the row
-    hJoin(prevX, slotX[slots.length - 1], selfTop)
-  }
 
   /** Puts a sibling on the self row (outside the core slots) and remembers where. */
   const placeSibling = (member: TreeMember, x: number) => {
@@ -888,16 +876,12 @@ function layoutPass(
     )
 
     // parents → their children: drop from the couple, bus above kids, verticals to each
-    // (no sibling-to-sibling side lines — those are only for couples)
     const busToSelf = selfTop - busOffset
     const dropOrder = [selfFamily, ...families.filter((f) => !f.isSelf && f.kids.length)]
     for (const family of dropOrder) {
       const kidXs = family.kids.map((s) => memberX.get(s.id) as number)
       if (family.isSelf) kidXs.push(selfX)
       const targets: Target[] = kidXs.map((x) => ({ x, y: selfTop }))
-      if (family.isSelf && addSiblingX != null) {
-        targets.push({ x: addSiblingX, y: selfTop, dashed: true })
-      }
       const xs = family.parents.map((p) => parentX.get(p.id) as number)
       if (xs.length === 0) {
         // no parents on the tree yet: dashed line up to the "Add Parent" circle
@@ -920,21 +904,28 @@ function layoutPass(
     placeAddSibling(
       siblings.length ? Math.min(...siblings.map((s) => memberX.get(s.id) as number)) : null,
     )
-    // no parents row: siblings still connect from above (bus + verticals), never side-to-side
+    // no parents row: siblings still connect from above (bus + verticals)
     const kidXs = [
       ...selfFamily.kids.map((s) => memberX.get(s.id) as number),
       selfX,
-      ...(addSiblingX != null ? [addSiblingX] : []),
     ]
-    if (kidXs.length > 1 || addSiblingX != null) {
+    if (kidXs.length > 1) {
       const busY = selfTop - Math.min(busOffset, 36)
       const minX = Math.min(...kidXs)
       const maxX = Math.max(...kidXs)
       if (maxX > minX) hLine(minX, maxX, busY)
       for (const x of kidXs) {
-        vLine(x, busY, selfTop, addSiblingX != null && x === addSiblingX)
+        vLine(x, busY, selfTop)
       }
     }
+  }
+
+  // Connect all adjacent nodes on the self row (siblings, spouses, self, add buttons) at avatar level
+  const selfRowNodes = nodes
+    .filter((n) => n.y === selfTop)
+    .sort((a, b) => a.x - b.x)
+  for (let i = 0; i < selfRowNodes.length - 1; i += 1) {
+    hJoin(selfRowNodes[i].x, selfRowNodes[i + 1].x, selfTop)
   }
 
   /* ----------------------------------------------------------------- grandparents */

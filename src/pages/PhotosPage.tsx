@@ -313,7 +313,8 @@ export default function PhotosPage() {
         <TagFamilyLibraryModal
           open={tagPhoto !== null}
           onClose={() => setTagPhoto(null)}
-          photoLabel="this photo"
+          photoUrl={tagPhoto?.downloadUrl ?? null}
+          photoAlt={tagPhoto?.caption || 'Photo'}
           members={members}
           selfName={selfName}
           initialTaggedIds={tagPhoto?.taggedMemberIds ?? []}

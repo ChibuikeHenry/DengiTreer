@@ -1,0 +1,110 @@
+.public-tree-page {
+  min-height: 100vh;
+  background: #eef5e8;
+  color: #1a2416;
+}
+
+.public-tree-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  padding: 0.85rem clamp(1rem, 3vw, 2rem);
+  background: #fff;
+  border-bottom: 1px solid #d7e3cf;
+}
+
+.public-tree-brand {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #34611d;
+  text-decoration: none;
+}
+
+.public-tree-bar-note {
+  margin: 0;
+  flex: 1 1 auto;
+  font-size: 0.9rem;
+  color: #5a6552;
+}
+
+.public-tree-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.public-tree-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid #34611d;
+  color: #34611d;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.public-tree-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  background: #34611d;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.public-tree-main {
+  padding: clamp(1rem, 3vw, 1.75rem) clamp(0.75rem, 2.5vw, 1.5rem) 2.5rem;
+}
+
+.public-tree-head {
+  max-width: 1100px;
+  margin: 0 auto 1rem;
+}
+
+.public-tree-head h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
+  color: #34611d;
+}
+
+.public-tree-head p {
+  margin: 0;
+  color: #5a6552;
+  font-size: 0.95rem;
+}
+
+.public-tree-canvas {
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 420px;
+  background: #f4f8f0;
+  border: 1px solid #d5e3cb;
+  border-radius: 18px;
+  overflow: auto;
+}
+
+.public-tree-status,
+.public-tree-empty {
+  max-width: 32rem;
+  margin: 4rem auto;
+  text-align: center;
+}
+
+.public-tree-empty h1 {
+  margin: 0 0 0.5rem;
+  color: #34611d;
+}
+
+.public-tree-empty p {
+  margin: 0 0 1.25rem;
+  color: #5a6552;
+}
