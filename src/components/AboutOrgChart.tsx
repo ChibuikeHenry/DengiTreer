@@ -13,7 +13,7 @@ export default function AboutOrgChart() {
       >
         {/* Connecting lines */}
         <path
-          d="M200 80v40M60 120h280M60 120v40M200 120v40M340 120v40"
+          d="M200 90v40M60 130h280M60 130v30M200 130v30M340 130v30"
           stroke="#477334"
           strokeWidth="2.5"
           strokeLinecap="round"
@@ -21,10 +21,10 @@ export default function AboutOrgChart() {
         />
 
         {/* CEO Node */}
-        <circle cx="200" cy="42" r="38" fill="#1f4214" />
+        <circle cx="200" cy="48" r="42" fill="#1f4214" />
         <text
           x="200"
-          y="48"
+          y="54"
           textAnchor="middle"
           fill="#ffffff"
           fontSize="15"

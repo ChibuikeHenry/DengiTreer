@@ -57,6 +57,13 @@ const team = [
   },
 ] as const
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (!parts[0]) return '?'
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 function PillarIcon({ type }: { type: (typeof pillars)[number]['icon'] }) {
   switch (type) {
     case 'connect':
@@ -175,7 +182,9 @@ export default function AboutUsPage() {
                   <li key={member.name}>
                     <article className={`about-team-card about-team-card--${member.theme}`}>
                       <div className="about-team-media">
-                        <div className="about-team-avatar" aria-hidden="true" />
+                        <div className="about-team-avatar" aria-label={member.name}>
+                          <span>{getInitials(member.name)}</span>
+                        </div>
                         <span className={`about-role-pill about-role-pill--${member.theme}`}>
                           {member.role}
                         </span>
