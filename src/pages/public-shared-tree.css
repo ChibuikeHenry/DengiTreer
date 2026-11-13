@@ -1,99 +1,252 @@
 .public-tree-page {
   min-height: 100vh;
-  background: #eef5e8;
+  background: #e8ede3;
   color: #1a2416;
 }
 
-.public-tree-bar {
+.public-tree-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1.25rem;
-  padding: 0.85rem clamp(1rem, 3vw, 2rem);
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  padding: 0.95rem clamp(1rem, 3vw, 2rem);
   background: #fff;
   border-bottom: 1px solid #d7e3cf;
 }
 
 .public-tree-brand {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: #34611d;
-  text-decoration: none;
-}
-
-.public-tree-bar-note {
-  margin: 0;
-  flex: 1 1 auto;
-  font-size: 0.9rem;
-  color: #5a6552;
-}
-
-.public-tree-bar-actions {
   display: flex;
-  align-items: center;
-  gap: 0.65rem;
+  flex-direction: column;
+  gap: 0.1rem;
+  text-decoration: none;
+  color: inherit;
 }
 
-.public-tree-link-btn {
+.public-tree-brand-name {
+  font-weight: 800;
+  font-size: 1.45rem;
+  letter-spacing: -0.03em;
+  color: #34611d;
+  line-height: 1.1;
+}
+
+.public-tree-brand-tag {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #34611d;
+  opacity: 0.85;
+}
+
+.public-tree-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  gap: 1.15rem;
+  align-items: start;
+  padding: clamp(1rem, 2.5vw, 1.5rem) clamp(0.85rem, 2.5vw, 1.5rem) 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.public-tree-stage {
+  position: relative;
+  background: #f3f7ef;
+  border: 1px solid #d5e3cb;
+  border-radius: 20px;
+  padding: 1.15rem 1.15rem 1.35rem;
+  min-height: 34rem;
+  overflow: hidden;
+}
+
+.public-tree-stage-head {
+  margin-bottom: 0.75rem;
+}
+
+.public-tree-badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.45rem 0.95rem;
+  margin-bottom: 0.55rem;
+  padding: 0.28rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid #34611d;
+  background: #e4efda;
   color: #34611d;
-  text-decoration: none;
+  font-size: 0.75rem;
   font-weight: 700;
-  font-size: 0.88rem;
 }
 
-.public-tree-cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.45rem 0.95rem;
-  border-radius: 999px;
-  background: #34611d;
-  color: #fff;
-  text-decoration: none;
-  font-weight: 700;
-  font-size: 0.88rem;
+.public-tree-stage-head h1 {
+  margin: 0 0 0.3rem;
+  font-size: clamp(1.45rem, 2.8vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #1a2416;
 }
 
-.public-tree-main {
-  padding: clamp(1rem, 3vw, 1.75rem) clamp(0.75rem, 2.5vw, 1.5rem) 2.5rem;
-}
-
-.public-tree-head {
-  max-width: 1100px;
-  margin: 0 auto 1rem;
-}
-
-.public-tree-head h1 {
-  margin: 0 0 0.35rem;
-  font-size: clamp(1.35rem, 3vw, 1.85rem);
-  color: #34611d;
-}
-
-.public-tree-head p {
+.public-tree-stage-head p {
   margin: 0;
   color: #5a6552;
   font-size: 0.95rem;
 }
 
 .public-tree-canvas {
-  max-width: 1200px;
-  margin: 0 auto;
-  min-height: 420px;
-  background: #f4f8f0;
-  border: 1px solid #d5e3cb;
-  border-radius: 18px;
+  min-height: 26rem;
   overflow: auto;
+  padding: 0.35rem 0 5.5rem;
+}
+
+.public-tree-overview {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  width: min(100% - 2rem, 15.5rem);
+  background: #fff;
+  border: 1px solid #d7e3cf;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 10px 28px rgba(26, 31, 22, 0.08);
+}
+
+.public-tree-overview h2 {
+  margin: 0 0 0.7rem;
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: #1a2416;
+}
+
+.public-tree-overview ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.public-tree-overview li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.public-tree-stat-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.public-tree-overview strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1a2416;
+  line-height: 1.15;
+}
+
+.public-tree-overview small {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7364;
+}
+
+.public-tree-welcome {
+  background: #fff;
+  border-radius: 18px;
+  border: 1px solid #d7e3cf;
+  padding: 1.35rem 1.25rem 1.25rem;
+  box-shadow: 0 12px 32px rgba(26, 31, 22, 0.06);
+}
+
+.public-tree-welcome header {
+  margin-bottom: 1.15rem;
+}
+
+.public-tree-welcome h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #1a2416;
+}
+
+.public-tree-welcome p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: #6b7364;
+}
+
+.public-tree-welcome p strong {
+  color: #34611d;
+  font-weight: 700;
+}
+
+.public-tree-welcome-actions {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.public-tree-primary-btn,
+.public-tree-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.public-tree-primary-btn {
+  border: none;
+  background: #34611d;
+  color: #fff;
+}
+
+.public-tree-primary-btn:hover {
+  filter: brightness(1.05);
+}
+
+.public-tree-secondary-btn {
+  border: 1.5px solid #d4d9cf;
+  background: #fff;
+  color: #1a1f16;
+}
+
+.public-tree-secondary-btn:hover {
+  background: #f7f9f4;
+}
+
+.public-tree-google-btn {
+  width: 100%;
+}
+
+.public-tree-welcome-foot {
+  margin: 1rem 0 0 !important;
+  text-align: center;
+  font-size: 0.85rem !important;
+}
+
+.public-tree-welcome-foot a {
+  color: #34611d;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.public-tree-auth-error {
+  margin: 0 0 0.75rem !important;
+  color: #8a3b32 !important;
+  font-size: 0.85rem !important;
 }
 
 .public-tree-status,
 .public-tree-empty {
+  grid-column: 1 / -1;
   max-width: 32rem;
   margin: 4rem auto;
   text-align: center;
@@ -107,4 +260,30 @@
 .public-tree-empty p {
   margin: 0 0 1.25rem;
   color: #5a6552;
+}
+
+.public-tree-empty .public-tree-primary-btn {
+  width: auto;
+  min-width: 11rem;
+  margin: 0 auto;
+}
+
+@media (max-width: 960px) {
+  .public-tree-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .public-tree-welcome {
+    order: -1;
+  }
+
+  .public-tree-overview {
+    position: static;
+    width: auto;
+    margin-top: 0.85rem;
+  }
+
+  .public-tree-canvas {
+    padding-bottom: 0.5rem;
+  }
 }
