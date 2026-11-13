@@ -801,8 +801,8 @@ function layoutPass(
     pushSelfRowNode({ kind: 'member', member }, x)
   }
   /**
-   * "Add Sibling" sits at the left-hand end. It is wired into the parent→children bracket
-   * (not a side line at avatar height — those are only for couples).
+   * "Add Sibling" sits at the left-hand end. Unlike real siblings (who branch from the
+   * parents), it uses a short side line at avatar height to the nearest person on its right.
    */
   let addSiblingX: number | null = null
   const placeAddSibling = (leftmostSiblingX: number | null) => {
@@ -876,6 +876,7 @@ function layoutPass(
     )
 
     // parents → their children: drop from the couple, bus above kids, verticals to each
+    // (real siblings only — Add Sibling uses a side line below)
     const busToSelf = selfTop - busOffset
     const dropOrder = [selfFamily, ...families.filter((f) => !f.isSelf && f.kids.length)]
     for (const family of dropOrder) {
@@ -920,12 +921,36 @@ function layoutPass(
     }
   }
 
-  // Connect all adjacent nodes on the self row (siblings, spouses, self, add buttons) at avatar level
-  const selfRowNodes = nodes
+  // Side lines at avatar height: couples (You↔spouse / Add Spouse) and Add Sibling only.
+  // Real siblings stay on the parent→bus→vertical branch above — no sibling-to-sibling bar.
+  const spouseIds = new Set(spouses.map((s) => s.id))
+  const selfRowOrdered = nodes
     .filter((n) => n.y === selfTop)
     .sort((a, b) => a.x - b.x)
-  for (let i = 0; i < selfRowNodes.length - 1; i += 1) {
-    hJoin(selfRowNodes[i].x, selfRowNodes[i + 1].x, selfTop)
+  const isCoupleJoin = (a: PedNode, b: PedNode) => {
+    const aSpouse = a.kind === 'member' && spouseIds.has(a.member.id)
+    const bSpouse = b.kind === 'member' && spouseIds.has(b.member.id)
+    const aSelf = a.kind === 'self'
+    const bSelf = b.kind === 'self'
+    const bAddSpouse = b.kind === 'add' && b.modal === 'spouse'
+    return (
+      (aSelf && bSpouse) ||
+      (aSpouse && bSelf) ||
+      (aSpouse && bAddSpouse) ||
+      (aSelf && bAddSpouse)
+    )
+  }
+  for (let i = 0; i < selfRowOrdered.length - 1; i += 1) {
+    const a = selfRowOrdered[i]
+    const b = selfRowOrdered[i + 1]
+    if (isCoupleJoin(a, b)) hJoin(a.x, b.x, selfTop)
+  }
+  // Add Sibling ↔ nearest person on its right (side line stub only for this control)
+  if (addSiblingX != null) {
+    const neighbor = selfRowOrdered.find(
+      (n) => n.x > addSiblingX! && !(n.kind === 'add' && n.modal === 'sibling'),
+    )
+    if (neighbor) hJoin(addSiblingX, neighbor.x, selfTop)
   }
 
   /* ----------------------------------------------------------------- grandparents */
