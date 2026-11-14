@@ -3994,6 +3994,11 @@
   color: #a65a20;
 }
 
+.inv-badge-declined {
+  background: #fdecec;
+  color: #b42318;
+}
+
 .inv-badge-joined {
   background: #dcecd3;
   color: var(--dash-brand);

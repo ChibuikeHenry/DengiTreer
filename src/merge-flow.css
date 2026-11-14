@@ -267,6 +267,128 @@
   color: var(--dash-ink);
 }
 
+.mf-request-role {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.82rem;
+  color: var(--dash-muted);
+}
+
+.mf-request-conflict-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #8a5a12;
+}
+
+.mf-info-banner-warn {
+  background: #fff8e8;
+  border: 1px solid #f0d9a8;
+}
+
+.mf-conflicts {
+  text-align: left;
+  margin-bottom: 1.25rem;
+}
+
+.mf-conflict-card {
+  border: 1px solid var(--dash-border);
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+  background: #fff;
+}
+
+.mf-conflict-card h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  color: var(--dash-ink);
+}
+
+.mf-conflict-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.mf-conflict-side {
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.mf-conflict-sender {
+  background: #eef8e8;
+}
+
+.mf-conflict-yours {
+  background: #f8f0f4;
+}
+
+.mf-conflict-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dash-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mf-conflict-side strong {
+  font-size: 0.95rem;
+  color: var(--dash-ink);
+}
+
+.mf-conflict-meta {
+  font-size: 0.78rem;
+  color: var(--dash-muted);
+}
+
+.mf-conflict-vs {
+  align-self: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--dash-muted);
+}
+
+.mf-decline-panel {
+  max-width: 28rem;
+  text-align: left;
+}
+
+.mf-decline-panel h2 {
+  margin: 0 0 0.4rem;
+}
+
+.mf-decline-panel > p {
+  margin: 0 0 1rem;
+  color: var(--dash-muted);
+  font-size: 0.9rem;
+}
+
+.mf-btn-decline-confirm {
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1.15rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: #b42318;
+  color: #fff;
+}
+
+@media (max-width: 560px) {
+  .mf-conflict-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mf-conflict-vs {
+    justify-self: center;
+  }
+}
+
 .mf-incoming-actions {
   display: flex;
   gap: 0.75rem;

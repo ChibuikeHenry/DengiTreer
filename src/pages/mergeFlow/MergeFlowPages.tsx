@@ -15,8 +15,148 @@ import {
 } from '../../lib/mergeFlowDraft'
 import { sendFamilyMemberInvite, getCallableErrorMessage } from '../../lib/invitations'
 import { acceptTreeMerge, declineTreeMerge } from '../../lib/treeMerge'
+import type { MergeConflict } from '../../lib/mergeFlowApi'
 import { setSelfOnTree } from '../../lib/treeStorage'
 import '../../merge-flow.css'
+
+function ConflictCompare({
+  conflicts,
+  senderName,
+}: {
+  conflicts: MergeConflict[]
+  senderName: string
+}) {
+  if (!conflicts.length) {
+    return (
+      <div className="mf-info-banner">
+        <strong>No overlapping conflicts</strong>
+        <p>
+          Your trees do not list different names for the same parents. Accepting still joins you
+          into {senderName.split(/\s+/)[0]}&apos;s family.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mf-conflicts">
+      <div className="mf-info-banner mf-info-banner-warn">
+        <strong>Conflict resolution</strong>
+        <p>
+          You both have people in these roles with different details. Accepting uses{' '}
+          <strong>{senderName.split(/\s+/)[0]}&apos;s</strong> family information for these
+          relatives. Declining ends the invite completely — add a comment explaining why.
+        </p>
+      </div>
+      {conflicts.map((conflict) => (
+        <section key={conflict.key} className="mf-conflict-card">
+          <h3>{conflict.label}</h3>
+          <div className="mf-conflict-grid">
+            <div className="mf-conflict-side mf-conflict-sender">
+              <span className="mf-conflict-label">Their {conflict.label.toLowerCase()}</span>
+              <strong>{conflict.sender.displayName}</strong>
+              {conflict.sender.dateOfBirth ? (
+                <span className="mf-conflict-meta">Born {conflict.sender.dateOfBirth}</span>
+              ) : null}
+            </div>
+            <div className="mf-conflict-vs" aria-hidden="true">
+              vs
+            </div>
+            <div className="mf-conflict-side mf-conflict-yours">
+              <span className="mf-conflict-label">Your {conflict.label.toLowerCase()}</span>
+              <strong>{conflict.yours.displayName}</strong>
+              {conflict.yours.dateOfBirth ? (
+                <span className="mf-conflict-meta">Born {conflict.yours.dateOfBirth}</span>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function DeclineMergeModal({
+  open,
+  inviterName,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean
+  inviterName: string
+  busy: boolean
+  onClose: () => void
+  onConfirm: (comment: string) => void
+}) {
+  const [comment, setComment] = useState('')
+  const [localError, setLocalError] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      setComment('')
+      setLocalError('')
+    }
+  }, [open])
+
+  if (!open) return null
+
+  function submit() {
+    const trimmed = comment.trim()
+    if (trimmed.length < 5) {
+      setLocalError('Please add a short comment (at least 5 characters).')
+      return
+    }
+    onConfirm(trimmed)
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="modal-panel mf-decline-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mf-decline-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="mf-decline-title">Decline invitation</h2>
+        <p>
+          Declining ends {inviterName.split(/\s+/)[0]}&apos;s invite completely. Tell them why so
+          they understand.
+        </p>
+        <label className="mf-field">
+          <span>Comment (required)</span>
+          <textarea
+            value={comment}
+            maxLength={500}
+            rows={4}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="I don't recognize these family details / I prefer to keep my tree separate…"
+          />
+          <span className="mf-char-count">{comment.length}/500</span>
+        </label>
+        {localError ? (
+          <p className="modal-form-error" role="alert">
+            {localError}
+          </p>
+        ) : null}
+        <div className="mf-actions-row">
+          <button type="button" className="mf-btn-outline" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="mf-btn-decline-confirm"
+            disabled={busy}
+            onClick={submit}
+          >
+            {busy ? 'Declining…' : 'Decline invite'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function MergeShell({ children, title, subtitle }: { children: ReactNode; title: string; subtitle?: string }) {
   return (
@@ -248,8 +388,10 @@ export function MergeSentPage() {
         <strong>What happens next?</strong>
         <ol>
           <li>{draft?.target.displayName.split(/\s+/)[0] ?? 'They'} will receive a notification about your request.</li>
-          <li>They can view your family (optional).</li>
-          <li>They can accept or decline the request.</li>
+          <li>They review any overlapping relatives (for example both of you listing a mother).</li>
+          <li>
+            They accept your family details for conflicts, or decline the invite with a comment.
+          </li>
         </ol>
       </div>
       <Link to="/home" className="mf-btn-primary-wide mf-link-btn" onClick={() => clearMergeFlowDraft()}>
@@ -264,6 +406,8 @@ export function MergeIncomingPage() {
   const navigate = useNavigate()
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchTreeMergeRequest>> | null>(null)
   const [error, setError] = useState('')
+  const [declineOpen, setDeclineOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -272,7 +416,22 @@ export function MergeIncomingPage() {
       .catch((err) => setError(getCallableErrorMessage(err)))
   }, [token])
 
-  if (error) {
+  async function handleDecline(comment: string) {
+    if (!token) return
+    setBusy(true)
+    setError('')
+    try {
+      await declineTreeMerge(token, comment)
+      navigate('/home/invitations')
+    } catch (err) {
+      setError(getCallableErrorMessage(err))
+      setDeclineOpen(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (error && !data) {
     const stale =
       error.toLowerCase().includes('not found') ||
       error.toLowerCase().includes('missing an update')
@@ -300,19 +459,23 @@ export function MergeIncomingPage() {
     )
   }
 
+  const conflictCount = data.conflicts?.length ?? 0
+
   return (
     <MergeShell title="Family Merge Request">
       <div className="mf-icon-circle mf-icon-bell" aria-hidden="true">
         🔔
       </div>
       <p className="mf-lede">
-        <strong>{data.inviterName}</strong> has requested to merge families with you.
+        <strong>{data.inviterName}</strong> invited you to join their family as their{' '}
+        <strong>{data.roleLabel.toLowerCase()}</strong> and merge trees.
       </p>
       <div className="mf-request-card">
         <div className="mf-request-head">
           <span className="mf-compare-avatar">{initialsFromName(data.inviterName)}</span>
           <div>
             <strong>Request from {data.inviterName}</strong>
+            <span className="mf-request-role">As your {data.roleLabel.toLowerCase()}</span>
           </div>
         </div>
         {data.mergeMessage ? (
@@ -320,23 +483,32 @@ export function MergeIncomingPage() {
             <p>{data.mergeMessage}</p>
           </div>
         ) : null}
+        {conflictCount > 0 ? (
+          <p className="mf-request-conflict-note">
+            {conflictCount} conflict{conflictCount === 1 ? '' : 's'} to review before accepting.
+          </p>
+        ) : null}
       </div>
+      {error ? (
+        <p className="modal-form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <button
         type="button"
         className="mf-btn-primary-wide"
         onClick={() => navigate(`/home/merge/incoming/${token}/family`)}
       >
-        View {data.inviterName.split(/\s+/)[0]}&apos;s Family →
+        Review conflicts &amp; family →
       </button>
       <div className="mf-incoming-actions">
         <button
           type="button"
           className="mf-btn-decline"
-          onClick={() =>
-            void declineTreeMerge(token).then(() => navigate('/home/invitations'))
-          }
+          disabled={busy}
+          onClick={() => setDeclineOpen(true)}
         >
-          ✕ Decline
+          ✕ Decline invite
         </button>
         <button
           type="button"
@@ -346,6 +518,13 @@ export function MergeIncomingPage() {
           ✓ Review &amp; accept
         </button>
       </div>
+      <DeclineMergeModal
+        open={declineOpen}
+        inviterName={data.inviterName}
+        busy={busy}
+        onClose={() => setDeclineOpen(false)}
+        onConfirm={(comment) => void handleDecline(comment)}
+      />
     </MergeShell>
   )
 }
@@ -362,6 +541,7 @@ export function MergeViewFamilyPage() {
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [declineOpen, setDeclineOpen] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -398,20 +578,36 @@ export function MergeViewFamilyPage() {
     }
   }
 
+  async function handleDecline(comment: string) {
+    if (!token) return
+    setBusy(true)
+    setError('')
+    try {
+      await declineTreeMerge(token, comment)
+      navigate('/home/invitations')
+    } catch (err) {
+      setError(getCallableErrorMessage(err))
+      setDeclineOpen(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!family || !request) {
     return (
-      <MergeShell title="View Requester's Family">
+      <MergeShell title="Resolve merge conflicts">
         <p className="mf-lede">{error || 'Loading…'}</p>
       </MergeShell>
     )
   }
 
   const isInvitee = user?.uid === request.inviteeUid
+  const conflicts = request.conflicts ?? []
 
   return (
     <MergeShell
-      title="View Requester's Family"
-      subtitle={`Here is ${family.requesterName}'s immediate family.`}
+      title="Resolve merge conflicts"
+      subtitle={`${family.requesterName} invited you as their ${request.roleLabel.toLowerCase()}. Review overlapping relatives below.`}
     >
       <div className="mf-requester-chip">
         <ProfileAvatar
@@ -421,9 +617,12 @@ export function MergeViewFamilyPage() {
         />
         <div>
           <strong>{family.requesterName}</strong>
-          <span>Requesting to merge families</span>
+          <span>Sender · join as {request.roleLabel.toLowerCase()}</span>
         </div>
       </div>
+
+      <ConflictCompare conflicts={conflicts} senderName={family.requesterName} />
+
       <h2 className="mf-section-label">Their Immediate Family</h2>
       <div className="mf-mini-tree">
         <div className="mf-mini-row">
@@ -446,7 +645,7 @@ export function MergeViewFamilyPage() {
           <div className="mf-mini-person mf-mini-person-you">
             <span className="mf-mini-avatar">{initialsFromName(family.requesterName)}</span>
             <strong>{family.requesterName.split(/\s+/)[0]}</strong>
-            <span>Requester</span>
+            <span>Sender</span>
           </div>
         </div>
       </div>
@@ -463,17 +662,19 @@ export function MergeViewFamilyPage() {
             disabled={busy}
             onClick={() => void handleAccept()}
           >
-            {busy ? 'Merging…' : 'Accept Merge Request →'}
+            {busy
+              ? 'Merging…'
+              : conflicts.length
+                ? "Accept sender's family & merge →"
+                : 'Accept Merge Request →'}
           </button>
           <button
             type="button"
             className="mf-btn-outline-wide"
             disabled={busy}
-            onClick={() =>
-              void declineTreeMerge(token).then(() => navigate('/home/invitations'))
-            }
+            onClick={() => setDeclineOpen(true)}
           >
-            Decline Request
+            Decline invite
           </button>
         </div>
       ) : (
@@ -481,6 +682,13 @@ export function MergeViewFamilyPage() {
           ← Back
         </Link>
       )}
+      <DeclineMergeModal
+        open={declineOpen}
+        inviterName={family.requesterName}
+        busy={busy}
+        onClose={() => setDeclineOpen(false)}
+        onConfirm={(comment) => void handleDecline(comment)}
+      />
     </MergeShell>
   )
 }

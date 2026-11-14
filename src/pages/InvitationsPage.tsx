@@ -542,7 +542,9 @@ export default function InvitationsPage() {
                       ? 'claimed'
                       : item.status === 'joined'
                         ? 'joined'
-                        : 'pending'
+                        : item.status === 'declined'
+                          ? 'declined'
+                          : 'pending'
                   }`}
                   title={
                     tab === 'sent' && isProfileClaimed(item)
@@ -554,7 +556,9 @@ export default function InvitationsPage() {
                     ? 'Profile claimed'
                     : item.status === 'joined'
                       ? 'Joined'
-                      : 'Pending'}
+                      : item.status === 'declined'
+                        ? 'Declined'
+                        : 'Pending'}
                 </span>
                 {canAcceptMerge ? (
                   <div className="inv-merge-actions">

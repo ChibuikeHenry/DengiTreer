@@ -22,6 +22,22 @@ const submitTreeMergeRequestFn = httpsCallable<
   { ok: boolean; token: string; joinUrl: string }
 >(functions, 'submitTreeMergeRequest')
 
+export type MergeConflictSide = {
+  memberId: string | null
+  displayName: string
+  photoURL: string | null
+  dateOfBirth: string | null
+  gender: string | null
+  memberStatus: string | null
+}
+
+export type MergeConflict = {
+  key: 'father' | 'mother'
+  label: string
+  sender: MergeConflictSide
+  yours: MergeConflictSide
+}
+
 const getTreeMergeRequestFn = httpsCallable<
   { token: string },
   {
@@ -36,6 +52,8 @@ const getTreeMergeRequestFn = httpsCallable<
     requesterMemberCount: number
     inviteeMemberCount: number
     roleLabel: string
+    conflicts: MergeConflict[]
+    declineComment: string | null
   }
 >(functions, 'getTreeMergeRequest')
 
@@ -62,7 +80,11 @@ export async function submitTreeMergeRequest(
 
 export async function fetchTreeMergeRequest(token: string) {
   const result = await getTreeMergeRequestFn({ token })
-  return result.data
+  return {
+    ...result.data,
+    conflicts: Array.isArray(result.data.conflicts) ? result.data.conflicts : [],
+    declineComment: result.data.declineComment ?? null,
+  }
 }
 
 export async function fetchMergeRequesterFamily(token: string) {

@@ -209,7 +209,7 @@
 
 .about-team-media {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 0.85rem;
   margin-bottom: 1.25rem;
@@ -262,7 +262,7 @@
   font-weight: 700;
   white-space: nowrap;
   letter-spacing: 0.01em;
-  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
 }
 
 .about-role-pill--green {

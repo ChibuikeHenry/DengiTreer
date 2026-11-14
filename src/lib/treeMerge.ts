@@ -20,7 +20,7 @@ const acceptTreeMergeFn = httpsCallable<
   { ok: boolean; copiedCount: number; inviterUid: string }
 >(functions, 'acceptTreeMerge')
 
-const declineTreeMergeFn = httpsCallable<{ token: string }, { ok: boolean }>(
+const declineTreeMergeFn = httpsCallable<{ token: string; comment: string }, { ok: boolean }>(
   functions,
   'declineTreeMerge',
 )
@@ -123,8 +123,8 @@ export async function acceptTreeMerge(token: string) {
   return result.data
 }
 
-export async function declineTreeMerge(token: string) {
-  const result = await declineTreeMergeFn({ token })
+export async function declineTreeMerge(token: string, comment: string) {
+  const result = await declineTreeMergeFn({ token, comment: comment.trim() })
   return result.data
 }
 

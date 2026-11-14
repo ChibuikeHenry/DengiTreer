@@ -215,6 +215,132 @@ async function displayNameForUid(uid: string): Promise<string> {
   return 'Family member'
 }
 
+export type MergeConflictSide = {
+  memberId: string | null
+  displayName: string
+  photoURL: string | null
+  dateOfBirth: string | null
+  gender: string | null
+  memberStatus: string | null
+}
+
+export type MergeConflict = {
+  key: 'father' | 'mother'
+  label: string
+  sender: MergeConflictSide
+  yours: MergeConflictSide
+}
+
+function normalizePersonName(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
+function memberToConflictSide(data: Record<string, unknown>, memberId: string): MergeConflictSide {
+  const displayName =
+    String(data.displayName ?? '').trim() ||
+    [data.firstName, data.lastName]
+      .map((p) => String(p ?? '').trim())
+      .filter(Boolean)
+      .join(' ') ||
+    'Family member'
+  return {
+    memberId,
+    displayName,
+    photoURL: data.photoURL ? String(data.photoURL) : null,
+    dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth) : null,
+    gender: data.gender ? String(data.gender) : null,
+    memberStatus: data.memberStatus ? String(data.memberStatus) : null,
+  }
+}
+
+async function resolvePrimaryParent(
+  uid: string,
+  slot: 'father' | 'mother',
+): Promise<{ id: string; data: Record<string, unknown> } | null> {
+  const userSnap = await db().collection('users').doc(uid).get()
+  const profile = userSnap.data() ?? {}
+  const linkedId = String(
+    slot === 'father' ? profile.treeFatherMemberId : profile.treeMotherMemberId,
+  ).trim()
+
+  const membersSnap = await db().collection('users').doc(uid).collection('familyMembers').get()
+  const parents = membersSnap.docs
+    .map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }))
+    .filter((m) => String(m.data.role ?? '') === 'parent')
+
+  if (linkedId) {
+    const linked = parents.find((p) => p.id === linkedId)
+    if (linked) return linked
+    const linkedDoc = await db()
+      .collection('users')
+      .doc(uid)
+      .collection('familyMembers')
+      .doc(linkedId)
+      .get()
+    if (linkedDoc.exists) {
+      return { id: linkedDoc.id, data: linkedDoc.data() as Record<string, unknown> }
+    }
+  }
+
+  const bySlot = parents.find(
+    (p) =>
+      String(p.data.parentSlot ?? '') === slot && String(p.data.parentKind ?? '') !== 'step',
+  )
+  if (bySlot) return bySlot
+
+  const byGender = parents.find((p) => {
+    const g = String(p.data.gender ?? '').toLowerCase()
+    if (slot === 'father') return g === 'male'
+    if (slot === 'mother') return g === 'female'
+    return false
+  })
+  return byGender ?? null
+}
+
+/** Compare overlapping relatives (e.g. both have a mom) so the invitee can review before accepting. */
+export async function buildMergeConflicts(
+  inviterUid: string,
+  inviteeUid: string,
+): Promise<MergeConflict[]> {
+  const conflicts: MergeConflict[] = []
+  for (const slot of ['father', 'mother'] as const) {
+    const [senderParent, yoursParent] = await Promise.all([
+      resolvePrimaryParent(inviterUid, slot),
+      resolvePrimaryParent(inviteeUid, slot),
+    ])
+    if (!senderParent || !yoursParent) continue
+    const sender = memberToConflictSide(senderParent.data, senderParent.id)
+    const yours = memberToConflictSide(yoursParent.data, yoursParent.id)
+    if (normalizePersonName(sender.displayName) === normalizePersonName(yours.displayName)) {
+      continue
+    }
+    conflicts.push({
+      key: slot,
+      label: slot === 'father' ? 'Father' : 'Mother',
+      sender,
+      yours,
+    })
+  }
+  return conflicts
+}
+
+/** Invitee parent member IDs that conflict with the sender's family — kept on sender's side on accept. */
+async function inviteeConflictingParentIds(
+  inviterUid: string,
+  inviteeUid: string,
+): Promise<Set<string>> {
+  const skip = new Set<string>()
+  const conflicts = await buildMergeConflicts(inviterUid, inviteeUid)
+  for (const conflict of conflicts) {
+    const id = conflict.yours.memberId?.trim()
+    if (id) skip.add(id)
+  }
+  return skip
+}
+
 export const checkInviteeEmailForMerge = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in to check this email.')
@@ -269,6 +395,10 @@ export const getTreeMergeRequest = onCall(async (request) => {
 
   const inviteSnap = await db().collection('invitations').doc(token).get()
   const invite = inviteSnap.data() ?? {}
+  const conflicts =
+    String(merge.status ?? 'pending') === 'pending'
+      ? await buildMergeConflicts(inviterUid, inviteeUid)
+      : []
 
   return {
     token,
@@ -283,6 +413,8 @@ export const getTreeMergeRequest = onCall(async (request) => {
     inviteeMemberCount: Number(merge.inviteeMemberCount ?? 0),
     roleLabel: mergeRoleLabel(invite.role),
     createdAt: merge.createdAt ?? null,
+    conflicts,
+    declineComment: String(merge.declineComment ?? '').trim() || null,
   }
 })
 
@@ -492,12 +624,18 @@ async function copyInviteeTreeIntoInviter(
     const id = String(inviteeUser[key] ?? '').trim()
     if (id) skipMemberIds.add(id)
   }
+  // Accepting keeps the sender's conflicting relatives (e.g. both moms → keep theirs).
+  const conflictingParents = await inviteeConflictingParentIds(inviterUid, inviteeUid)
+  for (const id of conflictingParents) skipMemberIds.add(id)
 
-  const [inviteeInvitesSnap, inviteeMembersSnap, inviterInvitesSnap] = await Promise.all([
-    db().collection('invitations').where('inviterUid', '==', inviteeUid).get(),
-    db().collection('users').doc(inviteeUid).collection('familyMembers').get(),
-    db().collection('invitations').where('inviterUid', '==', inviterUid).get(),
-  ])
+  const [inviteeInvitesSnap, inviteeMembersSnap, inviterInvitesSnap, inviterUserSnap] =
+    await Promise.all([
+      db().collection('invitations').where('inviterUid', '==', inviteeUid).get(),
+      db().collection('users').doc(inviteeUid).collection('familyMembers').get(),
+      db().collection('invitations').where('inviterUid', '==', inviterUid).get(),
+      db().collection('users').doc(inviterUid).get(),
+    ])
+  const inviterUser = inviterUserSnap.data() ?? {}
 
   const inviterJoinedUids = new Set<string>()
   for (const doc of inviterInvitesSnap.docs) {
@@ -520,7 +658,21 @@ async function copyInviteeTreeIntoInviter(
     if (!idMap.has(doc.id)) idMap.set(doc.id, newToken())
   }
 
-  if (idMap.size === 0) return 0
+  if (idMap.size === 0) {
+    await db()
+      .collection('users')
+      .doc(inviteeUid)
+      .set(
+        {
+          treeMergedIntoUid: inviterUid,
+          treeMergedAt: FieldValue.serverTimestamp(),
+          treeMergeInvitationToken: invitationToken,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+    return 0
+  }
 
   let batch = db().batch()
   let ops = 0
@@ -575,13 +727,16 @@ async function copyInviteeTreeIntoInviter(
     )
   }
 
+  // Never overwrite the sender's own father/mother links — accept means keep their family.
   const inviterUserPatch: Record<string, string> = {}
   const fatherId = String(inviteeUser.treeFatherMemberId ?? '').trim()
   const motherId = String(inviteeUser.treeMotherMemberId ?? '').trim()
-  if (fatherId && idMap.has(fatherId)) {
+  const inviterHasFather = Boolean(String(inviterUser.treeFatherMemberId ?? '').trim())
+  const inviterHasMother = Boolean(String(inviterUser.treeMotherMemberId ?? '').trim())
+  if (fatherId && idMap.has(fatherId) && !inviterHasFather && !conflictingParents.has(fatherId)) {
     inviterUserPatch.treeFatherMemberId = idMap.get(fatherId)!
   }
-  if (motherId && idMap.has(motherId)) {
+  if (motherId && idMap.has(motherId) && !inviterHasMother && !conflictingParents.has(motherId)) {
     inviterUserPatch.treeMotherMemberId = idMap.get(motherId)!
   }
   if (Object.keys(inviterUserPatch).length > 0) {
@@ -713,13 +868,25 @@ export const declineTreeMerge = onCall(async (request) => {
     throw new HttpsError('unauthenticated', 'Sign in to decline this merge request.')
   }
 
-  const token = String((request.data as { token?: string })?.token ?? '').trim()
+  const data = request.data as { token?: string; comment?: string }
+  const token = String(data?.token ?? '').trim()
+  const comment = String(data?.comment ?? '').trim()
   if (!token) {
     throw new HttpsError('invalid-argument', 'Missing invitation token.')
+  }
+  if (comment.length < 5) {
+    throw new HttpsError(
+      'invalid-argument',
+      'Add a short comment (at least 5 characters) explaining why you are declining.',
+    )
+  }
+  if (comment.length > 500) {
+    throw new HttpsError('invalid-argument', 'Decline comment must be 500 characters or fewer.')
   }
 
   const uid = request.auth.uid
   const mergeRef = mergeRequestRef(token)
+  const inviteRef = db().collection('invitations').doc(token)
 
   await db().runTransaction(async (tx) => {
     const mergeSnap = await tx.get(mergeRef)
@@ -731,10 +898,32 @@ export const declineTreeMerge = onCall(async (request) => {
       throw new HttpsError('permission-denied', 'This merge request is for another account.')
     }
     if (merge.status !== 'pending') return
+
+    const inviteSnap = await tx.get(inviteRef)
+
     tx.update(mergeRef, {
       status: 'declined',
+      declineComment: comment,
       respondedAt: FieldValue.serverTimestamp(),
     })
+
+    // Declining the merge also declines the underlying invite completely.
+    if (inviteSnap.exists) {
+      const invite = inviteSnap.data() ?? {}
+      if (String(invite.status ?? '') === 'pending' && !invite.joinedUid) {
+        tx.set(
+          inviteRef,
+          {
+            status: 'declined',
+            declineComment: comment,
+            declinedAt: FieldValue.serverTimestamp(),
+            treeMergeOffered: false,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      }
+    }
   })
 
   return { ok: true }

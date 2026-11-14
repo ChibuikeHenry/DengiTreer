@@ -31,7 +31,7 @@ export type TreeMember = {
   role: InviteRole
   photoURL: string | null
   memberStatus: 'living' | 'deceased'
-  inviteStatus: 'pending' | 'joined'
+  inviteStatus: 'pending' | 'joined' | 'declined'
   joinedUid: string | null
   profileClaimed: boolean
   inviterCanEdit: boolean

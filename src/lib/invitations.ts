@@ -75,7 +75,7 @@ export type InvitationRecord = {
   inviteeLastName: string | null
   inviteeEmail: string | null
   role: InviteRole
-  status: 'pending' | 'joined'
+  status: 'pending' | 'joined' | 'declined'
   memberStatus: 'living' | 'deceased'
   photoURL: string | null
   joinedUid: string | null

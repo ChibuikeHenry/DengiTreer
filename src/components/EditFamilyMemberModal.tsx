@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePhotoPicker } from '../hooks/usePhotoPicker'
 import {
   getCallableErrorMessage,
-  removeFamilyMemberFromTree,
+  // removeFamilyMemberFromTree,
   updatePendingFamilyMemberProfile,
 } from '../lib/invitations'
 import { uploadFamilyMemberPhoto } from '../lib/profilePhoto'
@@ -41,12 +41,13 @@ export default function EditFamilyMemberModal({
   member,
   onClose,
   onUpdated,
-  onRemoved,
+  onRemoved: _onRemoved,
 }: EditFamilyMemberModalProps) {
+  void _onRemoved
   const { user } = useAuth()
   const photo = usePhotoPicker()
   const [submitting, setSubmitting] = useState(false)
-  const [removing, setRemoving] = useState(false)
+  // const [removing, setRemoving] = useState(false)
   const [error, setError] = useState('')
 
   const [firstName, setFirstName] = useState('')
@@ -197,6 +198,7 @@ export default function EditFamilyMemberModal({
     }
   }
 
+  /* Temporarily hidden with Remove from tree button
   async function handleRemove() {
     if (!member || removing || submitting) return
     const claimed = member.profileClaimed || member.joinedUid
@@ -220,8 +222,9 @@ export default function EditFamilyMemberModal({
       setRemoving(false)
     }
   }
+  */
 
-  const busy = submitting || removing
+  const busy = submitting
 
   return (
     <ModalFrame
@@ -327,6 +330,7 @@ export default function EditFamilyMemberModal({
         <MemberBioField bio={bio} onBioChange={setBio} idPrefix="edit-member" />
       </section>
 
+      {/* Temporarily hidden — remove-from-tree action
       <section className="modal-section modal-section-danger">
         <h3>Remove from tree</h3>
         <p className="field-hint">
@@ -342,6 +346,7 @@ export default function EditFamilyMemberModal({
           {removing ? 'Removing…' : 'Remove from tree'}
         </button>
       </section>
+      */}
     </ModalFrame>
   )
 }

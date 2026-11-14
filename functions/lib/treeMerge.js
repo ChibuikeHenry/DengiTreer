@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.syncTreeMergeOffers = exports.unmergeFamilyTrees = exports.declineTreeMerge = exports.acceptTreeMerge = exports.getMergeRequesterFamily = exports.getTreeMergeRequest = exports.checkInviteeEmailForMerge = void 0;
 exports.findUidByEmail = findUidByEmail;
 exports.countTreeMembers = countTreeMembers;
+exports.buildMergeConflicts = buildMergeConflicts;
 exports.offerTreeMergeForInvitation = offerTreeMergeForInvitation;
 exports.maybeCreateTreeMergeRequest = maybeCreateTreeMergeRequest;
 exports.mergeReviewUrl = mergeReviewUrl;
@@ -193,6 +194,98 @@ async function displayNameForUid(uid) {
         return email.split('@')[0] ?? email;
     return 'Family member';
 }
+function normalizePersonName(value) {
+    return String(value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+}
+function memberToConflictSide(data, memberId) {
+    const displayName = String(data.displayName ?? '').trim() ||
+        [data.firstName, data.lastName]
+            .map((p) => String(p ?? '').trim())
+            .filter(Boolean)
+            .join(' ') ||
+        'Family member';
+    return {
+        memberId,
+        displayName,
+        photoURL: data.photoURL ? String(data.photoURL) : null,
+        dateOfBirth: data.dateOfBirth ? String(data.dateOfBirth) : null,
+        gender: data.gender ? String(data.gender) : null,
+        memberStatus: data.memberStatus ? String(data.memberStatus) : null,
+    };
+}
+async function resolvePrimaryParent(uid, slot) {
+    const userSnap = await db().collection('users').doc(uid).get();
+    const profile = userSnap.data() ?? {};
+    const linkedId = String(slot === 'father' ? profile.treeFatherMemberId : profile.treeMotherMemberId).trim();
+    const membersSnap = await db().collection('users').doc(uid).collection('familyMembers').get();
+    const parents = membersSnap.docs
+        .map((doc) => ({ id: doc.id, data: doc.data() }))
+        .filter((m) => String(m.data.role ?? '') === 'parent');
+    if (linkedId) {
+        const linked = parents.find((p) => p.id === linkedId);
+        if (linked)
+            return linked;
+        const linkedDoc = await db()
+            .collection('users')
+            .doc(uid)
+            .collection('familyMembers')
+            .doc(linkedId)
+            .get();
+        if (linkedDoc.exists) {
+            return { id: linkedDoc.id, data: linkedDoc.data() };
+        }
+    }
+    const bySlot = parents.find((p) => String(p.data.parentSlot ?? '') === slot && String(p.data.parentKind ?? '') !== 'step');
+    if (bySlot)
+        return bySlot;
+    const byGender = parents.find((p) => {
+        const g = String(p.data.gender ?? '').toLowerCase();
+        if (slot === 'father')
+            return g === 'male';
+        if (slot === 'mother')
+            return g === 'female';
+        return false;
+    });
+    return byGender ?? null;
+}
+/** Compare overlapping relatives (e.g. both have a mom) so the invitee can review before accepting. */
+async function buildMergeConflicts(inviterUid, inviteeUid) {
+    const conflicts = [];
+    for (const slot of ['father', 'mother']) {
+        const [senderParent, yoursParent] = await Promise.all([
+            resolvePrimaryParent(inviterUid, slot),
+            resolvePrimaryParent(inviteeUid, slot),
+        ]);
+        if (!senderParent || !yoursParent)
+            continue;
+        const sender = memberToConflictSide(senderParent.data, senderParent.id);
+        const yours = memberToConflictSide(yoursParent.data, yoursParent.id);
+        if (normalizePersonName(sender.displayName) === normalizePersonName(yours.displayName)) {
+            continue;
+        }
+        conflicts.push({
+            key: slot,
+            label: slot === 'father' ? 'Father' : 'Mother',
+            sender,
+            yours,
+        });
+    }
+    return conflicts;
+}
+/** Invitee parent member IDs that conflict with the sender's family — kept on sender's side on accept. */
+async function inviteeConflictingParentIds(inviterUid, inviteeUid) {
+    const skip = new Set();
+    const conflicts = await buildMergeConflicts(inviterUid, inviteeUid);
+    for (const conflict of conflicts) {
+        const id = conflict.yours.memberId?.trim();
+        if (id)
+            skip.add(id);
+    }
+    return skip;
+}
 exports.checkInviteeEmailForMerge = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Sign in to check this email.');
@@ -245,6 +338,9 @@ exports.getTreeMergeRequest = (0, https_1.onCall)(async (request) => {
     }
     const inviteSnap = await db().collection('invitations').doc(token).get();
     const invite = inviteSnap.data() ?? {};
+    const conflicts = String(merge.status ?? 'pending') === 'pending'
+        ? await buildMergeConflicts(inviterUid, inviteeUid)
+        : [];
     return {
         token,
         status: String(merge.status ?? 'pending'),
@@ -258,6 +354,8 @@ exports.getTreeMergeRequest = (0, https_1.onCall)(async (request) => {
         inviteeMemberCount: Number(merge.inviteeMemberCount ?? 0),
         roleLabel: mergeRoleLabel(invite.role),
         createdAt: merge.createdAt ?? null,
+        conflicts,
+        declineComment: String(merge.declineComment ?? '').trim() || null,
     };
 });
 exports.getMergeRequesterFamily = (0, https_1.onCall)(async (request) => {
@@ -413,11 +511,17 @@ async function copyInviteeTreeIntoInviter(inviterUid, inviteeUid, invitationToke
         if (id)
             skipMemberIds.add(id);
     }
-    const [inviteeInvitesSnap, inviteeMembersSnap, inviterInvitesSnap] = await Promise.all([
+    // Accepting keeps the sender's conflicting relatives (e.g. both moms → keep theirs).
+    const conflictingParents = await inviteeConflictingParentIds(inviterUid, inviteeUid);
+    for (const id of conflictingParents)
+        skipMemberIds.add(id);
+    const [inviteeInvitesSnap, inviteeMembersSnap, inviterInvitesSnap, inviterUserSnap] = await Promise.all([
         db().collection('invitations').where('inviterUid', '==', inviteeUid).get(),
         db().collection('users').doc(inviteeUid).collection('familyMembers').get(),
         db().collection('invitations').where('inviterUid', '==', inviterUid).get(),
+        db().collection('users').doc(inviterUid).get(),
     ]);
+    const inviterUser = inviterUserSnap.data() ?? {};
     const inviterJoinedUids = new Set();
     for (const doc of inviterInvitesSnap.docs) {
         const joined = String(doc.data().joinedUid ?? '').trim();
@@ -442,8 +546,18 @@ async function copyInviteeTreeIntoInviter(inviterUid, inviteeUid, invitationToke
         if (!idMap.has(doc.id))
             idMap.set(doc.id, newToken());
     }
-    if (idMap.size === 0)
+    if (idMap.size === 0) {
+        await db()
+            .collection('users')
+            .doc(inviteeUid)
+            .set({
+            treeMergedIntoUid: inviterUid,
+            treeMergedAt: firestore_1.FieldValue.serverTimestamp(),
+            treeMergeInvitationToken: invitationToken,
+            updatedAt: firestore_1.FieldValue.serverTimestamp(),
+        }, { merge: true });
         return 0;
+    }
     let batch = db().batch();
     let ops = 0;
     const batches = [];
@@ -492,13 +606,16 @@ async function copyInviteeTreeIntoInviter(inviterUid, inviteeUid, invitationToke
             updatedAt: firestore_1.FieldValue.serverTimestamp(),
         }));
     }
+    // Never overwrite the sender's own father/mother links — accept means keep their family.
     const inviterUserPatch = {};
     const fatherId = String(inviteeUser.treeFatherMemberId ?? '').trim();
     const motherId = String(inviteeUser.treeMotherMemberId ?? '').trim();
-    if (fatherId && idMap.has(fatherId)) {
+    const inviterHasFather = Boolean(String(inviterUser.treeFatherMemberId ?? '').trim());
+    const inviterHasMother = Boolean(String(inviterUser.treeMotherMemberId ?? '').trim());
+    if (fatherId && idMap.has(fatherId) && !inviterHasFather && !conflictingParents.has(fatherId)) {
         inviterUserPatch.treeFatherMemberId = idMap.get(fatherId);
     }
-    if (motherId && idMap.has(motherId)) {
+    if (motherId && idMap.has(motherId) && !inviterHasMother && !conflictingParents.has(motherId)) {
         inviterUserPatch.treeMotherMemberId = idMap.get(motherId);
     }
     if (Object.keys(inviterUserPatch).length > 0) {
@@ -596,12 +713,21 @@ exports.declineTreeMerge = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'Sign in to decline this merge request.');
     }
-    const token = String(request.data?.token ?? '').trim();
+    const data = request.data;
+    const token = String(data?.token ?? '').trim();
+    const comment = String(data?.comment ?? '').trim();
     if (!token) {
         throw new https_1.HttpsError('invalid-argument', 'Missing invitation token.');
     }
+    if (comment.length < 5) {
+        throw new https_1.HttpsError('invalid-argument', 'Add a short comment (at least 5 characters) explaining why you are declining.');
+    }
+    if (comment.length > 500) {
+        throw new https_1.HttpsError('invalid-argument', 'Decline comment must be 500 characters or fewer.');
+    }
     const uid = request.auth.uid;
     const mergeRef = mergeRequestRef(token);
+    const inviteRef = db().collection('invitations').doc(token);
     await db().runTransaction(async (tx) => {
         const mergeSnap = await tx.get(mergeRef);
         if (!mergeSnap.exists) {
@@ -613,10 +739,25 @@ exports.declineTreeMerge = (0, https_1.onCall)(async (request) => {
         }
         if (merge.status !== 'pending')
             return;
+        const inviteSnap = await tx.get(inviteRef);
         tx.update(mergeRef, {
             status: 'declined',
+            declineComment: comment,
             respondedAt: firestore_1.FieldValue.serverTimestamp(),
         });
+        // Declining the merge also declines the underlying invite completely.
+        if (inviteSnap.exists) {
+            const invite = inviteSnap.data() ?? {};
+            if (String(invite.status ?? '') === 'pending' && !invite.joinedUid) {
+                tx.set(inviteRef, {
+                    status: 'declined',
+                    declineComment: comment,
+                    declinedAt: firestore_1.FieldValue.serverTimestamp(),
+                    treeMergeOffered: false,
+                    updatedAt: firestore_1.FieldValue.serverTimestamp(),
+                }, { merge: true });
+            }
+        }
     });
     return { ok: true };
 });
