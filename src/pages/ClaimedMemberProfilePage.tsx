@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import FamilyLibraryTaggedPhotos from '../components/FamilyLibraryTaggedPhotos'
 import ProfileAvatar from '../components/ProfileAvatar'
 import { useAuth } from '../context/AuthContext'
@@ -15,10 +15,6 @@ import {
 } from '../lib/familyTreeMembers'
 import { formatDisplayDate } from '../lib/lifeDates'
 import { memberPrivacyScopeLabel } from '../lib/memberPrivacy'
-import {
-  getCallableErrorMessage,
-  removeFamilyMemberFromTree,
-} from '../lib/invitations'
 import { isClaimedTreeMember } from '../lib/profileClaim'
 import { resolveExploreAccess } from '../lib/treeExplore'
 import {
@@ -35,14 +31,13 @@ function FieldIcon({ children }: { children: ReactNode }) {
 export default function ClaimedMemberProfilePage() {
   const { memberId } = useParams<{ memberId: string }>()
   const location = useLocation()
-  const navigate = useNavigate()
   const { user } = useAuth()
   const treeOwnerUid =
     (location.state as { treeOwnerUid?: string } | null)?.treeOwnerUid?.trim() ||
     user?.uid ||
     null
-  const [removing, setRemoving] = useState(false)
-  const [removeError, setRemoveError] = useState('')
+  const [_removing] = useState(false)
+  const [_removeError] = useState('')
   const [members, setMembers] = useState<TreeMember[]>([])
   const [membersReady, setMembersReady] = useState(false)
   const [membersError, setMembersError] = useState('')
@@ -176,8 +171,8 @@ export default function ClaimedMemberProfilePage() {
   const genderTone = avatarGenderToneForMember(member, avatarViewer)
   const claimed = isClaimedTreeMember(member)
 
-  async function handleRemoveFromTree() {
-    if (!member || removing) return
+  /* async function handleRemoveFromTree() {
+    if (!member || _removing) return
     const confirmed = window.confirm(
       `Remove ${member.displayName} from your tree?\n\nTheir DengiTree account is not deleted. You can invite them again afterward.`,
     )
@@ -192,7 +187,7 @@ export default function ClaimedMemberProfilePage() {
     } finally {
       setRemoving(false)
     }
-  }
+  } */
 
   return (
     <div className="claimed-member-page">
@@ -369,7 +364,7 @@ export default function ClaimedMemberProfilePage() {
         />
       ) : null}
 
-      {member.inviterCanRemove ? (
+      {/* {member.inviterCanRemove ? (
         <section className="claimed-card claimed-card-remove">
           <h2>Remove from your tree</h2>
           <p className="claimed-readonly-note">
@@ -389,7 +384,7 @@ export default function ClaimedMemberProfilePage() {
             {removing ? 'Removing…' : 'Remove from tree'}
           </button>
         </section>
-      ) : null}
+      ) : null} */}
     </div>
   )
 }

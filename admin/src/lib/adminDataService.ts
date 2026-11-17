@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp } from 'firebase/firestore'
+import {
+  collection,
+  onSnapshot,
+  query,
+  orderBy,
+  addDoc,
+  serverTimestamp,
+  doc,
+  updateDoc,
+} from 'firebase/firestore'
 import { db } from '../firebase'
 import type { InvitationRow, MemberRow, TreeRow } from '../data/mockAdminData'
 
@@ -380,7 +389,7 @@ export function useRealPlatformOverview() {
 
       const queue: RealQueueItem[] = [
         { label: 'Profile Claims Awaiting Review', count: unclaimedCount, tone: 'green', link: '/profile-claims' },
-        { label: 'Concession Requests', count: pendingConcessions, tone: 'yellow', link: '/dashboard' },
+        { label: 'Concession Requests', count: pendingConcessions, tone: 'yellow', link: '/concessions' },
         { label: 'Tree Build Requests', count: pendingBuilds, tone: 'blue', link: '/dashboard' },
         { label: 'Tree Cleanup Requests', count: pendingCleanups, tone: 'purple', link: '/dashboard' },
       ]
@@ -570,6 +579,80 @@ export function useRealPlatformOverview() {
   ]
 
   return { stats, recentActivities, operationsQueue, growthTrend }
+}
+
+export type ConcessionRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export type RealConcessionRequest = {
+  id: string
+  email: string
+  phone: string | null
+  reason: string
+  reasonLabel: string
+  details: string | null
+  status: ConcessionRequestStatus
+  uid: string | null
+  submitted: string
+  createdAtMs: number
+}
+
+function parseConcessionStatus(value: unknown): ConcessionRequestStatus {
+  if (value === 'approved' || value === 'rejected' || value === 'pending') return value
+  return 'pending'
+}
+
+/** Live concession requests for admin review */
+export function useRealConcessionRequests() {
+  const [requests, setRequests] = useState<RealConcessionRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, 'concessionRequests'),
+      (snapshot) => {
+        const list: RealConcessionRequest[] = snapshot.docs
+          .map((docSnap) => {
+            const data = docSnap.data()
+            const ts = data.createdAt
+            return {
+              id: docSnap.id,
+              email: String(data.email ?? ''),
+              phone: data.phone ? String(data.phone) : null,
+              reason: String(data.reason ?? ''),
+              reasonLabel: String(data.reasonLabel ?? data.reason ?? '—'),
+              details: data.details ? String(data.details) : null,
+              status: parseConcessionStatus(data.status),
+              uid: data.uid ? String(data.uid) : null,
+              submitted: formatDate(ts),
+              createdAtMs: ts?.toMillis ? ts.toMillis() : 0,
+            }
+          })
+          .sort((a, b) => b.createdAtMs - a.createdAtMs)
+        setRequests(list)
+        setLoading(false)
+        setError(null)
+      },
+      (err) => {
+        console.error('concessionRequests listen failed', err)
+        setError(err.message || 'Could not load concession requests.')
+        setLoading(false)
+      },
+    )
+    return unsubscribe
+  }, [])
+
+  return { requests, loading, error }
+}
+
+export async function updateConcessionRequestStatus(
+  id: string,
+  status: Exclude<ConcessionRequestStatus, 'pending'>,
+) {
+  await updateDoc(doc(db, 'concessionRequests', id), {
+    status,
+    reviewedAt: serverTimestamp(),
+  })
 }
 
 /** Create new user directly in Firestore */

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.ensureTreeShareLink = exports.disableTreeShareLink = exports.verifyTreeBuildPayment = exports.initializeTreeBuildPayment = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.untagSelfFromFamilyLibraryPhoto = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
+exports.unmergeFamilyTrees = exports.syncTreeMergeOffers = exports.getTreeMergeRequest = exports.getMergeRequesterFamily = exports.declineTreeMerge = exports.checkInviteeEmailForMerge = exports.acceptTreeMerge = exports.ensureTreeShareLink = exports.disableTreeShareLink = exports.verifyTreeBuildPayment = exports.initializeTreeBuildPayment = exports.verifyPremiumPayment = exports.initializePremiumPayment = exports.untagSelfFromFamilyLibraryPhoto = exports.updateAdminPermissions = exports.revokeAdminAccess = exports.listAdminAccounts = exports.createAdminAccount = exports.submitTreeMergeRequest = exports.updateFamilyMemberPrivacy = exports.claimPendingInvitationsForEmail = exports.removeFamilyMemberFromTree = exports.updatePendingFamilyMemberProfile = exports.acceptInvitation = exports.getInvitationByToken = exports.sendShareInviteEmail = exports.createShareInvite = exports.createFamilyMemberInvite = void 0;
 const crypto_1 = require("crypto");
 const firestore_1 = require("firebase-admin/firestore");
 const app_1 = require("firebase-admin/app");
@@ -975,6 +975,11 @@ exports.submitTreeMergeRequest = (0, https_1.onCall)(async (request) => {
     });
     return { ok: true, token: result.token, joinUrl: result.joinUrl };
 });
+var adminAccounts_1 = require("./adminAccounts");
+Object.defineProperty(exports, "createAdminAccount", { enumerable: true, get: function () { return adminAccounts_1.createAdminAccount; } });
+Object.defineProperty(exports, "listAdminAccounts", { enumerable: true, get: function () { return adminAccounts_1.listAdminAccounts; } });
+Object.defineProperty(exports, "revokeAdminAccess", { enumerable: true, get: function () { return adminAccounts_1.revokeAdminAccess; } });
+Object.defineProperty(exports, "updateAdminPermissions", { enumerable: true, get: function () { return adminAccounts_1.updateAdminPermissions; } });
 var familyLibraryUntag_1 = require("./familyLibraryUntag");
 Object.defineProperty(exports, "untagSelfFromFamilyLibraryPhoto", { enumerable: true, get: function () { return familyLibraryUntag_1.untagSelfFromFamilyLibraryPhoto; } });
 var premiumPayments_1 = require("./premiumPayments");

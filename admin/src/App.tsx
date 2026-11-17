@@ -8,7 +8,8 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import LoginPage from './pages/LoginPage'
 import AddUserPage from './pages/AddUserPage'
 import CreateFamilyTreePage from './pages/CreateFamilyTreePage'
-import PlaceholderPage from './pages/PlaceholderPage'
+import AdminSettingsPage from './pages/AdminSettingsPage'
+import ConcessionReviewPage from './pages/ConcessionReviewPage'
 import PrivacySafetyPage from './pages/PrivacySafetyPage'
 import ProfileClaimsPage from './pages/ProfileClaimsPage'
 import UserManagementPage from './pages/UserManagementPage'
@@ -29,15 +30,8 @@ export default function App() {
           <Route path="create-family-tree" element={<CreateFamilyTreePage />} />
           <Route path="profile-claims" element={<ProfileClaimsPage />} />
           <Route path="privacy" element={<PrivacySafetyPage />} />
-          <Route
-            path="settings"
-            element={
-              <PlaceholderPage
-                title="Settings"
-                subtitle="Configure admin preferences and platform options."
-              />
-            }
-          />
+          <Route path="concessions" element={<ConcessionReviewPage />} />
+          <Route path="settings" element={<AdminSettingsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

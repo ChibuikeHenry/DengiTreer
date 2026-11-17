@@ -1,13 +1,18 @@
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
-import { resolveAdminAccess } from '../lib/adminAccess'
+import {
+  hasAdminPermission,
+  resolveAdminAccessDetails,
+} from '../lib/adminAccess'
+import type { AdminPermission } from '../lib/adminPermissions'
 import { auth } from '../firebase'
 
 type AdminAuthContextValue = {
@@ -15,6 +20,10 @@ type AdminAuthContextValue = {
   ready: boolean
   isAdmin: boolean
   adminChecked: boolean
+  isBootstrap: boolean
+  permissions: AdminPermission[]
+  can: (permission: AdminPermission) => boolean
+  refreshAccess: () => Promise<void>
 }
 
 const AdminAuthContext = createContext<AdminAuthContextValue | null>(null)
@@ -24,6 +33,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminChecked, setAdminChecked] = useState(false)
+  const [isBootstrap, setIsBootstrap] = useState(false)
+  const [permissions, setPermissions] = useState<AdminPermission[]>([])
 
   useEffect(() => {
     return onAuthStateChanged(auth, (next) => {
@@ -32,28 +43,70 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!user) {
+  const applyAccess = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
       setIsAdmin(false)
+      setIsBootstrap(false)
+      setPermissions([])
       setAdminChecked(true)
       return
     }
     setAdminChecked(false)
-    void resolveAdminAccess(user).then((allowed) => {
+    const details = await resolveAdminAccessDetails(nextUser)
+    setIsAdmin(details.isAdmin)
+    setIsBootstrap(details.isBootstrap)
+    setPermissions(details.permissions)
+    setAdminChecked(true)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (!user) {
+        if (!cancelled) {
+          setIsAdmin(false)
+          setIsBootstrap(false)
+          setPermissions([])
+          setAdminChecked(true)
+        }
+        return
+      }
+      setAdminChecked(false)
+      const details = await resolveAdminAccessDetails(user)
       if (!cancelled) {
-        setIsAdmin(allowed)
+        setIsAdmin(details.isAdmin)
+        setIsBootstrap(details.isBootstrap)
+        setPermissions(details.permissions)
         setAdminChecked(true)
       }
-    })
+    })()
     return () => {
       cancelled = true
     }
   }, [user])
 
+  const refreshAccess = useCallback(async () => {
+    await applyAccess(user)
+  }, [applyAccess, user])
+
+  const can = useCallback(
+    (permission: AdminPermission) =>
+      hasAdminPermission(permissions, permission, { isBootstrap }),
+    [permissions, isBootstrap],
+  )
+
   const value = useMemo(
-    () => ({ user, ready, isAdmin, adminChecked }),
-    [user, ready, isAdmin, adminChecked],
+    () => ({
+      user,
+      ready,
+      isAdmin,
+      adminChecked,
+      isBootstrap,
+      permissions,
+      can,
+      refreshAccess,
+    }),
+    [user, ready, isAdmin, adminChecked, isBootstrap, permissions, can, refreshAccess],
   )
 
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>

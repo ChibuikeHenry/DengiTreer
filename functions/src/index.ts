@@ -1257,6 +1257,12 @@ export const submitTreeMergeRequest = onCall(async (request) => {
   return { ok: true, token: result.token, joinUrl: result.joinUrl }
 })
 
+export {
+  createAdminAccount,
+  listAdminAccounts,
+  revokeAdminAccess,
+  updateAdminPermissions,
+} from './adminAccounts'
 export { untagSelfFromFamilyLibraryPhoto } from './familyLibraryUntag'
 export { initializePremiumPayment, verifyPremiumPayment } from './premiumPayments'
 export {

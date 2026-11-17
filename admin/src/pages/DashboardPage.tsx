@@ -120,6 +120,9 @@ export default function DashboardPage() {
               <Link to="/profile-claims" className="dt-quick-btn">Review Profile Claim</Link>
             </li>
             <li>
+              <Link to="/concessions" className="dt-quick-btn">Review Concession</Link>
+            </li>
+            <li>
               <Link to="/invitations" className="dt-quick-btn">Manage Invitation</Link>
             </li>
             <li>

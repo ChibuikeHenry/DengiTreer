@@ -1,8 +1,9 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAdminAuth } from '../context/AdminAuthContext'
+import { ROUTE_PERMISSIONS } from '../lib/adminPermissions'
 
 export default function ProtectedRoute() {
-  const { user, ready, isAdmin, adminChecked } = useAdminAuth()
+  const { user, ready, isAdmin, adminChecked, can } = useAdminAuth()
   const location = useLocation()
 
   if (!ready || (user && !adminChecked)) {
@@ -19,6 +20,11 @@ export default function ProtectedRoute() {
 
   if (!isAdmin) {
     return <Navigate to="/login" replace state={{ denied: true }} />
+  }
+
+  const required = ROUTE_PERMISSIONS[location.pathname]
+  if (required && !can(required)) {
+    return <Navigate to="/dashboard" replace />
   }
 
   return <Outlet />

@@ -26,36 +26,54 @@ const pillars = [
   },
 ] as const
 
-const team = [
+type TeamMember = {
+  name: string
+  role: string
+  jobTitle: string
+  bio: string
+  theme: 'green' | 'purple' | 'blue' | 'tan'
+  photoSrc?: string
+  linkedIn?: string
+  email?: string
+}
+
+const team: TeamMember[] = [
   {
     name: 'Abubakar Isimbabi',
     role: 'CEO',
     jobTitle: 'Chief Executive Officer',
     bio: 'Abubakar is the visionary behind DengiTree. with a passion for technology and family legacy, he leads the team in building a platform that connects people, preserve heritage and creates lasting impact for generations to come.',
-    theme: 'green' as const,
+    theme: 'green',
   },
   {
     name: 'Chinyere Achoromadu',
     role: 'Product Designer',
     jobTitle: 'Product Designer',
     bio: 'Chinyere brings ideas to life through thoughtful and user-centered design. She focuses on creating simple, beautiful and intuitive experience that makes DengiTree easy and enjoyable for everyone',
-    theme: 'purple' as const,
+    theme: 'purple',
+    photoSrc: '/images/team/chinyere-achoromadu.jpg',
+    linkedIn: 'https://www.linkedin.com/in/chinyere-achoromadu',
+    email: 'chinyereachoromadu44@gmail.com',
   },
   {
     name: 'Henry Nwachinemere',
     role: 'Lead Developer',
     jobTitle: 'Lead Developer',
     bio: 'Henry leads the development of DengiTree, turning ideas into reliable, secure and scalable technology. He ensures the platform runs smoothly and continues to grow with the needs of our users.',
-    theme: 'blue' as const,
+    theme: 'blue',
+    photoSrc: '/images/team/henry-nwachinemere.jpg',
+    linkedIn: 'https://www.linkedin.com/in/henry-nwachinemere-968493348',
+    email: 'ugwuhenry195@gmail.com',
   },
   {
     name: 'Halima Mamman Biu',
     role: 'Developer',
     jobTitle: 'Developer',
-    bio: 'Halima supports the Lead Developer by helping improve DengiTree features. He assists with testing, trouble shooting, and day-to-day development task. Her teamwork and attention to details help the development team deliver smoothly.',
-    theme: 'tan' as const,
+    bio: 'Halima supports the Lead Developer by helping improve DengiTree features. She assists with testing, trouble shooting, and day-to-day development task. Her teamwork and attention to details help the development team deliver smoothly.',
+    theme: 'tan',
+    photoSrc: '/images/team/halima-mamman-biu.jpg',
   },
-] as const
+]
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/)
@@ -98,20 +116,53 @@ function PillarIcon({ type }: { type: (typeof pillars)[number]['icon'] }) {
   }
 }
 
-function SocialIcons({ theme }: { theme: (typeof team)[number]['theme'] }) {
+function LinkedInIcon() {
   return (
-    <div className={`about-social about-social--${theme}`} role="group" aria-label="Social links">
-      <a href="#" aria-label="LinkedIn" onClick={(e) => e.preventDefault()}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
-        </svg>
-      </a>
-      <a href="#" aria-label="Email" onClick={(e) => e.preventDefault()}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect width="20" height="16" x="2" y="4" rx="2" />
-          <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-        </svg>
-      </a>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z" />
+    </svg>
+  )
+}
+
+function MailIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect width="20" height="16" x="2" y="4" rx="2" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </svg>
+  )
+}
+
+function SocialIcons({ member }: { member: TeamMember }) {
+  const { theme, linkedIn, email, name } = member
+  const btnClass = `about-social-btn about-social-btn--${theme}`
+
+  return (
+    <div className="about-social" role="group" aria-label={`${name} social links`}>
+      {linkedIn ? (
+        <a
+          href={linkedIn}
+          className={btnClass}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${name} on LinkedIn`}
+        >
+          <LinkedInIcon />
+        </a>
+      ) : (
+        <span className={`${btnClass} about-social-btn--static`} aria-hidden="true">
+          <LinkedInIcon />
+        </span>
+      )}
+      {email ? (
+        <a href={`mailto:${email}`} className={btnClass} aria-label={`Email ${name}`}>
+          <MailIcon />
+        </a>
+      ) : (
+        <span className={`${btnClass} about-social-btn--static`} aria-hidden="true">
+          <MailIcon />
+        </span>
+      )}
     </div>
   )
 }
@@ -183,7 +234,15 @@ export default function AboutUsPage() {
                     <article className={`about-team-card about-team-card--${member.theme}`}>
                       <div className="about-team-media">
                         <div className="about-team-avatar" aria-label={member.name}>
-                          <span>{getInitials(member.name)}</span>
+                          {member.photoSrc ? (
+                            <img
+                              className="about-team-photo"
+                              src={member.photoSrc}
+                              alt={member.name}
+                            />
+                          ) : (
+                            <span>{getInitials(member.name)}</span>
+                          )}
                         </div>
                         <span className={`about-role-pill about-role-pill--${member.theme}`}>
                           {member.role}
@@ -192,7 +251,7 @@ export default function AboutUsPage() {
                       <h3>{member.name}</h3>
                       <p className="about-team-job">{member.jobTitle}</p>
                       <p className="about-team-bio">{member.bio}</p>
-                      <SocialIcons theme={member.theme} />
+                      <SocialIcons member={member} />
                     </article>
                   </li>
                 ))}

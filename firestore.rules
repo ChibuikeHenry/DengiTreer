@@ -179,5 +179,11 @@ service cloud.firestore {
       allow read: if resource.data.enabled == true;
       allow write: if false;
     }
+
+    // Admin CMS staff accounts (writes only via Cloud Functions / Admin SDK).
+    match /adminUsers/{uid} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
   }
 }
