@@ -851,12 +851,7 @@
   text-decoration: none;
 }
 
-/* Admin Settings */
-.dt-settings-layout {
-  display: grid;
-  gap: 1rem;
-}
-
+/* Admin / CMS Settings */
 .dt-settings-muted {
   margin: 0;
   font-size: 0.8125rem;
@@ -864,44 +859,26 @@
   line-height: 1.45;
 }
 
-.dt-settings-error {
-  margin: 0 0 0.85rem;
-  padding: 0.65rem 0.85rem;
+.dt-settings-error,
+.dt-settings-success {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.dt-settings-error {
   background: #fff5f5;
   color: #c53030;
-  font-size: 0.8125rem;
 }
 
 .dt-settings-success {
-  margin: 0 0 0.85rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 8px;
   background: #eef8e8;
   color: #1f4a0c;
-  font-size: 0.8125rem;
 }
 
 .dt-table-scroll {
   overflow-x: auto;
-}
-
-.dt-perm-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.dt-perm-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.18rem 0.5rem;
-  border-radius: 999px;
-  background: #eef5e8;
-  color: var(--dt-brand-dark);
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
 }
 
 .dt-row-actions {
@@ -930,235 +907,230 @@
   color: #b42318;
 }
 
-.dt-perm-list {
-  list-style: none;
-  margin: 0.35rem 0 0;
-  padding: 0;
+.dt-cms-settings-grid {
   display: grid;
-  gap: 0.45rem;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
 }
 
-.dt-perm-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--dt-border);
-  border-radius: 10px;
-  background: #fafbf8;
-  cursor: pointer;
-}
-
-.dt-perm-item.is-checked {
-  border-color: #b7cfa8;
-  background: #f3f8ef;
-}
-
-.dt-perm-item input {
-  margin-top: 0.2rem;
-  flex-shrink: 0;
-}
-
-.dt-perm-item strong {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--dt-ink);
-}
-
-.dt-perm-item small {
-  display: block;
-  margin-top: 0.15rem;
-  font-size: 0.72rem;
-  color: var(--dt-muted);
-  line-height: 1.35;
-}
-
-.dt-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(22, 55, 6, 0.35);
-}
-
-.dt-modal {
-  width: min(520px, 100%);
-  max-height: min(90vh, 720px);
-  overflow: auto;
-  background: #fff;
-  border-radius: 14px;
-  padding: 1.25rem 1.25rem 1rem;
-  box-shadow: 0 18px 48px rgba(26, 31, 22, 0.18);
-}
-
-.dt-modal h2 {
-  margin: 0 0 0.25rem;
-  font-size: 1.1rem;
-}
-
-@media (min-width: 1100px) {
-  .dt-settings-layout {
-    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
-    align-items: start;
+@media (min-width: 960px) {
+  .dt-cms-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/* Admin Settings */
-.dt-settings-layout {
-  display: grid;
-  gap: 1rem;
+.dt-cms-card {
+  background: var(--dt-surface);
+  border: 1px solid var(--dt-border);
+  border-radius: 14px;
+  padding: 1.15rem 1.2rem 1.1rem;
+  box-shadow: 0 1px 3px rgba(26, 31, 22, 0.04);
+  min-width: 0;
 }
 
-.dt-settings-muted {
-  margin: 0;
-  font-size: 0.8125rem;
-  color: var(--dt-muted);
-  line-height: 1.45;
-}
-
-.dt-settings-error {
-  margin: 0 0 0.85rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 8px;
-  background: #fff5f5;
-  color: #c53030;
-  font-size: 0.8125rem;
-}
-
-.dt-settings-success {
-  margin: 0 0 0.85rem;
-  padding: 0.65rem 0.85rem;
-  border-radius: 8px;
-  background: #eef8e8;
-  color: #1f4a0c;
-  font-size: 0.8125rem;
-}
-
-.dt-table-scroll {
-  overflow-x: auto;
-}
-
-.dt-perm-chips {
+.dt-cms-card-head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
 }
 
-.dt-perm-chip {
+.dt-cms-card-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--dt-ink);
+}
+
+.dt-cms-card-icon {
   display: inline-flex;
   align-items: center;
-  padding: 0.18rem 0.5rem;
-  border-radius: 999px;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 8px;
   background: #eef5e8;
   color: var(--dt-brand-dark);
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.dt-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.dt-link-btn {
-  border: none;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--dt-brand);
-  cursor: pointer;
-}
-
-.dt-link-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.dt-link-btn--danger {
-  color: #b42318;
-}
-
-.dt-perm-list {
-  list-style: none;
-  margin: 0.35rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.dt-perm-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.65rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--dt-border);
-  border-radius: 10px;
-  background: #fafbf8;
-  cursor: pointer;
-}
-
-.dt-perm-item.is-checked {
-  border-color: #b7cfa8;
-  background: #f3f8ef;
-}
-
-.dt-perm-item input {
-  margin-top: 0.2rem;
   flex-shrink: 0;
 }
 
-.dt-perm-item strong {
-  display: block;
+.dt-cms-fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dt-cms-card .dt-field label {
+  font-size: 0.78rem;
+}
+
+.dt-cms-card .dt-field input,
+.dt-cms-card .dt-field select {
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8125rem;
+}
+
+.dt-cms-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+}
+
+.dt-cms-info-banner {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: #eef5e8;
+  border: 1px solid #d8e8ce;
+  color: #1f4a0c;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.dt-cms-current-admins h3,
+.dt-cms-add-admin h3 {
+  margin: 0 0 0.55rem;
   font-size: 0.8125rem;
   font-weight: 700;
   color: var(--dt-ink);
 }
 
-.dt-perm-item small {
-  display: block;
-  margin-top: 0.15rem;
-  font-size: 0.72rem;
-  color: var(--dt-muted);
-  line-height: 1.35;
+.dt-cms-admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
-.dt-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
+.dt-cms-admin-row {
   display: flex;
   align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background: #f7f9f5;
+  border: 1px solid #e5ebe0;
+}
+
+.dt-cms-admin-avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 1rem;
-  background: rgba(22, 55, 6, 0.35);
+  background: #d4e8c8;
+  color: #163706;
+  font-size: 0.72rem;
+  font-weight: 800;
+  flex-shrink: 0;
 }
 
-.dt-modal {
-  width: min(520px, 100%);
-  max-height: min(90vh, 720px);
-  overflow: auto;
+.dt-cms-admin-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.dt-cms-admin-meta strong {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--dt-ink);
+}
+
+.dt-cms-admin-meta span {
+  font-size: 0.72rem;
+  color: var(--dt-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-cms-add-admin {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid #eef1eb;
+}
+
+.dt-cms-add-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.75rem;
+}
+
+.dt-cms-add-span {
+  grid-column: 1 / -1;
+}
+
+.dt-cms-pref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dt-cms-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eef1eb;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dt-ink);
+  cursor: pointer;
+}
+
+.dt-cms-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.dt-cms-switch {
+  position: relative;
+  width: 2.55rem;
+  height: 1.4rem;
+  border: none;
+  border-radius: 999px;
+  background: #c9d0c4;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.15s ease;
+}
+
+.dt-cms-switch.is-on {
+  background: var(--dt-brand);
+}
+
+.dt-cms-switch-knob {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
   background: #fff;
-  border-radius: 14px;
-  padding: 1.25rem 1.25rem 1rem;
-  box-shadow: 0 18px 48px rgba(26, 31, 22, 0.18);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
 }
 
-.dt-modal h2 {
-  margin: 0 0 0.25rem;
-  font-size: 1.1rem;
+.dt-cms-switch.is-on .dt-cms-switch-knob {
+  transform: translateX(1.15rem);
 }
 
-@media (min-width: 1100px) {
-  .dt-settings-layout {
-    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
-    align-items: start;
+.dt-cms-activity-table th,
+.dt-cms-activity-table td {
+  font-size: 0.8rem;
+}
+
+@media (max-width: 560px) {
+  .dt-cms-add-grid {
+    grid-template-columns: 1fr;
   }
 }
