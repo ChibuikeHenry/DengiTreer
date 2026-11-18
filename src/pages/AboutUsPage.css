@@ -175,10 +175,10 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
-  align-items: stretch;
+  align-items: start;
 }
 
-.about-team-grid > li {
+.about-team-item {
   display: flex;
   min-height: 100%;
 }
@@ -192,6 +192,25 @@
   border-radius: 18px;
   padding: 1.25rem 1.1rem 1.15rem;
   box-sizing: border-box;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    padding 0.2s ease;
+}
+
+.about-team-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(26, 36, 22, 0.08);
+}
+
+.about-team-card:focus-visible {
+  outline: 2px solid #1f4214;
+  outline-offset: 3px;
+}
+
+.about-team-card.is-expanded {
+  box-shadow: 0 14px 32px rgba(26, 36, 22, 0.12);
 }
 
 .about-team-card--green {
@@ -212,7 +231,7 @@
 
 .about-team-media {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: flex-start;
   gap: 0.65rem;
   margin-bottom: 1.1rem;
@@ -273,6 +292,7 @@
   flex: 1;
   min-width: 0;
   max-width: 100%;
+  min-height: 2.1rem;
   padding: 0.45rem 0.75rem;
   border-radius: 999px;
   font-size: 0.72rem;
@@ -281,7 +301,7 @@
   text-align: center;
   white-space: normal;
   letter-spacing: 0.01em;
-  align-self: center;
+  align-self: flex-end;
 }
 
 .about-role-pill--green {
@@ -352,11 +372,60 @@
 }
 
 .about-team-bio {
-  margin: 0 0 1rem;
+  margin: 0 0 0.85rem;
   flex: 1;
   font-size: 0.78rem;
   line-height: 1.48;
   font-weight: 500;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.about-team-card.is-expanded .about-team-bio {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.about-team-card.is-expanded .about-team-avatar {
+  width: 6.5rem;
+  height: 6.5rem;
+}
+
+.about-team-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.15rem;
+}
+
+.about-team-expand-hint {
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.about-team-card--green .about-team-expand-hint {
+  color: #1f4214;
+}
+
+.about-team-card--purple .about-team-expand-hint {
+  color: #471c67;
+}
+
+.about-team-card--blue .about-team-expand-hint {
+  color: #1b4372;
+}
+
+.about-team-card--tan .about-team-expand-hint {
+  color: #664316;
 }
 
 .about-team-card--green .about-team-bio {
@@ -379,8 +448,6 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  margin-top: auto;
-  padding-top: 0.15rem;
 }
 
 .about-social-btn {
@@ -426,6 +493,59 @@ a.about-social-btn:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .about-team-item.is-expanded {
+    grid-column: 1 / -1;
+  }
+
+  .about-team-card.is-expanded {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      'media copy'
+      'media bio'
+      'media footer';
+    column-gap: 1.25rem;
+    row-gap: 0.35rem;
+    padding: 1.35rem 1.35rem 1.25rem;
+  }
+
+  .about-team-card.is-expanded .about-team-media {
+    grid-area: media;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 0;
+    min-height: 0;
+    gap: 0.55rem;
+  }
+
+  .about-team-card.is-expanded .about-role-pill {
+    flex: 0 0 auto;
+    width: max-content;
+    max-width: 9.5rem;
+  }
+
+  .about-team-card.is-expanded .about-team-copy {
+    grid-area: copy;
+  }
+
+  .about-team-card.is-expanded h3 {
+    margin: 0;
+  }
+
+  .about-team-card.is-expanded .about-team-job {
+    margin: 0.15rem 0 0;
+  }
+
+  .about-team-card.is-expanded .about-team-bio {
+    grid-area: bio;
+    margin: 0.35rem 0 0;
+  }
+
+  .about-team-card.is-expanded .about-team-card-footer {
+    grid-area: footer;
+    margin-top: 0.65rem;
+  }
+
   .about-team-intro {
     flex-direction: row;
     justify-content: space-between;
@@ -456,6 +576,10 @@ a.about-social-btn:hover {
   .about-team-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.85rem;
+  }
+
+  .about-team-item.is-expanded {
+    grid-column: span 2;
   }
 
   .about-team-card {

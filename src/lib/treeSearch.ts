@@ -41,7 +41,9 @@ const FAMILY_QUERY_ALIASES: Record<string, string[]> = {
     'mother',
     'father',
     'mom',
+    'mommy',
     'dad',
+    'daddy',
     'mama',
     'papa',
     'step-mother',
@@ -97,6 +99,15 @@ const FAMILY_QUERY_ALIASES: Record<string, string[]> = {
   family: ['family', 'relative', 'relatives', 'relation', 'relationship'],
 }
 
+/** Gender-neutral relationship terms shared by every parent (not mom/dad). */
+const PARENT_SHARED_ALIASES = [
+  'parent',
+  'parents',
+  'step-parent',
+  'stepparent',
+  'adoptive parent',
+]
+
 function normalize(text: string): string {
   return text
     .toLowerCase()
@@ -129,16 +140,23 @@ export function relationshipToYouTerms(member: TreeMember): string[] {
 
   switch (member.role) {
     case 'parent':
-      add(...FAMILY_QUERY_ALIASES.parent)
-      if (slot === 'father' || isMale) add('father', 'dad', 'papa')
-      if (slot === 'mother' || isFemale) add('mother', 'mom', 'mama')
+      add(...PARENT_SHARED_ALIASES)
+      if (slot === 'father' || isMale) {
+        add('father', 'dad', 'daddy', 'papa', 'step-father', 'stepfather', 'adoptive father')
+      } else if (slot === 'mother' || isFemale) {
+        add('mother', 'mom', 'mommy', 'mama', 'step-mother', 'stepmother', 'adoptive mother')
+      } else {
+        // Unknown gender — keep both so relationship search still works.
+        add('father', 'dad', 'daddy', 'papa', 'mother', 'mom', 'mommy', 'mama')
+      }
       if (kind === 'step') add('step parent', 'step-parent', 'stepparent')
       if (kind === 'adoptive') add('adoptive parent')
       break
     case 'grandparent':
-      add(...FAMILY_QUERY_ALIASES.grandparent)
-      if (slot === 'father' || isMale) add('grandfather', 'grandpa')
-      if (slot === 'mother' || isFemale) add('grandmother', 'grandma')
+      add('grandparent', 'grandparents')
+      if (slot === 'father' || isMale) add('grandfather', 'grandpa', 'step-grandfather')
+      else if (slot === 'mother' || isFemale) add('grandmother', 'grandma', 'step-grandmother')
+      else add('grandfather', 'grandpa', 'grandmother', 'grandma')
       if (side === 'paternal') {
         add('paternal', 'fathers side', "father's side")
         if (slot === 'father' || isMale) add('paternal grandfather')
@@ -151,31 +169,47 @@ export function relationshipToYouTerms(member: TreeMember): string[] {
       }
       break
     case 'great-grandparent':
-      add(...FAMILY_QUERY_ALIASES['great-grandparent'], ...FAMILY_QUERY_ALIASES.grandparent)
-      if (slot === 'father' || isMale) add('great-grandfather', 'great grandfather')
-      if (slot === 'mother' || isFemale) add('great-grandmother', 'great grandmother')
+      add('great-grandparent', 'great grandparent', 'grandparent', 'grandparents')
+      if (slot === 'father' || isMale) add('great-grandfather', 'great grandfather', 'grandfather', 'grandpa')
+      else if (slot === 'mother' || isFemale)
+        add('great-grandmother', 'great grandmother', 'grandmother', 'grandma')
+      else {
+        add(
+          'great-grandfather',
+          'great grandfather',
+          'great-grandmother',
+          'great grandmother',
+          'grandfather',
+          'grandma',
+          'grandpa',
+          'grandmother',
+        )
+      }
       if (side) add(side)
       break
     case 'child':
-      add(...FAMILY_QUERY_ALIASES.child)
+      add('child', 'children', 'kid', 'kids')
       if (isMale) add('son')
-      if (isFemale) add('daughter')
+      else if (isFemale) add('daughter')
+      else add('son', 'daughter')
       break
     case 'sibling':
-      add(...FAMILY_QUERY_ALIASES.sibling)
+      add('sibling', 'siblings')
       if (member.siblingRelationship) {
         add(siblingRelationshipLabel(member.siblingRelationship), member.siblingRelationship)
       }
-      if (isMale) add('brother')
-      if (isFemale) add('sister')
+      if (isMale) add('brother', 'half-brother', 'half brother', 'step-brother', 'step brother')
+      else if (isFemale) add('sister', 'half-sister', 'half sister', 'step-sister', 'step sister')
+      else add(...FAMILY_QUERY_ALIASES.sibling)
       break
     case 'spouse':
-      add(...FAMILY_QUERY_ALIASES.spouse)
+      add('spouse', 'partner', 'married')
       if (isMale) add('husband')
-      if (isFemale) add('wife')
+      else if (isFemale) add('wife')
+      else add('husband', 'wife')
       break
     default:
-      add(...FAMILY_QUERY_ALIASES.family)
+      break
   }
 
   return [...terms]
@@ -214,7 +248,6 @@ function memberSearchHaystack(member: TreeMember, members: TreeMember[]): string
     member.dateOfDeath,
     ...relationshipToYouTerms(member),
     ...linkedRelativeNames(member, members),
-    ...FAMILY_QUERY_ALIASES.family,
   ]
   return normalize(
     parts.filter((p): p is string => Boolean(p && String(p).trim())).join(' '),
@@ -222,11 +255,31 @@ function memberSearchHaystack(member: TreeMember, members: TreeMember[]): string
 }
 
 function selfSearchHaystack(name: string, position: string | null): string {
-  return normalize(
-    [name, position, 'you', 'self', 'me', 'profile', ...FAMILY_QUERY_ALIASES.family]
-      .filter(Boolean)
-      .join(' '),
-  )
+  return normalize([name, position, 'you', 'self', 'me', 'profile'].filter(Boolean).join(' '))
+}
+
+/** True when `token` is a relationship word (exact or clear prefix), not a name that merely contains one. */
+function tokenMatchesAlias(token: string, alias: string): boolean {
+  if (!token || !alias) return false
+  if (token === alias) return true
+  // "bro" → brother, "moth" → mother (prefix of alias)
+  if (token.length >= 3 && alias.startsWith(token)) return true
+  // "daddy" → dad, "mommy" → mom (token extends a short alias)
+  if (alias.length >= 3 && token.startsWith(alias) && token.length <= alias.length + 3) return true
+  return false
+}
+
+function tokenMatchesAnyAlias(token: string, aliases: string[]): boolean {
+  return aliases.some((alias) => tokenMatchesAlias(token, alias))
+}
+
+function haystackMatchesRelationshipToken(token: string, haystack: string): boolean {
+  for (const aliases of Object.values(FAMILY_QUERY_ALIASES)) {
+    const normalizedAliases = aliases.map(normalize)
+    if (!tokenMatchesAnyAlias(token, normalizedAliases)) continue
+    if (normalizedAliases.some((alias) => haystack.includes(alias))) return true
+  }
+  return false
 }
 
 function queryMatchesHaystack(query: string, haystack: string): boolean {
@@ -239,16 +292,35 @@ function queryMatchesHaystack(query: string, haystack: string): boolean {
     return true
   }
 
-  for (const aliases of Object.values(FAMILY_QUERY_ALIASES)) {
-    const normalizedAliases = aliases.map(normalize)
-    const queryHitsAlias = normalizedAliases.some(
-      (alias) => alias.includes(q) || q.includes(alias) || tokens.every((t) => alias.includes(t)),
-    )
-    if (!queryHitsAlias) continue
-    if (normalizedAliases.some((alias) => haystack.includes(alias))) return true
+  // Relationship search: match only when a query *token* is a relationship term.
+  // Never use `query.includes(alias)` — that made "Jason" match all sons and
+  // "daddy jennifer" match every parent because of the substring "dad".
+  const allAliases = Object.values(FAMILY_QUERY_ALIASES).flat().map(normalize)
+  const familyWideAliases = FAMILY_QUERY_ALIASES.family.map(normalize)
+  const relationshipTokens = tokens.filter((token) => tokenMatchesAnyAlias(token, allAliases))
+  const nameTokens = tokens.filter((token) => !relationshipTokens.includes(token))
+
+  if (relationshipTokens.length === 0) return false
+
+  const isFamilyWide = relationshipTokens.every((token) =>
+    tokenMatchesAnyAlias(token, familyWideAliases),
+  )
+  if (isFamilyWide) {
+    // "family" / "relative" → everyone; with a name token, filter by name
+    return nameTokens.length === 0 || nameTokens.every((token) => haystack.includes(token))
   }
 
-  return false
+  const relationshipOk = relationshipTokens.every((token) =>
+    haystackMatchesRelationshipToken(token, haystack),
+  )
+  if (!relationshipOk) return false
+
+  // "daddy jennifer" → must be a dad/father AND mention Jennifer
+  if (nameTokens.length > 0) {
+    return nameTokens.every((token) => haystack.includes(token))
+  }
+
+  return true
 }
 
 function matchScore(query: string, name: string, haystack: string): number {

@@ -978,17 +978,6 @@
   padding-top: 0.85rem;
 }
 
-.dt-cms-info-banner {
-  margin: 0 0 1rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: 10px;
-  background: #eef5e8;
-  border: 1px solid #d8e8ce;
-  color: #1f4a0c;
-  font-size: 0.78rem;
-  line-height: 1.45;
-}
-
 .dt-cms-current-admins h3,
 .dt-cms-add-admin h3 {
   margin: 0 0 0.55rem;
@@ -1044,12 +1033,49 @@
   color: var(--dt-ink);
 }
 
-.dt-cms-admin-meta span {
+.dt-cms-admin-meta > span {
   font-size: 0.72rem;
   color: var(--dt-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dt-cms-role-pill {
+  display: inline-flex !important;
+  width: fit-content;
+  margin-top: 0.2rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: #eef5e8;
+  color: var(--dt-brand-dark) !important;
+  font-size: 0.65rem !important;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dt-perm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+.dt-perm-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #d8e8ce;
+  color: var(--dt-brand-dark);
+  font-size: 0.62rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dt-cms-admin-row .dt-row-actions {
+  flex-shrink: 0;
 }
 
 .dt-cms-add-admin {
@@ -1068,60 +1094,77 @@
   grid-column: 1 / -1;
 }
 
-.dt-cms-pref-list {
-  display: flex;
-  flex-direction: column;
+.dt-cms-perms-block {
+  margin-top: 0.85rem;
+}
+
+.dt-cms-perms-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--dt-ink);
+}
+
+.dt-perm-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35rem;
 }
 
-.dt-cms-toggle-row {
+.dt-perm-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #eef1eb;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--dt-ink);
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--dt-border);
+  border-radius: 8px;
+  background: #fafbf8;
   cursor: pointer;
 }
 
-.dt-cms-toggle-row:last-child {
-  border-bottom: none;
+.dt-perm-item.is-checked {
+  border-color: #b7cfa8;
+  background: #f3f8ef;
 }
 
-.dt-cms-switch {
-  position: relative;
-  width: 2.55rem;
-  height: 1.4rem;
-  border: none;
-  border-radius: 999px;
-  background: #c9d0c4;
-  cursor: pointer;
-  flex-shrink: 0;
+.dt-field .dt-perm-item input,
+.dt-perm-item input {
+  width: auto;
+  min-width: 1rem;
+  margin: 0;
   padding: 0;
-  transition: background 0.15s ease;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  flex-shrink: 0;
+  accent-color: var(--dt-brand);
 }
 
-.dt-cms-switch.is-on {
-  background: var(--dt-brand);
+.dt-field .dt-perm-item input:focus,
+.dt-perm-item input:focus {
+  outline: 2px solid rgba(52, 97, 29, 0.35);
+  outline-offset: 2px;
+  border-color: transparent;
 }
 
-.dt-cms-switch-knob {
-  position: absolute;
-  top: 0.15rem;
-  left: 0.15rem;
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-  transition: transform 0.15s ease;
+.dt-perm-item .dt-perm-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1a1f16;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.dt-cms-switch.is-on .dt-cms-switch-knob {
-  transform: translateX(1.15rem);
+.dt-cms-card--wide {
+  grid-column: 1 / -1;
 }
 
 .dt-cms-activity-table th,
@@ -1129,8 +1172,35 @@
   font-size: 0.8rem;
 }
 
+.dt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(22, 55, 6, 0.35);
+}
+
+.dt-modal {
+  width: min(480px, 100%);
+  max-height: min(90vh, 640px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.1rem 1.15rem 0.9rem;
+  box-shadow: 0 18px 48px rgba(26, 31, 22, 0.18);
+}
+
+.dt-modal h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
 @media (max-width: 560px) {
-  .dt-cms-add-grid {
+  .dt-cms-add-grid,
+  .dt-perm-list {
     grid-template-columns: 1fr;
   }
 }

@@ -38,6 +38,19 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return onAuthStateChanged(auth, (next) => {
+      // Reset admin check in the same render as the restored user so
+      // ProtectedRoute never sees user + stale adminChecked=true + isAdmin=false.
+      if (next) {
+        setAdminChecked(false)
+        setIsAdmin(false)
+        setIsBootstrap(false)
+        setPermissions([])
+      } else {
+        setIsAdmin(false)
+        setIsBootstrap(false)
+        setPermissions([])
+        setAdminChecked(true)
+      }
       setUser(next)
       setReady(true)
     })
@@ -60,18 +73,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    if (!ready || !user) return
+
     let cancelled = false
     void (async () => {
-      if (!user) {
-        if (!cancelled) {
-          setIsAdmin(false)
-          setIsBootstrap(false)
-          setPermissions([])
-          setAdminChecked(true)
-        }
-        return
-      }
-      setAdminChecked(false)
       const details = await resolveAdminAccessDetails(user)
       if (!cancelled) {
         setIsAdmin(details.isAdmin)
@@ -83,7 +88,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user, ready])
 
   const refreshAccess = useCallback(async () => {
     await applyAccess(user)

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import AboutOrgChart from '../components/AboutOrgChart'
 import MarketingHeader from '../components/MarketingHeader'
 import './FeaturesPage.css'
@@ -72,6 +73,8 @@ const team: TeamMember[] = [
     bio: 'Halima supports the Lead Developer by helping improve DengiTree features. She assists with testing, trouble shooting, and day-to-day development task. Her teamwork and attention to details help the development team deliver smoothly.',
     theme: 'tan',
     photoSrc: '/images/team/halima-mamman-biu.jpg',
+    linkedIn: 'https://www.linkedin.com/in/halima-mamman-biu-a3519531b',
+    email: 'halimamammanbiu@gmail.com',
   },
 ]
 
@@ -168,6 +171,12 @@ function SocialIcons({ member }: { member: TeamMember }) {
 }
 
 export default function AboutUsPage() {
+  const [expandedName, setExpandedName] = useState<string | null>(null)
+
+  function toggleMember(name: string) {
+    setExpandedName((current) => (current === name ? null : name))
+  }
+
   return (
     <div className="about-page">
       <MarketingHeader />
@@ -229,32 +238,65 @@ export default function AboutUsPage() {
               </div>
 
               <ul className="about-team-grid">
-                {team.map((member) => (
-                  <li key={member.name}>
-                    <article className={`about-team-card about-team-card--${member.theme}`}>
-                      <div className="about-team-media">
-                        <div className="about-team-avatar" aria-label={member.name}>
-                          {member.photoSrc ? (
-                            <img
-                              className="about-team-photo"
-                              src={member.photoSrc}
-                              alt={member.name}
-                            />
-                          ) : (
-                            <span>{getInitials(member.name)}</span>
-                          )}
+                {team.map((member) => {
+                  const expanded = expandedName === member.name
+                  return (
+                    <li
+                      key={member.name}
+                      className={expanded ? 'about-team-item is-expanded' : 'about-team-item'}
+                    >
+                      <article
+                        className={`about-team-card about-team-card--${member.theme}${
+                          expanded ? ' is-expanded' : ''
+                        }`}
+                        tabIndex={0}
+                        role="button"
+                        aria-expanded={expanded}
+                        aria-label={`${expanded ? 'Collapse' : 'Expand'} profile for ${member.name}`}
+                        onClick={() => toggleMember(member.name)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            toggleMember(member.name)
+                          }
+                        }}
+                      >
+                        <div className="about-team-media">
+                          <div className="about-team-avatar" aria-hidden="true">
+                            {member.photoSrc ? (
+                              <img
+                                className="about-team-photo"
+                                src={member.photoSrc}
+                                alt=""
+                              />
+                            ) : (
+                              <span>{getInitials(member.name)}</span>
+                            )}
+                          </div>
+                          <span className={`about-role-pill about-role-pill--${member.theme}`}>
+                            {member.role}
+                          </span>
                         </div>
-                        <span className={`about-role-pill about-role-pill--${member.theme}`}>
-                          {member.role}
-                        </span>
-                      </div>
-                      <h3>{member.name}</h3>
-                      <p className="about-team-job">{member.jobTitle}</p>
-                      <p className="about-team-bio">{member.bio}</p>
-                      <SocialIcons member={member} />
-                    </article>
-                  </li>
-                ))}
+                        <div className="about-team-copy">
+                          <h3>{member.name}</h3>
+                          <p className="about-team-job">{member.jobTitle}</p>
+                        </div>
+                        <p className="about-team-bio">{member.bio}</p>
+                        <div className="about-team-card-footer">
+                          <div
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            <SocialIcons member={member} />
+                          </div>
+                          <span className="about-team-expand-hint" aria-hidden="true">
+                            {expanded ? 'Show less' : 'Read more'}
+                          </span>
+                        </div>
+                      </article>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           </section>

@@ -16,7 +16,17 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  if (ready && user && adminChecked && isAdmin) {
+  // Wait for Firebase session restore + admin claim check before showing the form,
+  // otherwise a refresh briefly paints Sign In then redirects to the dashboard.
+  if (!ready || (user && !adminChecked)) {
+    return (
+      <div className="admin-login-page">
+        <div className="admin-login-main">Loading…</div>
+      </div>
+    )
+  }
+
+  if (user && isAdmin) {
     return <Navigate to="/dashboard" replace />
   }
 

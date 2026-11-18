@@ -5,9 +5,15 @@ type AdminPageToolbarProps = {
   title: string
   subtitle: string
   backTo?: string
+  showActions?: boolean
 }
 
-export default function AdminPageToolbar({ title, subtitle, backTo = '/dashboard' }: AdminPageToolbarProps) {
+export default function AdminPageToolbar({
+  title,
+  subtitle,
+  backTo = '/dashboard',
+  showActions = true,
+}: AdminPageToolbarProps) {
   return (
     <div className="dt-page-toolbar">
       <div className="dt-page-toolbar-left">
@@ -19,16 +25,18 @@ export default function AdminPageToolbar({ title, subtitle, backTo = '/dashboard
           <p className="dt-page-subtitle">{subtitle}</p>
         </div>
       </div>
-      <div className="dt-page-toolbar-right">
-        <button type="button" className="dt-select-btn">
-          <IconCalendar />
-          Last 30 days
-        </button>
-        <button type="button" className="dt-export-btn">
-          <IconDownload />
-          Export Report
-        </button>
-      </div>
+      {showActions ? (
+        <div className="dt-page-toolbar-right">
+          <button type="button" className="dt-select-btn">
+            <IconCalendar />
+            Last 30 days
+          </button>
+          <button type="button" className="dt-export-btn">
+            <IconDownload />
+            Export Report
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

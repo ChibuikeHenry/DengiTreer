@@ -5,53 +5,42 @@ import {
   createAdminAccount,
   listAdminAccounts,
   revokeAdminAccess,
+  updateAdminPermissions,
   type AdminAccountRow,
 } from '../lib/adminAccountsApi'
-import { ADMIN_PERMISSIONS, type AdminPermission } from '../lib/adminPermissions'
+import {
+  ADMIN_PERMISSION_OPTIONS,
+  ADMIN_PERMISSIONS,
+  adminPermissionLabel,
+  type AdminPermission,
+} from '../lib/adminPermissions'
 import { isAllowlistedAdminEmail } from '../lib/adminAccess'
 
-const MAX_ADDITIONAL_ADMINS = 2
+const MAX_ADDITIONAL_STAFF = 2
 const CMS_SETTINGS_KEY = 'dengitree.cmsSettings'
-const CMS_PREFS_KEY = 'dengitree.cmsPreferences'
 
-/** Additional admins get full CMS access except managing other admins / system config. */
-const ADDITIONAL_ADMIN_PERMISSIONS: AdminPermission[] = ADMIN_PERMISSIONS.filter(
-  (p) => p !== 'manage_admins',
-)
+type StaffRole = 'admin' | 'content_editor'
+
+const ROLE_PRESETS: Record<StaffRole, AdminPermission[]> = {
+  content_editor: ['manage_claims', 'manage_invitations', 'manage_privacy'],
+  admin: ADMIN_PERMISSIONS.filter((p) => p !== 'manage_admins'),
+}
 
 type CmsSystemSettings = {
   siteName: string
-  language: string
-  timeZone: string
-  dateFormat: string
-}
-
-type CmsPreferences = {
-  allowContentEditing: boolean
-  enableUserManagement: boolean
-  receiveSystemNotifications: boolean
 }
 
 const DEFAULT_SYSTEM: CmsSystemSettings = {
   siteName: 'DengiTree CMS',
-  language: 'en',
-  timeZone: 'GMT+1',
-  dateFormat: 'DD MM YYYY',
 }
 
-const DEFAULT_PREFS: CmsPreferences = {
-  allowContentEditing: true,
-  enableUserManagement: true,
-  receiveSystemNotifications: true,
-}
-
-function loadJson<T>(key: string, fallback: T): T {
+function loadSystemSettings(): CmsSystemSettings {
   try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return fallback
-    return { ...fallback, ...JSON.parse(raw) }
+    const raw = localStorage.getItem(CMS_SETTINGS_KEY)
+    if (!raw) return DEFAULT_SYSTEM
+    return { ...DEFAULT_SYSTEM, ...JSON.parse(raw) }
   } catch {
-    return fallback
+    return DEFAULT_SYSTEM
   }
 }
 
@@ -68,7 +57,16 @@ function initialsFromName(name: string, email: string): string {
   return (email.slice(0, 2) || 'AD').toUpperCase()
 }
 
-function SettingsCardIcon({ kind }: { kind: 'system' | 'admins' | 'prefs' | 'activity' }) {
+function inferStaffRole(permissions: AdminPermission[]): StaffRole {
+  const hasOps =
+    permissions.includes('manage_users') ||
+    permissions.includes('create_accounts') ||
+    permissions.includes('create_family_trees') ||
+    permissions.includes('manage_trees')
+  return hasOps ? 'admin' : 'content_editor'
+}
+
+function SettingsCardIcon({ kind }: { kind: 'system' | 'admins' | 'activity' }) {
   const common = {
     width: 18,
     height: 18,
@@ -96,17 +94,6 @@ function SettingsCardIcon({ kind }: { kind: 'system' | 'admins' | 'prefs' | 'act
           <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       )
-    case 'prefs':
-      return (
-        <svg {...common}>
-          <line x1="4" y1="6" x2="20" y2="6" />
-          <line x1="4" y1="12" x2="20" y2="12" />
-          <line x1="4" y1="18" x2="20" y2="18" />
-          <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
-          <circle cx="16" cy="12" r="2" fill="currentColor" stroke="none" />
-          <circle cx="10" cy="18" r="2" fill="currentColor" stroke="none" />
-        </svg>
-      )
     case 'activity':
       return (
         <svg {...common}>
@@ -117,28 +104,47 @@ function SettingsCardIcon({ kind }: { kind: 'system' | 'admins' | 'prefs' | 'act
   }
 }
 
-function ToggleRow({
-  label,
-  checked,
+function PermissionChecklist({
+  selected,
   onChange,
+  disabled,
 }: {
-  label: string
-  checked: boolean
-  onChange: (next: boolean) => void
+  selected: AdminPermission[]
+  onChange: (next: AdminPermission[]) => void
+  disabled?: boolean
 }) {
+  function toggle(value: AdminPermission) {
+    if (selected.includes(value)) {
+      onChange(selected.filter((item) => item !== value))
+    } else {
+      onChange([...selected, value])
+    }
+  }
+
   return (
-    <label className="dt-cms-toggle-row">
-      <span>{label}</span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        className={`dt-cms-switch${checked ? ' is-on' : ''}`}
-        onClick={() => onChange(!checked)}
-      >
-        <span className="dt-cms-switch-knob" />
-      </button>
-    </label>
+    <ul className="dt-perm-list">
+      {ADMIN_PERMISSION_OPTIONS.filter((option) => option.value !== 'manage_admins').map(
+        (option) => {
+          const checked = selected.includes(option.value)
+          return (
+            <li key={option.value}>
+              <label
+                className={`dt-perm-item${checked ? ' is-checked' : ''}`}
+                title={option.description}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => toggle(option.value)}
+                />
+                <span className="dt-perm-label">{option.label}</span>
+              </label>
+            </li>
+          )
+        },
+      )}
+    </ul>
   )
 }
 
@@ -150,20 +156,25 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [listError, setListError] = useState('')
 
-  const [system, setSystem] = useState<CmsSystemSettings>(() =>
-    loadJson(CMS_SETTINGS_KEY, DEFAULT_SYSTEM),
-  )
-  const [prefs, setPrefs] = useState<CmsPreferences>(() => loadJson(CMS_PREFS_KEY, DEFAULT_PREFS))
+  const [system, setSystem] = useState<CmsSystemSettings>(loadSystemSettings)
   const [systemSaved, setSystemSaved] = useState('')
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState('admin')
+  const [role, setRole] = useState<StaffRole>('content_editor')
+  const [permissions, setPermissions] = useState<AdminPermission[]>([
+    ...ROLE_PRESETS.content_editor,
+  ])
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState('')
   const [createSuccess, setCreateSuccess] = useState('')
   const [actionBusyUid, setActionBusyUid] = useState<string | null>(null)
+
+  const [editing, setEditing] = useState<AdminAccountRow | null>(null)
+  const [editPermissions, setEditPermissions] = useState<AdminPermission[]>([])
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
 
   const loadAdmins = useCallback(async () => {
     setListError('')
@@ -182,19 +193,25 @@ export default function AdminSettingsPage() {
     void loadAdmins()
   }, [loadAdmins])
 
-  const additionalAdmins = useMemo(
+  const additionalStaff = useMemo(
     () => admins.filter((a) => !isAllowlistedAdminEmail(a.email)),
     [admins],
   )
-  const slotsRemaining = Math.max(0, MAX_ADDITIONAL_ADMINS - additionalAdmins.length)
+  const slotsRemaining = Math.max(0, MAX_ADDITIONAL_STAFF - additionalStaff.length)
   const canAddMore = slotsRemaining > 0
 
   function resetAddForm() {
     setFirstName('')
     setLastName('')
     setEmail('')
-    setRole('admin')
+    setRole('content_editor')
+    setPermissions([...ROLE_PRESETS.content_editor])
     setCreateError('')
+  }
+
+  function handleRoleChange(nextRole: StaffRole) {
+    setRole(nextRole)
+    setPermissions([...ROLE_PRESETS[nextRole]])
   }
 
   function handleSaveSystem(event: FormEvent) {
@@ -204,19 +221,15 @@ export default function AdminSettingsPage() {
     window.setTimeout(() => setSystemSaved(''), 2500)
   }
 
-  function updatePref<K extends keyof CmsPreferences>(key: K, value: CmsPreferences[K]) {
-    setPrefs((prev) => {
-      const next = { ...prev, [key]: value }
-      localStorage.setItem(CMS_PREFS_KEY, JSON.stringify(next))
-      return next
-    })
-  }
-
   async function handleAddAdmin(event: FormEvent) {
     event.preventDefault()
     if (!canManage) return
     if (!canAddMore) {
-      setCreateError('You already have the maximum of 2 additional admins.')
+      setCreateError(`You already have the maximum of ${MAX_ADDITIONAL_STAFF} additional staff.`)
+      return
+    }
+    if (permissions.length === 0) {
+      setCreateError('Select at least one permission.')
       return
     }
 
@@ -230,18 +243,51 @@ export default function AdminSettingsPage() {
         firstName,
         lastName,
         password: tempPassword,
-        permissions: ADDITIONAL_ADMIN_PERMISSIONS,
+        permissions,
       })
+      const roleLabel = role === 'admin' ? 'Admin' : 'Content Editor'
       setCreateSuccess(
-        `Admin added for ${result.email}. Temporary password: ${tempPassword}`,
+        `${roleLabel} added for ${result.email}. Temporary password: ${tempPassword}`,
       )
       resetAddForm()
       await loadAdmins()
       await refreshAccess()
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Could not add admin.')
+      setCreateError(err instanceof Error ? err.message : 'Could not add staff account.')
     } finally {
       setCreating(false)
+    }
+  }
+
+  function openEdit(admin: AdminAccountRow) {
+    setEditing(admin)
+    setEditPermissions([...admin.permissions])
+    setEditError('')
+  }
+
+  async function handleSaveEdit(event: FormEvent) {
+    event.preventDefault()
+    if (!editing || !canManage) return
+    if (editPermissions.length === 0) {
+      setEditError('Select at least one permission.')
+      return
+    }
+    setEditSaving(true)
+    setEditError('')
+    try {
+      await updateAdminPermissions({
+        uid: editing.uid,
+        permissions: editPermissions,
+        firstName: editing.firstName,
+        lastName: editing.lastName,
+      })
+      setEditing(null)
+      await loadAdmins()
+      if (editing.uid === user?.uid) await refreshAccess()
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Could not update permissions.')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -256,7 +302,7 @@ export default function AdminSettingsPage() {
       return
     }
     const confirmed = window.confirm(
-      `Remove admin access for ${admin.displayName || admin.email}?`,
+      `Remove access for ${admin.displayName || admin.email}?`,
     )
     if (!confirmed) return
 
@@ -266,7 +312,7 @@ export default function AdminSettingsPage() {
       await revokeAdminAccess(admin.uid)
       await loadAdmins()
     } catch (err) {
-      setListError(err instanceof Error ? err.message : 'Could not remove admin.')
+      setListError(err instanceof Error ? err.message : 'Could not remove staff account.')
     } finally {
       setActionBusyUid(null)
     }
@@ -276,78 +322,11 @@ export default function AdminSettingsPage() {
     <>
       <AdminPageToolbar
         title="CMS Settings"
-        subtitle="Configure system defaults, admin access, and CMS preferences."
+        subtitle="Configure system defaults and staff access permissions."
+        showActions={false}
       />
 
       <div className="dt-cms-settings-grid">
-        {/* System Settings */}
-        <section className="dt-cms-card">
-          <header className="dt-cms-card-head">
-            <span className="dt-cms-card-icon" aria-hidden="true">
-              <SettingsCardIcon kind="system" />
-            </span>
-            <h2>System Settings</h2>
-          </header>
-          <form onSubmit={handleSaveSystem}>
-            <div className="dt-cms-fields">
-              <div className="dt-field">
-                <label htmlFor="cms-site-name">Site Name</label>
-                <input
-                  id="cms-site-name"
-                  value={system.siteName}
-                  onChange={(e) => setSystem((s) => ({ ...s, siteName: e.target.value }))}
-                />
-              </div>
-              <div className="dt-field">
-                <label htmlFor="cms-language">Default Language</label>
-                <select
-                  id="cms-language"
-                  value={system.language}
-                  onChange={(e) => setSystem((s) => ({ ...s, language: e.target.value }))}
-                >
-                  <option value="en">English</option>
-                  <option value="fr">French</option>
-                  <option value="ha">Hausa</option>
-                  <option value="yo">Yoruba</option>
-                  <option value="ig">Igbo</option>
-                </select>
-              </div>
-              <div className="dt-field">
-                <label htmlFor="cms-tz">Time Zone</label>
-                <select
-                  id="cms-tz"
-                  value={system.timeZone}
-                  onChange={(e) => setSystem((s) => ({ ...s, timeZone: e.target.value }))}
-                >
-                  <option value="GMT+1">(GMT +1) West Africa Time</option>
-                  <option value="GMT+0">(GMT +0) Greenwich Mean Time</option>
-                  <option value="GMT-5">(GMT -5) Eastern Time</option>
-                  <option value="GMT+1-CET">(GMT +1) Central European Time</option>
-                </select>
-              </div>
-              <div className="dt-field">
-                <label htmlFor="cms-date">Date Format</label>
-                <select
-                  id="cms-date"
-                  value={system.dateFormat}
-                  onChange={(e) => setSystem((s) => ({ ...s, dateFormat: e.target.value }))}
-                >
-                  <option value="DD MM YYYY">DD MM YYYY</option>
-                  <option value="MM DD YYYY">MM DD YYYY</option>
-                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                </select>
-              </div>
-            </div>
-            {systemSaved ? <p className="dt-settings-success">{systemSaved}</p> : null}
-            <div className="dt-cms-card-actions">
-              <button type="submit" className="dt-btn-primary">
-                Save Changes
-              </button>
-            </div>
-          </form>
-        </section>
-
-        {/* Admin Access */}
         <section className="dt-cms-card">
           <header className="dt-cms-card-head">
             <span className="dt-cms-card-icon" aria-hidden="true">
@@ -356,29 +335,28 @@ export default function AdminSettingsPage() {
             <h2>Admin Access</h2>
           </header>
 
-          <div className="dt-cms-info-banner" role="note">
-            You can add up to {MAX_ADDITIONAL_ADMINS} additional admins. They will have full access to
-            the CMS dashboard, except for account deletion and system configuration.
-            {canAddMore ? ` ${slotsRemaining} slot${slotsRemaining === 1 ? '' : 's'} remaining.` : null}
-          </div>
-
           {listError ? <p className="dt-settings-error">{listError}</p> : null}
 
           <div className="dt-cms-current-admins">
-            <h3>Current Admins</h3>
+            <h3>Current Staff</h3>
             {loading ? (
               <p className="dt-settings-muted">Loading…</p>
             ) : admins.length === 0 ? (
-              <p className="dt-settings-muted">No admins found.</p>
+              <p className="dt-settings-muted">No staff accounts found.</p>
             ) : (
               <ul className="dt-cms-admin-list">
                 {admins.map((admin) => {
                   const name = admin.displayName || admin.email
+                  const staffRole = inferStaffRole(admin.permissions)
                   const removable =
                     canManage &&
                     admin.uid !== user?.uid &&
                     !admin.uid.startsWith('bootstrap:') &&
                     !isAllowlistedAdminEmail(admin.email)
+                  const editable =
+                    canManage &&
+                    !admin.uid.startsWith('bootstrap:') &&
+                    admin.status === 'active'
                   return (
                     <li key={admin.uid} className="dt-cms-admin-row">
                       <span className="dt-cms-admin-avatar" aria-hidden="true">
@@ -387,17 +365,45 @@ export default function AdminSettingsPage() {
                       <div className="dt-cms-admin-meta">
                         <strong>{name}</strong>
                         <span>{admin.email}</span>
+                        <span className="dt-cms-role-pill">
+                          {staffRole === 'admin' ? 'Admin' : 'Content Editor'}
+                        </span>
+                        {admin.permissions.length > 0 ? (
+                          <div className="dt-perm-chips">
+                            {admin.permissions.slice(0, 4).map((perm) => (
+                              <span key={perm} className="dt-perm-chip">
+                                {adminPermissionLabel(perm)}
+                              </span>
+                            ))}
+                            {admin.permissions.length > 4 ? (
+                              <span className="dt-perm-chip">
+                                +{admin.permissions.length - 4}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
-                      {removable ? (
-                        <button
-                          type="button"
-                          className="dt-link-btn dt-link-btn--danger"
-                          disabled={actionBusyUid === admin.uid}
-                          onClick={() => void handleRevoke(admin)}
-                        >
-                          {actionBusyUid === admin.uid ? 'Removing…' : 'Remove'}
-                        </button>
-                      ) : null}
+                      <div className="dt-row-actions">
+                        {editable ? (
+                          <button
+                            type="button"
+                            className="dt-link-btn"
+                            onClick={() => openEdit(admin)}
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        {removable ? (
+                          <button
+                            type="button"
+                            className="dt-link-btn dt-link-btn--danger"
+                            disabled={actionBusyUid === admin.uid}
+                            onClick={() => void handleRevoke(admin)}
+                          >
+                            {actionBusyUid === admin.uid ? 'Removing…' : 'Remove'}
+                          </button>
+                        ) : null}
+                      </div>
                     </li>
                   )
                 })}
@@ -407,7 +413,7 @@ export default function AdminSettingsPage() {
 
           {canManage && canAddMore ? (
             <form className="dt-cms-add-admin" onSubmit={(e) => void handleAddAdmin(e)}>
-              <h3>Add New Admin</h3>
+              <h3>Add Staff</h3>
               {createError ? <p className="dt-settings-error">{createError}</p> : null}
               {createSuccess ? <p className="dt-settings-success">{createSuccess}</p> : null}
               <div className="dt-cms-add-grid">
@@ -450,13 +456,29 @@ export default function AdminSettingsPage() {
                   <select
                     id="add-admin-role"
                     value={role}
-                    onChange={(e) => setRole(e.target.value)}
+                    onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
                     disabled={creating}
                   >
+                    <option value="content_editor">Content Editor</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
               </div>
+
+              <div className="dt-cms-perms-block">
+                <h4 className="dt-cms-perms-title">Permissions</h4>
+                <p className="dt-settings-muted" style={{ marginBottom: '0.4rem' }}>
+                  {role === 'admin'
+                    ? 'Admins can manage users, trees, and accounts. Uncheck anything you want to withhold.'
+                    : 'Content Editors focus on claims, invitations, and privacy. Add more access if needed.'}
+                </p>
+                <PermissionChecklist
+                  selected={permissions}
+                  onChange={setPermissions}
+                  disabled={creating}
+                />
+              </div>
+
               <div className="dt-cms-card-actions">
                 <button
                   type="button"
@@ -467,13 +489,13 @@ export default function AdminSettingsPage() {
                   Cancel
                 </button>
                 <button type="submit" className="dt-btn-primary" disabled={creating}>
-                  {creating ? 'Adding…' : '+ Add Admin'}
+                  {creating ? 'Adding…' : '+ Add Staff'}
                 </button>
               </div>
             </form>
           ) : canManage && !canAddMore ? (
             <p className="dt-settings-muted" style={{ marginTop: '0.75rem' }}>
-              Maximum of {MAX_ADDITIONAL_ADMINS} additional admins reached.
+              Maximum of {MAX_ADDITIONAL_STAFF} additional staff reached.
             </p>
           ) : !canManage ? (
             <p className="dt-settings-muted" style={{ marginTop: '0.75rem' }}>
@@ -482,35 +504,34 @@ export default function AdminSettingsPage() {
           ) : null}
         </section>
 
-        {/* CMS Preferences */}
         <section className="dt-cms-card">
           <header className="dt-cms-card-head">
             <span className="dt-cms-card-icon" aria-hidden="true">
-              <SettingsCardIcon kind="prefs" />
+              <SettingsCardIcon kind="system" />
             </span>
-            <h2>CMS Preferences</h2>
+            <h2>System Settings</h2>
           </header>
-          <div className="dt-cms-pref-list">
-            <ToggleRow
-              label="Allow content editing"
-              checked={prefs.allowContentEditing}
-              onChange={(v) => updatePref('allowContentEditing', v)}
-            />
-            <ToggleRow
-              label="Enable user management"
-              checked={prefs.enableUserManagement}
-              onChange={(v) => updatePref('enableUserManagement', v)}
-            />
-            <ToggleRow
-              label="Receive system notifications"
-              checked={prefs.receiveSystemNotifications}
-              onChange={(v) => updatePref('receiveSystemNotifications', v)}
-            />
-          </div>
+          <form onSubmit={handleSaveSystem}>
+            <div className="dt-cms-fields">
+              <div className="dt-field">
+                <label htmlFor="cms-site-name">Site Name</label>
+                <input
+                  id="cms-site-name"
+                  value={system.siteName}
+                  onChange={(e) => setSystem({ siteName: e.target.value })}
+                />
+              </div>
+            </div>
+            {systemSaved ? <p className="dt-settings-success">{systemSaved}</p> : null}
+            <div className="dt-cms-card-actions">
+              <button type="submit" className="dt-btn-primary">
+                Save Changes
+              </button>
+            </div>
+          </form>
         </section>
 
-        {/* Recent Admin Activity */}
-        <section className="dt-cms-card">
+        <section className="dt-cms-card dt-cms-card--wide">
           <header className="dt-cms-card-head">
             <span className="dt-cms-card-icon" aria-hidden="true">
               <SettingsCardIcon kind="activity" />
@@ -528,7 +549,11 @@ export default function AdminSettingsPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td colSpan={3} className="dt-empty-cell" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                  <td
+                    colSpan={3}
+                    className="dt-empty-cell"
+                    style={{ textAlign: 'center', padding: '1.5rem' }}
+                  >
                     No recent admin activity yet.
                   </td>
                 </tr>
@@ -537,6 +562,44 @@ export default function AdminSettingsPage() {
           </div>
         </section>
       </div>
+
+      {editing ? (
+        <div className="dt-modal-backdrop" role="presentation" onClick={() => setEditing(null)}>
+          <div
+            className="dt-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-staff-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="edit-staff-title">Edit permissions</h2>
+            <p className="dt-settings-muted">
+              {editing.displayName || editing.email} · {editing.email}
+            </p>
+            {editError ? <p className="dt-settings-error">{editError}</p> : null}
+            <form onSubmit={(e) => void handleSaveEdit(e)}>
+              <PermissionChecklist
+                selected={editPermissions}
+                onChange={setEditPermissions}
+                disabled={editSaving}
+              />
+              <div className="dt-form-actions">
+                <button
+                  type="button"
+                  className="dt-btn-outline"
+                  onClick={() => setEditing(null)}
+                  disabled={editSaving}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="dt-btn-primary" disabled={editSaving}>
+                  {editSaving ? 'Saving…' : 'Save permissions'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }
